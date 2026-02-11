@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telex - A DX-first TUI framework for Rust</title>
+  <meta name="description" content="Telex is a reactive TUI framework for Rust, inspired by React's component model. Declare your UI, manage state with hooks, and let Telex handle the rendering.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <img src="assets/telex-tui.png" alt="Telex logo" class="hero-logo">
+        <h1>Telex</h1>
+        <p class="tagline">A DX-first TUI framework for Rust</p>
+        <div class="hero-links">
+          <a href="https://telex-tui.github.io/telex-tui/" class="btn btn-primary">Read the Book</a>
+          <a href="https://crates.io/crates/telex-tui" class="btn btn-outline">Crates.io</a>
+          <a href="https://github.com/telex-tui/telex-tui" class="btn btn-outline">GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="code-section">
+      <div class="container">
+        <h2>Declare your UI, manage state with hooks</h2>
+        <div class="code-block"><code><span class="kw">use</span> telex::prelude::*;
+
+<span class="kw">struct</span> <span class="ty">App</span>;
+
+<span class="kw">impl</span> <span class="ty">Component</span> <span class="kw">for</span> <span class="ty">App</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>, cx: <span class="ty">Scope</span>) -&gt; <span class="ty">View</span> {
+        <span class="kw">let</span> count = <span class="mac">state!</span>(cx, || <span class="num">0</span>);
+
+        <span class="ty">View</span>::<span class="fn">vstack</span>()
+            .<span class="fn">child</span>(<span class="ty">View</span>::<span class="fn">text</span>(<span class="mac">format!</span>(<span class="str">"Count: {}"</span>, count.<span class="fn">get</span>())))
+            .<span class="fn">child</span>(
+                <span class="ty">View</span>::<span class="fn">button</span>()
+                    .<span class="fn">label</span>(<span class="str">"+"</span>)
+                    .<span class="fn">on_press</span>(<span class="mac">with!</span>(count =&gt; <span class="kw">move</span> || count.<span class="fn">update</span>(|n| *n += <span class="num">1</span>)))
+                    .<span class="fn">build</span>()
+            )
+            .<span class="fn">build</span>()
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    telex::<span class="fn">run</span>(<span class="ty">App</span>).<span class="fn">unwrap</span>();
+}</code></div>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="container">
+        <h2>What's in the box</h2>
+        <div class="feature-grid">
+          <div class="feature">
+            <h3>Reactive State</h3>
+            <p>Order-independent <code>state!</code> macro, <code>effect!</code> for side effects, <code>use_async</code> for background work. No Arc, no Send bounds.</p>
+          </div>
+          <div class="feature">
+            <h3>Rich Widgets</h3>
+            <p>Text, TextInput, TextArea, Button, Checkbox, List, Table, Tree, Tabs, Modal, Menu, Form, Toast, Markdown, and more.</p>
+          </div>
+          <div class="feature">
+            <h3>Flexbox Layout</h3>
+            <p>VStack, HStack, Box with flex, min/max constraints, percentage sizing. Split panes for resizable panels.</p>
+          </div>
+          <div class="feature">
+            <h3>Focus Management</h3>
+            <p>Tab navigation, modal focus containment, cursor navigation, initial focus. Indicators appear only on keyboard use.</p>
+          </div>
+          <div class="feature">
+            <h3>Theming</h3>
+            <p>14 built-in themes: Catppuccin, Dracula, Gruvbox, Nord, Tokyo Night, and more. One line to switch.</p>
+          </div>
+          <div class="feature">
+            <h3>Unicode</h3>
+            <p>Proper grapheme cluster handling. Emoji, CJK, and combining characters all render at correct widths.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
