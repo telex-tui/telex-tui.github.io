@@ -40,7 +40,7 @@
       </p>
       <p>
         That device was the <strong>terminal</strong>. The word means exactly what it sounds
-        like &mdash; the end of the line, the point where a human meets the machine. The first
+        like &mdash; the end of the line, the point where a human meets the machine. Many
         widely-used terminals were built by the Teletype Corporation: a keyboard and a printer in
         one unit. You typed a character, it traveled down a cable to the computer, the computer
         processed it and sent characters back, and the Teletype printed them on paper. That's
@@ -79,26 +79,39 @@
       <h2>The wire disappears</h2>
 
       <p>
-        By the mid-1980s, computers shrank. Instead of a room-sized mainframe shared by dozens
-        of people, you might have a workstation on your desk with its own screen and keyboard.
-        There was no cable anymore &mdash; the "terminal" was just a window in a graphical
-        interface. But all the software still expected a TTY. Programs like <code>bash</code>
-        were written to read and write a character device. A window on a graphical display isn't
-        a serial port. It has no device file. It's just pixels managed by a GUI application.
+        Remember that the terminal only existed as a separate device because of distance. The
+        computer was in a machine room. The people who needed it were somewhere else &mdash;
+        down the hall, across campus, eventually across the city via phone lines. The terminal
+        was the endpoint of a long cable because it had to be. You couldn't sit at the computer.
       </p>
       <p>
-        So the kernel learned to fake it. The pseudoterminal, or PTY, is a virtual cable: a
-        pair of connected endpoints created in software.
+        As computers became personal, that distance collapsed. The machine moved to your desk.
+        The screen and keyboard were attached directly to it. There was no "somewhere else"
+        anymore, and no need for a remote endpoint. These personal machines came with graphical
+        interfaces &mdash; windows, menus, a mouse. That was the new way to interact with a
+        computer.
+      </p>
+      <p>
+        But by then, a decade of Unix software had been built around the TTY contract &mdash;
+        shells, editors, compilers, all the command-line tools that assumed a character device on
+        the other end. That ecosystem was too valuable to abandon. People still needed to run all
+        of that software. So someone built a program that opens a window on the graphical display
+        and pretends to be a terminal inside it: the <strong>terminal emulator</strong>.
+      </p>
+      <p>
+        The problem is that a window on a graphical display isn't a serial port. It has no device
+        file. It's just pixels managed by a GUI application. The old software expects to read and
+        write a TTY device &mdash; so the kernel needs to fake the cable. The pseudoterminal, or
+        PTY, is a virtual cable: a pair of connected endpoints created in software.
       </p>
       <ul>
         <li>One end &mdash; the <strong>slave</strong> side (<code>/dev/pts/0</code>,
           <code>/dev/pts/1</code>, etc.) &mdash; behaves exactly like a physical TTY.
-          The shell attaches here. As far as <code>bash</code> is concerned, it's talking to
+          The shell attaches here. As far as it's concerned, it's talking to
           a serial port.</li>
         <li>The other end &mdash; the <strong>master</strong> side &mdash; is held by the
-          terminal emulator, the application drawing the window on screen (Alacritty, GNOME
-          Terminal, iTerm2, or anything else that displays that black rectangle with
-          text in it).</li>
+          terminal emulator (Alacritty, GNOME Terminal, iTerm2, or anything else that
+          displays that black rectangle with text in it).</li>
       </ul>
       <p>
         When you type a character in your terminal window, the emulator writes it to the master
@@ -136,17 +149,17 @@
       <p>
         A physical Teletype had a fixed width &mdash; however wide the paper roll was. A CRT
         terminal had fixed dimensions too, built into the hardware. But a window on a graphical
-        desktop can be dragged to any size. Programs that draw full-screen layouts &mdash;
-        <code>vim</code>, <code>htop</code>, anything with columns and borders &mdash; need to
-        know the current dimensions. And when you grab a corner and resize the window while the
-        program is running, it needs to know <em>that</em> too.
+        desktop can be dragged to any size. If you're running a program that draws a full-screen
+        layout &mdash; <code>vim</code>, <code>htop</code>, anything with columns and
+        borders &mdash; and you resize the window, the layout breaks. Columns misalign, text
+        wraps at the old width, borders end up in the wrong place. The program drew for one size
+        and is now living in another.
       </p>
       <p>
-        There's no way for a program to poll for size changes. Instead, when you resize the
-        window, the terminal emulator tells the kernel the new dimensions, and the kernel
-        delivers a signal called SIGWINCH (Signal Window Change) directly to the running program.
-        The program catches the signal, asks the kernel for the new width and height, and redraws
-        itself.
+        The program needs to be told. When you resize the window, the terminal emulator tells the
+        kernel the new dimensions, and the kernel delivers a signal called SIGWINCH (Signal Window
+        Change) directly to the running program. The program catches the signal, asks the kernel
+        for the new width and height, and redraws itself.
       </p>
       <p>
         This is why full-screen terminal programs redraw correctly when you resize the window,
@@ -246,13 +259,17 @@
       <h2>The remote machine doesn't know your terminal</h2>
 
       <p>
-        There's a catch when working remotely. The software on the server &mdash;
-        <code>vim</code>, <code>htop</code>, anything that draws to the screen &mdash; needs to
-        know what your terminal can do. Does it support 256 colors? Can it underline text? What
-        escape sequences does it understand for moving the cursor around?
+        There's a catch when working remotely. Programs don't just print plain text to the
+        terminal &mdash; they also send special byte sequences to control it: move the cursor to
+        row 5 column 10, switch to red text, clear the screen. These are called escape sequences
+        because they start with the escape character, signaling that what follows is a command,
+        not text to display. Different terminals understand different sequences. What works on
+        one might print garbage on another.
       </p>
       <p>
-        When you connect, your SSH client sends along a piece of information: "My user's terminal
+        So the software on the server &mdash; <code>vim</code>, <code>htop</code>, anything that
+        draws to the screen &mdash; needs to know what kind of terminal is on the other end.
+        When you connect, your SSH client sends along that information: "My user's terminal
         type is <code>xterm-256color</code>" (or whatever it happens to be). The remote server
         stores this in the <code>$TERM</code> environment variable, and programs look it up in
         a database called Terminfo to find the right escape sequences for your terminal.
@@ -315,8 +332,10 @@
         its child processes. Unless a program is specifically configured to ignore it, it exits.
       </p>
       <p>
-        This is why <code>nohup</code> exists. Running <code>nohup ./long-task &amp;</code>
-        tells the process to ignore SIGHUP, so it survives when the terminal closes.
+        But sometimes you want a process to keep running after the terminal closes &mdash;
+        a long backup, a batch job, something that should finish whether you're watching or not.
+        That's why <code>nohup</code> exists. Running <code>nohup ./long-task &amp;</code>
+        tells the process to ignore SIGHUP, so it survives when the terminal goes away.
         It's also why <code>tmux</code> works for keeping sessions alive &mdash; the inner
         PTY's master is <code>tmux</code> itself, which doesn't close when the outer connection
         dies, so no SIGHUP reaches your shell.
