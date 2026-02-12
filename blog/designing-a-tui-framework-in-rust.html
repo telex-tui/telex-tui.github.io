@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Designing a TUI Framework in Rust - Telex</title>
+  <meta name="description" content="The foundational design decisions behind Telex: State with Rc RefCell, View as an enum, keyed hooks, and double-buffered rendering.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Designing a TUI Framework in Rust</h1>
+      <div class="post-meta">February 2025</div>
+
+      <p>
+        Telex is a component-based TUI framework for Rust. This post describes the foundational
+        design decisions made in its first version: the problems each one solves, the alternatives
+        considered, and the trade-offs accepted.
+      </p>
+
+      <h2>The problem</h2>
+
+      <p>
+        Component-based UI frameworks follow a simple idea: describe what the screen should look like
+        given the current state, and let the framework figure out how to update the terminal. The
+        component is a function from state to view tree. State changes, the function re-runs, and the
+        framework diffs the result against the previous frame.
+      </p>
+      <p>
+        In a garbage-collected language this is straightforward. Closures capture whatever they need,
+        the GC tracks references, and everyone goes home. Rust doesn't work that way. Three tensions
+        define the design space:
+      </p>
+      <ul>
+        <li><strong>Closures and lifetimes.</strong> An event handler on a button needs to outlive
+          the render call that created it. But a closure that captures <code>&amp;mut state</code>
+          borrows from the enclosing scope and can't be stored beyond it.</li>
+        <li><strong>Shared mutable access.</strong> Multiple handlers need to mutate the same
+          state &mdash; an increment button, a decrement button, a reset button all touching
+          the same counter. Rust's ownership rules forbid multiple <code>&amp;mut</code> references.</li>
+        <li><strong>No garbage collector.</strong> Whatever solution we pick for the above, we
+          can't rely on a runtime to clean up after us. Lifetimes and ownership must be explicit.</li>
+      </ul>
+      <p>
+        Every design decision in Telex flows from navigating these constraints while keeping the API
+        ergonomic. The goal is an interface where the ownership machinery is invisible to the person
+        writing a component.
+      </p>
+
+      <h2>State: <code>Rc&lt;RefCell&lt;T&gt;&gt;</code></h2>
+
+      <p>
+        The core problem is this: we want developers to write <code>count.update(|n| *n += 1)</code>
+        inside a closure that gets stored in a button, called later when the button is pressed, and
+        possibly called multiple times across re-renders. A closure that captures
+        <code>&amp;mut i32</code> can't be <code>'static</code>. It borrows from the stack frame
+        that created it, and that frame is gone by the time the button fires.
+      </p>
+      <p>
+        The solution is <code>State&lt;T&gt;</code>, a cheap-to-clone handle to shared, mutable data:
+      </p>
+      <pre><code><span class="kw">pub struct</span> <span class="ty">State</span>&lt;<span class="ty">T</span>&gt; {
+    inner: <span class="ty">Rc</span>&lt;<span class="ty">StateInner</span>&lt;<span class="ty">T</span>&gt;&gt;,
+}
+
+<span class="kw">struct</span> <span class="ty">StateInner</span>&lt;<span class="ty">T</span>&gt; {
+    value: <span class="ty">RefCell</span>&lt;<span class="ty">T</span>&gt;,
+    dirty: <span class="ty">RefCell</span>&lt;<span class="kw">bool</span>&gt;,
+}</code></pre>
+      <p>
+        <code>Rc</code> provides shared ownership &mdash; multiple closures can hold handles to the
+        same state, and cloning a <code>State&lt;T&gt;</code> just increments a reference count.
+        <code>RefCell</code> provides interior mutability &mdash; we can mutate through a shared
+        reference, with borrow checking deferred to runtime. The <code>dirty</code> flag tracks
+        whether the value has changed since the last render, which becomes important later for
+        skipping unnecessary work.
+      </p>
+      <p>
+        This means a button handler looks like:
+      </p>
+      <pre><code><span class="kw">let</span> count = <span class="mac">state!</span>(cx, || <span class="num">0</span>);
+
+<span class="ty">View</span>::<span class="fn">button</span>()
+    .<span class="fn">label</span>(<span class="str">"+"</span>)
+    .<span class="fn">on_press</span>(<span class="mac">with!</span>(count =&gt; <span class="kw">move</span> || count.<span class="fn">update</span>(|n| *n += <span class="num">1</span>)))
+    .<span class="fn">build</span>()</code></pre>
+      <p>
+        The <code>with!</code> macro clones <code>count</code> into the closure. The clone is
+        one pointer copy &mdash; an <code>Rc::clone</code>. Inside the closure, <code>update</code>
+        borrows the <code>RefCell</code> mutably, applies the function, and sets the dirty flag.
+      </p>
+
+      <h3>Why <code>Rc</code>, not <code>Arc</code>?</h3>
+      <p>
+        Telex is single-threaded. The entire render loop &mdash; component functions, event handlers,
+        state mutations &mdash; runs on one thread. <code>Arc</code> pays for atomic reference
+        counting on every clone and drop. <code>Rc</code> doesn't. For a framework where state
+        handles are cloned into every closure, that overhead adds up for no benefit. The thread
+        boundary is elsewhere (more on that in a future post).
+      </p>
+
+      <h3>Why not <code>Copy</code>?</h3>
+      <p>
+        We considered <code>impl Copy for State&lt;T&gt;</code>, but <code>Rc</code> isn't
+        <code>Copy</code>. The cost of <code>.clone()</code> is minimal &mdash; just an
+        <code>Rc::clone</code> &mdash; and being explicit about cloning makes ownership
+        visible at the call site. When three closures each need their own handle, you see
+        three clones (or a <code>with!</code> macro that does it for you).
+      </p>
+
+      <h2>The widget tree: enum, not trait objects</h2>
+
+      <p>
+        A component function returns a <code>View</code> &mdash; a tree describing what should be
+        on screen. The obvious Rust approach would be <code>Box&lt;dyn Widget&gt;</code>, a trait
+        object. Telex uses an enum instead:
+      </p>
+      <pre><code><span class="kw">pub enum</span> <span class="ty">View</span> {
+    <span class="ty">Text</span>(<span class="ty">TextNode</span>),
+    <span class="ty">VStack</span>(<span class="ty">VStackNode</span>),
+    <span class="ty">HStack</span>(<span class="ty">HStackNode</span>),
+    <span class="ty">Button</span>(<span class="ty">ButtonNode</span>),
+    <span class="ty">TextInput</span>(<span class="ty">TextInputNode</span>),
+    <span class="ty">Modal</span>(<span class="ty">ModalNode</span>),
+    <span class="cm">// ... 20+ variants</span>
+    <span class="ty">Empty</span>,
+}</code></pre>
+      <p>
+        The advantages are practical:
+      </p>
+      <ul>
+        <li><strong>No vtable overhead.</strong> Pattern matching is a jump table, not an indirect
+          call through a fat pointer.</li>
+        <li><strong>Cloneable.</strong> The view tree needs to be cloned for diffing.
+          <code>Clone</code> on an enum is derived; <code>Clone</code> on
+          <code>Box&lt;dyn Widget&gt;</code> requires <code>dyn CloneWidget</code> gymnastics.</li>
+        <li><strong>Debuggable.</strong> <code>Debug</code> is derived. You can print the entire
+          view tree and see exactly what's in it.</li>
+        <li><strong>Exhaustive matching.</strong> The compiler ensures every renderer handles every
+          widget type. Add a new variant, and every <code>match</code> statement that doesn't cover
+          it becomes a compile error.</li>
+      </ul>
+      <p>
+        The trade-off is that adding a new built-in widget means modifying the enum, which means
+        modifying the framework. For a framework we control, this is acceptable &mdash; the set of
+        built-in widgets changes slowly and deliberately. User-defined widgets use composition (nesting
+        built-in widgets), not new variants.
+      </p>
+      <p>
+        (The escape hatch for truly custom rendering came later. More on that in the next post.)
+      </p>
+
+      <h2>Callbacks as <code>Rc&lt;dyn Fn()&gt;</code></h2>
+
+      <p>
+        Event handlers are stored as <code>Rc&lt;dyn Fn()&gt;</code>:
+      </p>
+      <pre><code><span class="kw">pub type</span> <span class="ty">Callback</span> = <span class="ty">Rc</span>&lt;<span class="kw">dyn</span> <span class="ty">Fn</span>()&gt;;
+
+<span class="kw">pub struct</span> <span class="ty">ButtonNode</span> {
+    <span class="kw">pub</span> label: <span class="ty">String</span>,
+    <span class="kw">pub</span> on_press: <span class="ty">Option</span>&lt;<span class="ty">Callback</span>&gt;,
+}</code></pre>
+      <p>
+        <code>Rc</code> because callbacks live inside the view tree, and the view tree gets cloned.
+        <code>Box&lt;dyn Fn()&gt;</code> isn't <code>Clone</code>; <code>Rc&lt;dyn Fn()&gt;</code>
+        is &mdash; cloning shares the closure rather than copying it.
+      </p>
+      <p>
+        <code>Fn</code>, not <code>FnMut</code>, because a callback may be called multiple times
+        across re-renders, and mutation goes through <code>State</code> (which uses interior
+        mutability). The closure itself captures shared handles, not mutable references.
+      </p>
+
+      <h2>Hook storage: <code>HashMap&lt;TypeId, Rc&lt;dyn Any&gt;&gt;</code></h2>
+
+      <p>
+        State needs to persist across re-renders. When a component function runs for the second time,
+        <code>state!(cx, || 0)</code> should return the same <code>State&lt;i32&gt;</code> it created
+        on the first call, not a fresh one. This means the framework needs a place to store hooks
+        between renders.
+      </p>
+      <p>
+        The storage is a <code>HashMap</code> keyed by <code>TypeId</code>:
+      </p>
+      <pre><code><span class="kw">pub struct</span> <span class="ty">StateStorage</span> {
+    keyed_states: <span class="ty">RefCell</span>&lt;<span class="ty">HashMap</span>&lt;<span class="ty">TypeId</span>, <span class="ty">Rc</span>&lt;<span class="kw">dyn</span> <span class="ty">Any</span>&gt;&gt;&gt;,
+}</code></pre>
+      <p>
+        Each call to <code>state!</code> generates an anonymous struct type at the call site via
+        a proc macro. That type's <code>TypeId</code> becomes the key. Same call site, same key,
+        same state. Different call sites, different keys, different state.
+      </p>
+      <p>
+        This makes hooks order-independent. Unlike React's rules of hooks (no conditionals, no loops,
+        always call in the same order), Telex hooks can appear anywhere:
+      </p>
+      <pre><code><span class="kw">fn</span> <span class="fn">counter</span>(cx: <span class="ty">Scope</span>) -&gt; <span class="ty">View</span> {
+    <span class="cm">// Safe in conditionals</span>
+    <span class="kw">if</span> show_counter {
+        <span class="kw">let</span> count = <span class="mac">state!</span>(cx, || <span class="num">0</span>);
+        <span class="cm">// ...</span>
+    }
+
+    <span class="cm">// Safe in loops</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">3</span> {
+        <span class="kw">let</span> item = <span class="mac">state!</span>(cx, || <span class="ty">String</span>::<span class="fn">new</span>());
+        <span class="cm">// each iteration is a different call site = different state</span>
+    }
+}</code></pre>
+      <p>
+        Why <code>dyn Any</code>? Each hook can store a different type &mdash;
+        <code>State&lt;i32&gt;</code>, <code>State&lt;String&gt;</code>,
+        <code>ChannelHandle&lt;MidiMessage&gt;</code>. Type erasure via <code>Any</code> lets them
+        coexist in a single map, with <code>downcast_ref</code> recovering the concrete type on
+        retrieval. The cast is checked at runtime, but it always succeeds because the key and the
+        value type are generated together by the same macro invocation.
+      </p>
+
+      <h2>Rendering: double buffer and diff</h2>
+
+      <p>
+        Terminals are slow output devices. Writing every cell on every frame &mdash; even if most cells
+        haven't changed &mdash; causes visible flicker and measurable lag. The standard solution is
+        double buffering: maintain two cell grids, render the new frame into one, diff it against the
+        previous frame, and only emit escape sequences for cells that changed.
+      </p>
+      <p>
+        Telex's buffer is a flat array of <code>Cell</code> structs, each holding a character,
+        foreground color, background color, and a <code>wide_continuation</code> flag. That flag
+        handles wide characters (emoji, CJK ideographs) which occupy two terminal columns: the
+        character is stored in the first cell, and the second cell is marked as a continuation so
+        the renderer skips it. When a wide character would overflow the right edge of a line, a
+        space is written instead &mdash; you can't split an emoji across lines.
+      </p>
+      <p>
+        The diff pass walks both buffers in lockstep. For each cell that differs, it moves the
+        cursor and writes the new content. In practice, most frames change a small fraction of cells
+        (a counter incrementing, a cursor blinking, a list item highlighting), so the diff reduces
+        terminal I/O by orders of magnitude.
+      </p>
+
+      <h2>Trade-offs</h2>
+
+      <table>
+        <tr><th>Choice</th><th>Benefit</th><th>Cost</th></tr>
+        <tr>
+          <td>Enum for View</td>
+          <td>Fast, cloneable, exhaustive matching</td>
+          <td>Can't extend without modifying the framework</td>
+        </tr>
+        <tr>
+          <td>Rc for State</td>
+          <td>Cheap cloning, no lifetime parameters</td>
+          <td>Runtime borrow checking, single-threaded only</td>
+        </tr>
+        <tr>
+          <td>TypeId-keyed hooks</td>
+          <td>Order-independent, safe in conditionals</td>
+          <td>HashMap lookup vs. Vec index</td>
+        </tr>
+        <tr>
+          <td>Rebuild view every frame</td>
+          <td>Simple, always correct</td>
+          <td>Rebuilds unchanged subtrees</td>
+        </tr>
+        <tr>
+          <td>Full buffer diff</td>
+          <td>Simple implementation</td>
+          <td>O(width &times; height) per frame</td>
+        </tr>
+      </table>
+      <p>
+        These are reasonable for a terminal application. The view tree is dozens of widgets, not
+        thousands. The buffer is 80&times;24 to maybe 200&times;50 cells. Updates happen at human
+        speed &mdash; keypresses, not animation frames. Simplicity aids correctness, and correctness
+        is hard enough when Unicode, terminal escape codes, and focus management are all in play.
+      </p>
+      <p>
+        The first version of Telex shipped with these decisions and they held up well for
+        self-contained applications. But real applications need to talk to the outside world &mdash;
+        network sockets, MIDI devices, file watchers &mdash; and that's where the story gets
+        more interesting.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
