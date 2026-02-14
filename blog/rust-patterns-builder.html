@@ -33,8 +33,8 @@
         A struct has twelve fields. Three are required. Nine have sensible defaults. The
         constructor has twelve parameters and callers have to remember which position is
         which. Or you use <code>Default</code> and field-by-field assignment, losing any
-        validation. The builder pattern separates construction from representation, giving
-        you named parameters, defaults, and validation in one clean API.
+        validation. The builder pattern gives you a separate object for building the struct
+        step by step, with named setters, defaults, and validation in one clean API.
       </p>
 
       <h2>The motivation</h2>
@@ -177,7 +177,7 @@
         Borrowing setters require a binding:
         <code>let mut b = Builder::new(); b.timeout(30); b.build();</code>
         (or the chain works if you use the return value). Both styles are common. Consuming
-        setters are slightly more ergonomic for chaining.
+        setters are a bit nicer for chaining.
       </p>
 
       <h2>Derive macros</h2>

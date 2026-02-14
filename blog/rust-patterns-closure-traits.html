@@ -31,9 +31,9 @@
 
       <p>
         You pass a closure to a function and get a trait mismatch. You didn't ask for any
-        trait. You just wrote a <code>||</code> block. What's happening involves how closures
-        capture their environment, and it's one of the most useful things to understand about
-        Rust.
+        trait. You just wrote a <code>||</code> block. The answer has to do with how closures
+        capture variables from their surroundings, and it's one of the most useful things
+        to understand about Rust.
       </p>
 
       <h2>The motivation</h2>
@@ -87,9 +87,10 @@
  FnOnce   (least restrictive — reads, mutates, consumes)</pre>
 
       <p>
-        Every <code>Fn</code> closure is also <code>FnMut</code> (mutating nothing is a
-        valid form of mutation). Every <code>FnMut</code> closure is also <code>FnOnce</code>
-        (calling something once is a valid form of "at least once"). The hierarchy goes
+        Every <code>Fn</code> closure is also <code>FnMut</code> &mdash; if a closure
+        only reads, it's fine to use where mutation is allowed. Every <code>FnMut</code>
+        closure is also <code>FnOnce</code> &mdash; if you can call it many times, you can
+        certainly call it once. The hierarchy goes
         upward: if a function accepts <code>FnOnce</code>, you can pass any closure.
         If it requires <code>Fn</code>, only non-mutating closures qualify.
       </p>

@@ -81,9 +81,9 @@
         invalidation, and use-after-free &mdash; at compile time. No runtime cost.
       </p>
       <p>
-        The problem is that the cache is a legitimate mutation behind a logically immutable
-        interface. From the caller's perspective, <code>get()</code> is a read operation. The
-        cache is an implementation detail. But the type system doesn't know that &mdash; it
+        The problem is that the cache really does need to change, even though from the
+        outside <code>get()</code> looks like a read. The cache is an implementation detail
+        the caller shouldn't care about. But the type system doesn't know that &mdash; it
         sees a write through a shared reference and says no.
       </p>
 
@@ -147,16 +147,15 @@
       <p>
         With <code>RefCell</code>, you trade a compile-time guarantee for a runtime check.
         The compiler no longer catches double-mutable-borrows &mdash; you'll find out at
-        runtime via a panic. This is a conscious, local relaxation of Rust's rules, not
-        a hole in the safety model. The borrow rules are still enforced; the enforcement
-        just moved.
+        runtime via a panic. You're choosing to check the rules when the code runs instead
+        of when it compiles. The borrow rules still apply; they just moved.
       </p>
       <p>
         The runtime cost is small &mdash; an integer check on each borrow. In practice, the
         real cost is the possibility of panics. If you can structure your code so the compiler
         checks borrows statically (by taking <code>&amp;mut self</code> instead), do that.
-        Reach for <code>RefCell</code> when the API genuinely requires shared access with
-        internal mutation.
+        Reach for <code>RefCell</code> when callers need shared access but the struct
+        needs to change something inside.
       </p>
 
       <h2>When to use it</h2>

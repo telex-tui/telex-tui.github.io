@@ -106,9 +106,10 @@
       <h2>The orphan rule workaround</h2>
 
       <p>
-        Rust's orphan rule prevents you from implementing a foreign trait on a foreign type.
-        You can't write <code>impl Display for Vec&lt;u8&gt;</code> in your crate &mdash;
-        both <code>Display</code> and <code>Vec</code> are defined elsewhere.
+        Rust's orphan rule prevents you from implementing a trait on a type when both are
+        defined in someone else's crate. You can't write <code>impl Display for
+        Vec&lt;u8&gt;</code> in your crate &mdash; both <code>Display</code> and
+        <code>Vec</code> come from the standard library.
       </p>
       <p>
         The newtype pattern gives you a local type to attach the impl to:
@@ -147,8 +148,9 @@
 }</code></pre>
 
       <p>
-        You can also implement <code>Deref&lt;Target = u64&gt;</code> to make the newtype
-        transparent for reads. But be deliberate &mdash; <code>Deref</code> makes the
+        You can also implement <code>Deref&lt;Target = u64&gt;</code> so you can use a
+        <code>&amp;UserId</code> wherever a <code>&amp;u64</code> is expected. But be
+        careful &mdash; <code>Deref</code> makes the
         compiler automatically coerce <code>&amp;UserId</code> to <code>&amp;u64</code>,
         which weakens the type safety you added. If you want <code>UserId</code> and
         <code>u64</code> to be interchangeable for reads, implement <code>Deref</code>.

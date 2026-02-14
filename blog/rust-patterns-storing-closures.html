@@ -69,10 +69,9 @@
 <span class="cm">// a and b have DIFFERENT types, even though both are Fn(i32) -> i32</span></code></pre>
 
       <p>
-        This is intentional. Unique types let the compiler monomorphise: each closure's call
-        is inlined directly, with no dynamic dispatch overhead. But it means you can't write
-        a struct field like <code>callback: the_type_of_my_closure</code> because that type
-        has no name.
+        This is intentional. Because each closure gets its own type, the compiler can inline
+        the call directly &mdash; no overhead. But it means you can't write a struct field
+        like <code>callback: the_type_of_my_closure</code> because that type has no name.
       </p>
 
       <h2>Pattern 1: <code>Box&lt;dyn Fn()&gt;</code></h2>

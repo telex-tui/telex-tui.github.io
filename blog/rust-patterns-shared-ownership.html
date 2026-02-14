@@ -31,8 +31,8 @@
 
       <p>
         Rust enforces single ownership: one variable owns each value, and when that variable
-        goes out of scope, the value is dropped. This is the foundation of Rust's memory
-        safety without garbage collection. But trees, graphs, and callback registries all
+        goes out of scope, the value is dropped. This is how Rust keeps memory safe without
+        a garbage collector. But trees, graphs, and callback registries all
         need multiple parts of the program to hold onto the same data. Single ownership
         doesn't cover this.
       </p>
@@ -125,7 +125,7 @@
       <p>
         <code>Rc::clone(&amp;child)</code> doesn't copy the <code>Node</code>. It increments
         the reference count and returns a new <code>Rc</code> pointing to the same allocation.
-        This is cheap &mdash; a single atomic increment and a pointer copy.
+        This is cheap &mdash; incrementing an integer and copying a pointer.
       </p>
 
       <h2>The <code>Rc::clone()</code> convention</h2>
