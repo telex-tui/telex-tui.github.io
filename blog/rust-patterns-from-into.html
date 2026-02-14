@@ -164,6 +164,18 @@
 <span class="kw">let</span> p: <span class="ty">Result</span>&lt;<span class="ty">Port</span>, _&gt; = <span class="num">8080_u32</span>.<span class="fn">try_into</span>(); <span class="cm">// Ok(Port(8080))</span>
 <span class="kw">let</span> p: <span class="ty">Result</span>&lt;<span class="ty">Port</span>, _&gt; = <span class="num">99999_u32</span>.<span class="fn">try_into</span>(); <span class="cm">// Err("99999 is not a valid port")</span></code></pre>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>From</code>/<code>Into</code> conversions are monomorphised — the
+        compiler generates a specialized version for each concrete type pair at
+        compile time. There is no dynamic dispatch, no trait object, no vtable. A
+        call to <code>.into()</code> compiles to exactly the same code as calling
+        the conversion function directly. When the conversion is trivial (like
+        wrapping a value in a newtype), the optimizer eliminates it entirely. The
+        trait machinery is purely a compile-time API convenience.
+      </p>
+
       <h2>When to use it</h2>
 
       <ul>

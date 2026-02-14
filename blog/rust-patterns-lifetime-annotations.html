@@ -124,7 +124,7 @@
 
       <p>
         This says: "the return value borrows from <code>a</code> only &mdash;
-        <code>b</code> doesn't matter." So the compiler knows it's fine to drop
+        <code>b</code> doesn't matter." So the borrow checker permits dropping
         <code>b</code> even while the returned reference is still in use.
       </p>
 
@@ -176,6 +176,21 @@
         optimisation costs you more in code complexity than it saves in allocations,
         just own the data. The next post goes deeper on this trade-off:
         <a href="rust-patterns-static-clone.html"><code>'static</code> + Clone</a>.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        Lifetime annotations are erased during compilation — they exist only in the
+        type checker, not in the generated code. A function with
+        <code>&lt;'a&gt;</code> parameters compiles to exactly the same machine code
+        as one without them. There is no tag, no counter, no runtime check. Lifetimes
+        are part of Rust's type system the way const-correctness is in C++ — they
+        constrain what the compiler accepts, but vanish before code generation. Without
+        lifetime annotations, the compiler would have to either reject all functions
+        that return references (too restrictive) or accept them without proof of
+        validity (unsound). Lifetimes let you express the proof the compiler needs,
+        at zero runtime cost.
       </p>
 
       <h2>When to use lifetime annotations</h2>

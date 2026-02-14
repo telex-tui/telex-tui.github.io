@@ -77,6 +77,33 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         one thread accesses the data at a time.
       </p>
 
+      <h2>Inside Arc: atomic reference counting</h2>
+
+      <p>
+        <code>Arc</code> stores its reference counts as <code>AtomicUsize</code>
+        values. Cloning an <code>Arc</code> calls
+        <code>fetch_add(1, Ordering::Relaxed)</code> on the strong count — a single
+        atomic read-modify-write instruction. Dropping calls
+        <code>fetch_sub(1, Ordering::Release)</code>, and if the count reaches zero,
+        an <code>Acquire</code> fence ensures all previous writes are visible before
+        the data is dropped.
+      </p>
+      <p>
+        Why <code>Relaxed</code> for increment but <code>Release</code>/<code>Acquire</code>
+        for the final decrement? Incrementing doesn't synchronize data — it just
+        keeps the allocation alive. But the drop path needs to see all writes made
+        through other <code>Arc</code> clones before it frees the memory. The
+        <code>Release</code> on decrement and <code>Acquire</code> fence on the
+        zero-reaching thread establish that happens-before relationship.
+      </p>
+      <p>
+        This is a concrete example of memory ordering in Rust. Most code never
+        touches atomics directly — <code>Arc</code> encapsulates the ordering
+        decisions. But understanding them explains why <code>Arc::clone</code> is
+        cheap (one relaxed atomic op, no memory fence) while the final drop is
+        slightly more expensive (release store plus acquire fence).
+      </p>
+
       <h2>The pattern: <code>Arc&lt;Mutex&lt;T&gt;&gt;</code></h2>
 
       <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">Mutex</span>};
@@ -165,6 +192,22 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
       </ul>
       <p>
         For most applications, <code>Mutex</code> is the right choice.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>Arc</code>: one heap allocation at creation, one atomic
+        increment/decrement per clone/drop. On x86, atomic operations on naturally
+        aligned words are lock-free — they don't take an OS lock. The cost is a
+        few nanoseconds per operation, mainly from cache-line synchronization between
+        cores. <code>Mutex</code>: an uncontended lock/unlock is typically 15–25ns
+        on modern x86 (a single atomic compare-and-swap). Contended locks involve
+        OS futex calls and thread parking, which cost microseconds. Without
+        <code>Arc&lt;Mutex&lt;T&gt;&gt;</code>, shared mutable state across threads
+        would require unsafe — raw atomic operations, manual memory fences, and
+        hand-verified synchronization protocols. <code>Mutex</code> is that protocol,
+        audited and correct.
       </p>
 
       <h2>When to use it</h2>

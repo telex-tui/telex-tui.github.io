@@ -99,7 +99,38 @@
         A newtype compiles down to the same machine code as the inner type. At runtime there
         is no wrapper, no indirection, no overhead. <code>UserId(42)</code> is just
         <code>42</code> in memory. The wrapper only exists while the compiler is checking
-        your code; it's gone by the time the program runs.
+        your code; it's gone by the time the program runs. To confirm this guarantee across FFI boundaries, use <code>#[repr(transparent)]</code> — described below.
+      </p>
+
+      <p>
+        Without the newtype pattern, you'd rely on convention to keep UserId and OrderId separate — or use unsafe transmutes to reinterpret raw integers. The newtype gives you compile-time enforcement of these distinctions with no runtime mechanism at all.
+      </p>
+
+      <h2><code>#[repr(transparent)]</code></h2>
+
+      <p>
+        A newtype is zero-cost at the Rust level, but the compiler is free to choose
+        whatever layout it wants for a tuple struct. If you're passing your newtype
+        across an FFI boundary — for example, handing a <code>UserId(u64)</code> to a
+        C function that expects a <code>uint64_t</code> — you need a guarantee that
+        the newtype has exactly the same ABI as the inner type. That's what
+        <code>#[repr(transparent)]</code> provides:
+      </p>
+
+      <pre><code><span class="kw">#[repr(transparent)]</span>
+<span class="kw">struct</span> <span class="ty">FileDescriptor</span>(<span class="ty">i32</span>);
+
+<span class="kw">extern</span> <span class="str">"C"</span> {
+    <span class="kw">fn</span> <span class="fn">close</span>(fd: <span class="ty">FileDescriptor</span>); <span class="cm">// safe — same ABI as i32</span>
+}</code></pre>
+
+      <p>
+        Without <code>#[repr(transparent)]</code>, the compiler makes no promises
+        about the struct's layout matching the inner type. With it, the compiler
+        guarantees the newtype has the same size, alignment, and calling convention as
+        the wrapped field. This matters for FFI, for <code>transmute</code> safety,
+        and for any situation where you need the newtype to be bitwise-identical to
+        the inner type.
       </p>
 
       <h2>The orphan rule workaround</h2>

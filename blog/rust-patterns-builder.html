@@ -191,6 +191,18 @@
         hand is often worth the effort.
       </p>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        The builder struct lives on the stack during construction. Each setter
+        mutates a field in place — no allocation. The <code>.build()</code> call
+        moves the fields into the final struct, which the compiler typically
+        optimizes into direct initialization (no intermediate copies). When using
+        consuming setters (<code>self</code> by value), the entire chain may be
+        optimized to a single struct initialization in release builds. The pattern
+        is zero-cost in the "you couldn't write it more efficiently by hand" sense.
+      </p>
+
       <h2>When to use it</h2>
 
       <ul>

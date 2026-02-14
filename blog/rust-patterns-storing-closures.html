@@ -200,6 +200,19 @@
         Part 1</a> for details.
       </p>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>Box&lt;dyn Fn()&gt;</code> has two costs: one heap allocation to store
+        the closure, and one vtable indirection per call. The vtable is a static
+        table of function pointers — the compiler generates it at compile time.
+        Each call reads the function pointer from the vtable and jumps to it. This
+        prevents inlining and may cause an instruction cache miss if the target code
+        isn't hot. For event handlers and callbacks invoked occasionally, this is
+        invisible. For code called millions of times per frame, use generics
+        (<code>F: Fn()</code>) which monomorphise and inline.
+      </p>
+
       <h2>When to use which</h2>
 
       <ul>

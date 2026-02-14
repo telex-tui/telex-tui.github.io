@@ -181,6 +181,21 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         Part 2</a> for the full story on ports and channels.
       </p>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        Sending a value through an <code>mpsc::channel</code> involves: moving the
+        value into the channel's internal buffer (one move, no clone), waking the
+        receiver if it's parked (one atomic operation plus potentially an OS futex
+        call). For bounded channels, a full buffer parks the sender — a thread
+        context switch. The value itself is moved, not copied, so sending a
+        <code>Vec&lt;u8&gt;</code> with a million elements is cheap — it's three
+        words (pointer, length, capacity) being moved, not a megabyte being copied.
+        Channels are internally implemented with unsafe — lock-free queues, atomic
+        state machines, and raw pointer manipulation. The safe <code>send()</code>
+        / <code>recv()</code> API encapsulates that complexity.
+      </p>
+
       <h2>When to use channels vs shared state</h2>
 
       <ul>

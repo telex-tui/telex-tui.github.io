@@ -135,6 +135,41 @@ conn.<span class="fn">send</span>(b<span class="str">"hello"</span>);           
         You can't accidentally keep using a connection in the wrong state.
       </p>
 
+      <h2>Resource cleanup with <code>Drop</code></h2>
+
+      <p>
+        Because each state is a separate type, you can implement <code>Drop</code>
+        on intermediate states to prevent resource leaks. If a connection is dropped
+        while still in the <code>Connecting</code> state — perhaps because an error
+        caused early return — the <code>Drop</code> impl can cancel the pending
+        connection:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">Drop</span> <span class="kw">for</span> <span class="ty">Connection</span>&lt;<span class="ty">Connecting</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">drop</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+        <span class="mac">eprintln!</span>(<span class="str">"connection to {} dropped while still connecting — aborting"</span>,
+                  <span class="kw">self</span>.addr);
+        <span class="cm">// cancel the pending connection, close the socket, etc.</span>
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Drop</span> <span class="kw">for</span> <span class="ty">Connection</span>&lt;<span class="ty">Connected</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">drop</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+        <span class="mac">eprintln!</span>(<span class="str">"connection to {} dropped while connected — sending FIN"</span>,
+                  <span class="kw">self</span>.addr);
+        <span class="cm">// graceful shutdown</span>
+    }
+}</code></pre>
+
+      <p>
+        With a runtime enum, you'd need a single <code>Drop</code> impl that
+        matches on the current state — and forgetting a variant means a silent
+        resource leak. With typestate, the compiler enforces that every state with
+        cleanup needs gets its own <code>Drop</code>. If you add a new state and
+        forget to implement <code>Drop</code> for it, the default (no-op drop) is
+        explicit rather than an oversight hidden inside a match arm.
+      </p>
+
       <h2>Zero-sized types</h2>
 
       <p>
@@ -160,6 +195,21 @@ conn.<span class="fn">send</span>(b<span class="str">"hello"</span>);           
           comes from user input, a config file, or an external event, you need an enum. The
           typestate pattern only works when the compiler can see which transition happens.</li>
       </ul>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        Nothing at runtime. The state marker types are zero-sized —
+        <code>PhantomData</code> compiles away entirely. The type parameter exists
+        only during compilation; the generated machine code for
+        <code>Connection&lt;Disconnected&gt;</code> and
+        <code>Connection&lt;Connected&gt;</code> is identical in layout. Transition
+        methods that move <code>self</code> compile to a no-op move of the data
+        fields. The entire state machine is enforced purely by the type checker,
+        with zero runtime overhead. Without typestate, you'd either check states at
+        runtime (branching on an enum discriminant in every method) or use unsafe
+        to assert states by convention.
+      </p>
 
       <h2>When to use it</h2>
 

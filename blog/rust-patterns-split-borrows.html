@@ -117,7 +117,7 @@
     <span class="kw">let</span> <span class="ty">Renderer</span> { config, buffer } = <span class="kw">self</span>;
     <span class="cm">// config: &amp;Config (borrowed from self)</span>
     <span class="cm">// buffer: &amp;mut Vec&lt;u8&gt; (borrowed from self)</span>
-    <span class="cm">// These are disjoint borrows — compiler is happy</span>
+    <span class="cm">// These are disjoint borrows — the borrow checker accepts this</span>
 
     <span class="kw">let</span> width = config.width;
     buffer.<span class="fn">resize</span>(width, <span class="num">0</span>);
@@ -176,11 +176,25 @@
       <h2>The key insight</h2>
 
       <p>
-        The compiler is smarter than it might seem. It tracks borrows at the field level for
+        The borrow checker already tracks borrows at the field level for
         direct access. The problem comes specifically from method calls, which borrow the
         whole struct via <code>&amp;self</code>/<code>&amp;mut self</code>. The fixes all
-        share one strategy: give the compiler enough information to see that the borrows
-        are disjoint.
+        share one strategy: make the disjointness of the borrows visible to the
+        borrow checker.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        Nothing. Split borrows are resolved entirely at compile time. The borrow
+        checker tracks field-level borrows with no runtime representation — no
+        flags, no reference counts, no branches. The generated machine code is
+        identical whether you access fields through <code>self.config.width</code>
+        or through a destructured binding. This is the most literal kind of
+        zero-cost abstraction: the safety analysis happens during compilation and
+        leaves no trace in the binary. Without field-level borrow tracking, you'd
+        need either unsafe to take disjoint references from a single struct, or
+        runtime borrow checking via <code>RefCell</code>.
       </p>
 
       <h2>When to use it</h2>

@@ -122,6 +122,51 @@
         The closure gets the least restrictive trait that covers all its captures.
       </p>
 
+      <h2>What the compiler actually generates</h2>
+
+      <p>
+        Every closure compiles to an anonymous struct that captures its environment.
+        The struct's fields are the captured variables, and the compiler implements
+        the appropriate <code>Fn</code> trait on it. This process is called
+        <strong>environment capture</strong>. For example:
+      </p>
+
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> count = <span class="num">0</span>;
+<span class="kw">let</span> <span class="kw">mut</span> increment = || count += <span class="num">1</span>;</code></pre>
+
+      <p>
+        The compiler desugars this into something like:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Closure_increment</span>&lt;<span class="kw">'a</span>&gt; {
+    count: &amp;<span class="kw">'a</span> <span class="kw">mut</span> <span class="ty">i32</span>,  <span class="cm">// captured by unique (&amp;mut) reference</span>
+}
+
+<span class="kw">impl</span> <span class="ty">FnMut</span>&lt;()&gt; <span class="kw">for</span> <span class="ty">Closure_increment</span>&lt;<span class="kw">'_</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Output</span> = ();
+    <span class="kw">extern</span> <span class="str">"rust-call"</span> <span class="kw">fn</span> <span class="fn">call_mut</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, _: ()) {
+        *<span class="kw">self</span>.count += <span class="num">1</span>;
+    }
+}</code></pre>
+
+      <p>
+        The closure captures <code>count</code> by <code>&amp;mut</code> reference
+        because it needs to mutate it. That's why it implements <code>FnMut</code>
+        and not <code>Fn</code>: calling it requires <code>&amp;mut self</code>
+        access to the struct, because the struct holds a mutable reference. Two
+        threads can't call this closure simultaneously — they'd need concurrent
+        <code>&amp;mut</code> access to the same struct, which Rust forbids. To call
+        an <code>FnMut</code> closure from multiple threads, you'd need to wrap it
+        in a <code>Mutex</code>.
+      </p>
+
+      <p>
+        A <code>move</code> closure changes the struct's fields from references to
+        owned values, but doesn't change which trait is implemented. A
+        <code>move || count += 1</code> captures <code>count: i32</code> (owned) and
+        still implements <code>FnMut</code> because it mutates the captured value.
+      </p>
+
       <h2>The callee constrains it</h2>
 
       <p>
@@ -170,6 +215,19 @@
         <code>move</code> is about how data enters the closure (ownership vs borrowing).
         The trait is about how the closure uses that data (read, mutate, consume).
         These are independent.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        A closure with no captures compiles to the same code as a function pointer —
+        zero overhead. A closure with captures is a struct whose size equals the sum
+        of its captured fields. When passed to a generic function
+        (<code>impl Fn()</code>), the compiler monomorphises the call — the closure
+        body is inlined at the call site, the struct may be optimized away entirely,
+        and there is no dynamic dispatch. This is what "zero-cost abstraction" means
+        for closures: they compile to exactly the code you'd write by hand if you
+        passed a struct with a method.
       </p>
 
       <h2>When to use which</h2>

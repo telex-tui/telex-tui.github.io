@@ -110,6 +110,25 @@
         Together they let multiple variables own and modify the same data, on a single thread.
       </p>
 
+      <h2>Memory layout</h2>
+
+      <p>
+        An <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> creates two layers of indirection.
+        The <code>Rc</code> allocates a block on the heap containing: the strong count
+        (<code>usize</code>), the weak count (<code>usize</code>), and the inner value &mdash;
+        which is a <code>RefCell&lt;T&gt;</code>. The <code>RefCell</code> itself adds an
+        <code>isize</code> borrow flag in front of your <code>T</code>. So the heap layout
+        is roughly: <code>[strong_count | weak_count | borrow_flag | T]</code>. Accessing
+        <code>T</code> means following the <code>Rc</code> pointer to the heap block, skipping
+        past the counts, then checking the borrow flag. That's one pointer chase and one branch.
+        In cache terms, the entire <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> fits in a single
+        cache line for small <code>T</code>. For large <code>T</code> or many <code>Rc</code>
+        clones spread across code, each dereference is a potential L1 miss. This matters in
+        tight loops &mdash; if you're iterating millions of
+        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> values, consider index-based design
+        (<a href="rust-patterns-index-based-design.html">#5</a>) instead.
+      </p>
+
       <h2>"Is this a code smell?"</h2>
 
       <p>
@@ -122,8 +141,7 @@
         multiple variables can point to it, any of them can write to it, and the runtime
         frees it when nobody points to it anymore. Rust just makes you spell it out. The
         pattern isn't fighting the borrow checker; it's the normal way to let multiple
-        owners read and write the same data when the compiler can't prove it's safe at
-        compile time.
+        owners read and write the same data when safety can't be verified statically.
       </p>
       <p>
         UI frameworks, observer patterns, graph structures, callback registries &mdash; all
@@ -192,6 +210,22 @@ guard.<span class="fn">push</span>(<span class="num">4</span>);
         <code>RefCell</code>.
       </p>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        You pay for <code>Rc</code>'s reference counting (one <code>usize</code> increment per
+        clone, one decrement per drop &mdash; both non-atomic) plus <code>RefCell</code>'s borrow
+        checking (one <code>isize</code> check per borrow, one branch). The heap allocation happens
+        once at <code>Rc::new()</code>. Clones are cheap &mdash; pointer copy plus count bump. The
+        combined overhead is small for typical use. In a garbage-collected language, every heap
+        object already carries this overhead invisibly; Rust makes you opt in. Without
+        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>, you would need <code>unsafe</code> &mdash; either
+        raw pointers with manual reference counting and manual borrow discipline, or an
+        <code>UnsafeCell</code> with your own aliasing protocol.
+        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is that protocol, proven correct by the standard
+        library.
+      </p>
+
       <h2>When to use it</h2>
 
       <p>
@@ -210,7 +244,7 @@ guard.<span class="fn">push</span>(<span class="num">4</span>);
         <li>Across threads &mdash; use <code>Arc&lt;Mutex&lt;T&gt;&gt;</code>
           (<a href="rust-patterns-arc-mutex.html">#17</a>) instead</li>
         <li>When you can use <code>&amp;mut self</code> methods and pass ownership clearly
-          &mdash; letting the compiler check everything statically is always better</li>
+          &mdash; static verification is always preferable</li>
         <li>In tight loops where even the cost of bumping a reference count matters &mdash;
           consider storing indices into a <code>Vec</code>
           (<a href="rust-patterns-index-based-design.html">#5</a>) instead</li>

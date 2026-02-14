@@ -77,9 +77,9 @@
       </p>
       <p>
         <strong>Adding a new variant</strong> (like <code>Pentagon</code>) means you have to
-        add a new arm to every <code>match</code> in every method. The compiler helps &mdash;
-        exhaustive matching gives you an error for each method you haven't updated yet. But
-        the changes are spread across the whole file.
+        add a new arm to every <code>match</code> in every method. Exhaustive matching
+        gives you a compile error for each method you haven't updated yet. But the
+        changes are spread across the whole file.
       </p>
 
       <h2>Approach 2: Trait objects</h2>
@@ -136,19 +136,33 @@
         add new types, or mostly add new operations?
       </p>
 
-      <h2>Performance</h2>
+      <h2>VTable economics</h2>
 
       <p>
-        Enum dispatch is resolved at compile time. The compiler sees the <code>match</code>
-        and can inline each arm. There's no heap allocation and no pointer chasing through a
-        vtable. This matters in tight loops.
+        Enum dispatch resolves at compile time. The compiler sees the
+        <code>match</code>, knows every variant, and can inline each arm's code
+        directly. No heap allocation, no pointer indirection, no vtable lookup.
       </p>
       <p>
-        Trait objects use dynamic dispatch: each method call goes through a vtable pointer,
-        and the object usually lives on the heap in a <code>Box</code>. That indirection
-        stops the compiler from inlining. For event handlers or plugin systems that run
-        occasionally, you'll never notice. For code that runs once per pixel or once per
-        network packet, it can add up.
+        Trait objects use dynamic dispatch: each call loads a function pointer from
+        a vtable and jumps to it. That's one extra memory read per call, plus the
+        object itself usually lives behind a <code>Box</code> on the heap. The
+        indirection prevents the compiler from inlining the method body.
+      </p>
+      <p>
+        But the tradeoff isn't just "static is faster." Enum dispatch causes
+        <strong>code bloat</strong>: the compiler emits specialized code for every
+        variant in every match arm. With 20 variants and 10 methods, that's 200
+        inlined code paths. In large binaries, this inflates the instruction cache
+        footprint — more code means more I-cache misses, which can actually make
+        the program slower than the vtable approach. Trait objects keep the code
+        compact: one call site, one indirect jump.
+      </p>
+      <p>
+        In practice: enum dispatch wins when you have a small number of variants
+        (under ~20) and the match arms are small. Trait objects win when the set of
+        types is large, open-ended, or the method bodies are substantial enough that
+        inlining them everywhere would bloat the binary. Profile both if it matters.
       </p>
 
       <h2>Telex's choice</h2>
@@ -171,6 +185,22 @@
         enum dispatch the right fit. See
         <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework &mdash;
         Part 1</a> for the full reasoning.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        Enum dispatch: the enum is sized to its largest variant plus a discriminant
+        (1–8 bytes depending on variant count). Match dispatch compiles to a jump
+        table or branch chain — the cost is a branch prediction, not a pointer
+        chase. No heap allocation. The trade is code size: each match arm is inlined.
+      </p>
+      <p>
+        Trait objects: one heap allocation per object (the <code>Box</code>), plus a
+        vtable pointer (one usize) alongside the data pointer. Each method call is
+        an indirect jump through the vtable — roughly the cost of a virtual method
+        call in C++. Without trait objects, you'd need unsafe function pointer tables
+        and manual type erasure — which is exactly what a vtable is.
       </p>
 
       <h2>When to use which</h2>

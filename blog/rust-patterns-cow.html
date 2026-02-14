@@ -134,6 +134,53 @@
         The pattern is the same everywhere: borrow when you can, own when you must.
       </p>
 
+      <h2>Cow in high-performance parsers</h2>
+
+      <p>
+        This is how <code>serde_json</code> handles string values. Most JSON strings
+        contain no escape sequences — they're plain UTF-8 that can be referenced
+        directly from the input buffer. When a string does contain escapes like
+        <code>\n</code> or <code>\u0041</code>, the parser has to decode them into a
+        new <code>String</code>. Using <code>Cow&lt;'a, str&gt;</code> as the output
+        type means: zero allocation for the common case, owned allocation only when
+        escapes force it.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Cow</span>;
+
+<span class="kw">fn</span> <span class="fn">decode_json_string</span>&lt;<span class="kw">'a</span>&gt;(raw: &amp;<span class="kw">'a</span> <span class="kw">str</span>) -&gt; <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="kw">str</span>&gt; {
+    <span class="kw">if</span> !raw.<span class="fn">contains</span>(<span class="str">'\\'</span>) {
+        <span class="cm">// No escapes — borrow directly from the input buffer</span>
+        <span class="ty">Cow</span>::<span class="ty">Borrowed</span>(raw)
+    } <span class="kw">else</span> {
+        <span class="cm">// Has escapes — must allocate to hold the decoded output</span>
+        <span class="kw">let</span> <span class="kw">mut</span> out = <span class="ty">String</span>::<span class="fn">with_capacity</span>(raw.<span class="fn">len</span>());
+        <span class="kw">let</span> <span class="kw">mut</span> chars = raw.<span class="fn">chars</span>();
+        <span class="kw">while let</span> <span class="ty">Some</span>(c) = chars.<span class="fn">next</span>() {
+            <span class="kw">if</span> c == <span class="str">'\\'</span> {
+                <span class="kw">match</span> chars.<span class="fn">next</span>() {
+                    <span class="ty">Some</span>(<span class="str">'n'</span>) =&gt; out.<span class="fn">push</span>(<span class="str">'\n'</span>),
+                    <span class="ty">Some</span>(<span class="str">'t'</span>) =&gt; out.<span class="fn">push</span>(<span class="str">'\t'</span>),
+                    <span class="ty">Some</span>(other) =&gt; out.<span class="fn">push</span>(other),
+                    <span class="ty">None</span> =&gt; {}
+                }
+            } <span class="kw">else</span> {
+                out.<span class="fn">push</span>(c);
+            }
+        }
+        <span class="ty">Cow</span>::<span class="ty">Owned</span>(out)
+    }
+}</code></pre>
+
+      <p>
+        In real-world JSON, the vast majority of string values have no escapes. A
+        parser using <code>Cow</code> avoids allocating for those strings entirely —
+        it just returns a slice into the original input bytes. This is the foundation
+        of zero-copy deserialization: the parsed output borrows from the input buffer
+        instead of copying into new allocations. Serde's
+        <code>#[serde(borrow)]</code> attribute enables this at the derive level.
+      </p>
+
       <h2>Mutating through <code>Cow</code></h2>
 
       <p>
@@ -148,6 +195,20 @@
 <span class="cm">// Triggers a clone because it's currently Borrowed</span>
 s.<span class="fn">to_mut</span>().<span class="fn">push_str</span>(<span class="str">" world"</span>);
 <span class="cm">// s is now Cow::Owned("hello world")</span></code></pre>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>Cow</code> is an enum — one discriminant byte (plus alignment padding)
+        to distinguish <code>Borrowed</code> from <code>Owned</code>. For
+        <code>Cow&lt;str&gt;</code>, the size is the same as a <code>String</code>
+        (pointer + length + capacity) because the enum must accommodate the larger
+        variant. The cost of the branch on the discriminant is negligible. The real
+        value is in what you <em>don't</em> pay: no allocation in the
+        <code>Borrowed</code> path. This is a zero-cost abstraction in the literal
+        sense — the <code>Borrowed</code> variant compiles down to the same code as
+        passing a plain <code>&amp;str</code>.
+      </p>
 
       <h2>When to use it</h2>
 

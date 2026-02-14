@@ -88,6 +88,16 @@
         memory.</strong> Once a future is pinned, no one can move it, so self-references
         remain valid.
       </p>
+      <p>
+        Formally, the compiler-generated future is a <strong>self-referential
+        struct</strong>: it contains a field (<code>data</code>) and another field
+        (<code>slice</code>) that is a pointer into the first. In most languages,
+        this works because the garbage collector updates pointers when it moves
+        objects. Rust has no GC, so it uses <code>Pin</code> instead: a type-level
+        guarantee that the struct's address is stable. The <code>Future::poll</code>
+        method takes <code>Pin&lt;&amp;mut Self&gt;</code> specifically because the
+        executor must guarantee the future hasn't moved before it resumes polling.
+      </p>
 
       <h2>What <code>Pin</code> actually means</h2>
 
@@ -167,17 +177,35 @@
         know which type's future it will be.
       </p>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>Pin</code> itself is zero-cost — it's a wrapper that restricts the API,
+        not a runtime mechanism. <code>Pin&lt;&amp;mut T&gt;</code> compiles to the
+        same machine code as <code>&amp;mut T</code>. The cost comes from
+        <code>Box::pin()</code>: one heap allocation to give the future a stable
+        address. For trait objects (<code>Pin&lt;Box&lt;dyn Future&gt;&gt;</code>),
+        you also pay for vtable dispatch on each <code>poll()</code> call. For
+        non-trait-object futures (the common case with <code>async fn</code>), the
+        compiler pins the future on the stack or in the task allocator with no heap
+        allocation at all — <code>Pin</code> is enforced purely at the type level.
+        Without <code>Pin</code>, safe Rust would have no way to express "this value
+        must not move" — you'd need unsafe code to manage self-referential state
+        machines by hand, which is exactly what C++ coroutine implementations do.
+      </p>
+
       <h2>When to use it</h2>
 
       <ul>
         <li>Returning futures from trait methods that use <code>dyn Trait</code></li>
         <li>Storing futures of different types in the same <code>Vec</code> or struct field</li>
-        <li>Any situation where the compiler asks for <code>Pin</code></li>
+        <li>Any situation where a <code>Pin</code> bound appears in the type signature</li>
       </ul>
       <p>
         For normal <code>async fn</code> usage, you never think about <code>Pin</code>.
-        The compiler handles it. <code>Pin</code> only shows up when you use trait objects,
-        implement <code>Future</code> by hand, or store different future types together.
+        It's managed automatically by the generated state machine. <code>Pin</code>
+        only shows up when you use trait objects, implement <code>Future</code> by
+        hand, or store different future types together.
       </p>
 
       <nav class="series-index" id="series-index">

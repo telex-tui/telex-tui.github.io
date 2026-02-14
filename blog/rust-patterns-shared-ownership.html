@@ -79,8 +79,8 @@
       <h2>Why Rust does this</h2>
 
       <p>
-        Because every value in Rust has exactly one owner, the compiler always knows
-        when to drop it &mdash; right when that owner goes out of scope. No double frees,
+        Because every value in Rust has exactly one owner, the drop point is statically
+        determined &mdash; right when that owner goes out of scope. No double frees,
         no use-after-free, no garbage collector. <code>Box&lt;T&gt;</code> works exactly
         like this: one pointer, one owner, one deallocation.
       </p>
@@ -183,6 +183,20 @@
         holds an <code>Rc</code> to A, the count never reaches zero and neither is ever
         freed. Break cycles with <code>Weak</code>, which points to the data without
         keeping it alive.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>Rc</code> stores two <code>usize</code>s alongside your data on the heap: a strong
+        count and a weak count. Cloning an <code>Rc</code> increments the strong count &mdash; a
+        single non-atomic integer operation. Dropping decrements it. When the strong count reaches
+        zero, the data is dropped; when the weak count also reaches zero, the allocation is freed.
+        The cost is one heap allocation at creation and one integer bump per clone/drop. There is no
+        atomic synchronization, which is why <code>Rc</code> is faster than <code>Arc</code> but
+        restricted to a single thread. Without <code>Rc</code>, shared ownership on the heap would
+        require <code>unsafe</code> &mdash; raw pointer aliasing with manual reference counting,
+        exactly what <code>Rc</code> encapsulates.
       </p>
 
       <h2>When to use it</h2>

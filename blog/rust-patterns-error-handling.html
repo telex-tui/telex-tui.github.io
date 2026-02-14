@@ -196,6 +196,56 @@ Caused by:
         <code>anyhow::Error</code>. Both approaches plug into the same conversion system.
       </p>
 
+      <h2>Error downcasting and the <code>source()</code> chain</h2>
+
+      <p>
+        The <code>std::error::Error</code> trait has a <code>source()</code> method
+        that returns the underlying cause of an error, if any. This creates a chain:
+        your application error wraps a library error, which wraps an OS error.
+        <code>thiserror</code> generates the <code>source()</code> implementation
+        automatically when you use <code>#[source]</code> or <code>#[from]</code>.
+      </p>
+      <p>
+        <code>anyhow</code> preserves this chain and prints it with
+        <code>{:?}</code> or <code>.chain()</code>. You can also downcast an
+        <code>anyhow::Error</code> to a specific type when you need to:
+      </p>
+
+      <pre><code><span class="kw">use</span> anyhow::<span class="ty">Result</span>;
+
+<span class="kw">fn</span> <span class="fn">handle</span>(err: anyhow::<span class="ty">Error</span>) {
+    <span class="kw">if let</span> <span class="ty">Some</span>(io_err) = err.<span class="fn">downcast_ref</span>::&lt;std::io::<span class="ty">Error</span>&gt;() {
+        <span class="kw">match</span> io_err.<span class="fn">kind</span>() {
+            std::io::<span class="ty">ErrorKind</span>::<span class="ty">NotFound</span> =&gt; {
+                <span class="cm">// handle missing file</span>
+            }
+            _ =&gt; { <span class="cm">/* other IO errors */</span> }
+        }
+    }
+}</code></pre>
+
+      <p>
+        If you find yourself downcasting frequently, that's a sign you should switch
+        to <code>thiserror</code> with structured variants. Downcasting is a runtime
+        type check — it works, but pattern matching on an enum is checked at compile
+        time and can't silently miss a case.
+      </p>
+
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>thiserror</code> generates zero runtime overhead beyond what you'd
+        write by hand — it's a proc macro that emits <code>Display</code> and
+        <code>From</code> impls. The error enum is stack-allocated, sized to its
+        largest variant. <code>anyhow::Error</code> heap-allocates: it stores the
+        error behind a pointer with a vtable for downcasting. The allocation happens
+        once per error. Since errors are the exceptional path, this cost is
+        irrelevant in practice — you're about to unwind or log, not iterate in a
+        tight loop. The real cost of poor error handling isn't runtime — it's lost
+        diagnostic information when you erase types too aggressively or forget to
+        add context.
+      </p>
+
       <h2>When to use it</h2>
 
       <ul>

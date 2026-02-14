@@ -159,9 +159,72 @@
 }</code></pre>
 
       <p>
-        Now the compiler catches it if you pass an <code>EdgeId</code> where a
+        Now the type checker rejects it if you pass an <code>EdgeId</code> where a
         <code>NodeId</code> is expected. Zero runtime cost.
       </p>
+
+      <h2>Generational indices</h2>
+
+<p>
+  A bare index has no way to tell you whether the slot it points to still holds the
+  original value. If you remove node 5 and later insert a new node that reuses slot 5,
+  any old index pointing to 5 now silently refers to the wrong node. This is the ABA
+  problem: the index looks valid, the slot is occupied, but the occupant has changed.
+</p>
+
+<pre><code><span class="kw">struct</span> <span class="ty">GenIndex</span> {
+    index: <span class="ty">usize</span>,
+    generation: <span class="ty">u64</span>,
+}
+
+<span class="kw">struct</span> <span class="ty">Slot</span>&lt;<span class="ty">T</span>&gt; {
+    value: <span class="ty">Option</span>&lt;<span class="ty">T</span>&gt;,
+    generation: <span class="ty">u64</span>,
+}
+
+<span class="kw">struct</span> <span class="ty">Arena</span>&lt;<span class="ty">T</span>&gt; {
+    slots: <span class="ty">Vec</span>&lt;<span class="ty">Slot</span>&lt;<span class="ty">T</span>&gt;&gt;,
+    free_list: <span class="ty">Vec</span>&lt;<span class="ty">usize</span>&gt;,
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Arena</span>&lt;<span class="ty">T</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">insert</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, value: <span class="ty">T</span>) -&gt; <span class="ty">GenIndex</span> {
+        <span class="kw">if let</span> <span class="ty">Some</span>(index) = <span class="kw">self</span>.free_list.<span class="fn">pop</span>() {
+            <span class="kw">self</span>.slots[index].value = <span class="ty">Some</span>(value);
+            <span class="ty">GenIndex</span> { index, generation: <span class="kw">self</span>.slots[index].generation }
+        } <span class="kw">else</span> {
+            <span class="kw">let</span> index = <span class="kw">self</span>.slots.<span class="fn">len</span>();
+            <span class="kw">self</span>.slots.<span class="fn">push</span>(<span class="ty">Slot</span> { value: <span class="ty">Some</span>(value), generation: <span class="num">0</span> });
+            <span class="ty">GenIndex</span> { index, generation: <span class="num">0</span> }
+        }
+    }
+
+    <span class="kw">fn</span> <span class="fn">remove</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, id: <span class="ty">GenIndex</span>) {
+        <span class="kw">if let</span> <span class="ty">Some</span>(slot) = <span class="kw">self</span>.slots.<span class="fn">get_mut</span>(id.index) {
+            slot.value = <span class="ty">None</span>;
+            slot.generation += <span class="num">1</span>; <span class="cm">// invalidate old handles</span>
+            <span class="kw">self</span>.free_list.<span class="fn">push</span>(id.index);
+        }
+    }
+
+    <span class="kw">fn</span> <span class="fn">get</span>(&amp;<span class="kw">self</span>, id: <span class="ty">GenIndex</span>) -&gt; <span class="ty">Option</span>&lt;&amp;<span class="ty">T</span>&gt; {
+        <span class="kw">let</span> slot = <span class="kw">self</span>.slots.<span class="fn">get</span>(id.index)?;
+        <span class="kw">if</span> slot.generation == id.generation {
+            slot.value.<span class="fn">as_ref</span>()
+        } <span class="kw">else</span> {
+            <span class="ty">None</span> <span class="cm">// stale handle — slot was reused</span>
+        }
+    }
+}</code></pre>
+
+<p>
+  Every slot carries a generation counter. When a slot is freed, its generation increments.
+  A <code>GenIndex</code> stores both the slot position and the generation it was issued for.
+  On lookup, if the generations don't match, the handle is stale and the lookup returns
+  <code>None</code> instead of silently returning the wrong data. Libraries like
+  <code>slotmap</code>, <code>thunderdome</code>, and <code>generational-arena</code>
+  implement this with additional optimizations (packed free lists, iteration support).
+</p>
 
       <h2>ECS: this pattern at scale</h2>
 
@@ -183,14 +246,25 @@
       <ul>
         <li><strong>No compile-time validity.</strong> An index is just a number. If you
           remove a node without cleaning up references to it, the index becomes stale.
-          This is a runtime concern, not a compile-time one.</li>
-        <li><strong>Generational indices</strong> mitigate stale references: each slot has
-          a generation counter that increments on removal. An index stores both the position
-          and the generation; lookup checks that they match.</li>
+          This is a runtime concern, not a compile-time one. Generational indices
+          (described above) mitigate this but do not eliminate it entirely.</li>
         <li><strong>Cache-friendly.</strong> Nodes live in contiguous memory. Iterating
           over all nodes is a linear scan. This is often faster than chasing heap-allocated
           <code>Box&lt;Node&gt;</code> pointers.</li>
       </ul>
+
+      <h2>What does this cost?</h2>
+
+<p>
+  An index is a usize — one machine word, no heap allocation, no pointer chasing.
+  Lookup is a bounds-checked array access: one comparison and one indexed load.
+  Iteration over all live entities is a linear scan through contiguous memory — the
+  best possible access pattern for CPU caches. Without index-based design, graph-like
+  structures in safe Rust require either Rc<RefCell<T>> (heap allocation per node,
+  double indirection, borrow checking overhead) or unsafe raw pointer graphs. The
+  index approach avoids both, at the cost of giving up compile-time validity checks
+  on the handles themselves.
+</p>
 
       <h2>When to use it</h2>
 
@@ -202,7 +276,7 @@
       </ul>
       <p>
         When not to: if your data is a simple tree with clear parent-to-child ownership and
-        no cycles, <code>Box&lt;Node&gt;</code> works fine and the compiler checks everything
+        no cycles, <code>Box&lt;Node&gt;</code> works fine and the type system verifies everything
         statically.
       </p>
 
