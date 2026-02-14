@@ -30,11 +30,14 @@
       <p class="series-nav">Post 14 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have several types that all need to do the same thing &mdash; like different
-        shapes that can each calculate their area. In most languages, you'd use an interface
-        or a base class. Rust gives you two options: enums and trait objects. They solve the
-        same problem in opposite ways, and picking the wrong one makes the code harder to
-        change later.
+        Programs constantly need to handle &ldquo;one of several things.&rdquo; A drawing
+        program has circles, rectangles, and triangles &mdash; all shapes, but each calculates
+        area differently. A message parser handles text, images, and commands &mdash; all
+        messages, but each is processed differently. Every language needs a way to say
+        &ldquo;this variable could be any of these types, and here&rsquo;s how to handle each
+        one.&rdquo; Rust gives you two options: enums (list every variant in one place) and
+        trait objects (define an interface that any type can implement). They solve the same
+        problem in opposite ways, and which one fits depends on how your code will grow.
       </p>
 
       <h2>Approach 1: Enum dispatch</h2>

@@ -30,10 +30,14 @@
       <p class="series-nav">Post 2 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        In Rust, one variable owns each value, and when that variable goes out of scope, the
-        value is dropped. That's how Rust avoids a garbage collector. But trees, graphs, and
-        callback registries all need multiple parts of the program to hold onto the same
-        data. Single ownership doesn't cover that.
+        Most data has one clear owner: a function creates it, uses it, and cleans it up. But
+        some data doesn't belong to any single place. A UI widget tree where a child needs to
+        reference its parent. A graph where multiple nodes point to the same neighbor. A parsed
+        document where several parts of the code hold onto the same node. In these structures,
+        ownership is inherently shared &mdash; no single owner can decide when the data is done.
+        Rust's default ownership model (one owner, dropped when it goes out of scope) can't
+        express this. <code>Rc</code> gives you shared ownership: multiple handles to the same
+        heap-allocated data, freed when the last handle is gone.
       </p>
 
       <h2>The motivation</h2>

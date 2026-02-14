@@ -30,10 +30,15 @@
       <p class="series-nav">Post 9 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You pass a closure to a function and the compiler says the traits don't match.
-        You didn't pick a trait &mdash; you just wrote a <code>||</code> block. What happened?
-        It comes down to how your closure uses the variables it captures, and once you
-        see the pattern, a lot of Rust clicks into place.
+        Closures are functions that remember the context where they were created. A button
+        click handler that references a counter variable. A sorting comparator that
+        references a configuration. A callback that captures the connection it should send
+        data through. But "remembering context" means different things. Some closures just
+        read the captured data. Some modify it. Some consume it entirely (like moving a
+        connection into a one-shot callback). Rust distinguishes these with three traits
+        &mdash; <code>Fn</code>, <code>FnMut</code>, and <code>FnOnce</code> &mdash;
+        because what a closure does with its captured data determines where it can safely
+        be used.
       </p>
 
       <h2>The motivation</h2>

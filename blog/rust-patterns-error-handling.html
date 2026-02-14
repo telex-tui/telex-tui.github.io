@@ -30,11 +30,15 @@
       <p class="series-nav">Post 16 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Your application reads a config file, parses JSON, queries a database, and serves
-        HTTP. Each layer produces its own error type. Combining them manually means writing
-        error enums, <code>Display</code> impls, and <code>From</code> impls for every
-        source. There's a better way &mdash; and the answer depends on whether you're
-        writing a library or an application.
+        Real programs fail in many ways. A config file might be missing. A JSON payload
+        might be malformed. A database might be unreachable. A network request might time
+        out. Each layer of your program produces its own kind of error, and you need to
+        combine them &mdash; a function that reads a file, parses it, and queries a database
+        might encounter three different error types. Handling each one manually means writing
+        conversion boilerplate for every combination. Rust's ecosystem has settled on two
+        crates that eliminate this boilerplate: <code>thiserror</code> for libraries (where
+        callers need to match on specific errors) and <code>anyhow</code> for applications
+        (where errors get reported to a human).
       </p>
 
       <h2>The problem</h2>

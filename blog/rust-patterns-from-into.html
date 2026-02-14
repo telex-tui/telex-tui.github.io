@@ -30,11 +30,14 @@
       <p class="series-nav">Post 15 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You're writing a function that takes a string, but some callers have a
-        <code>&amp;str</code>, some have a <code>String</code>, and some have a
-        <code>PathBuf</code>. You want all of them to just work without making callers
-        convert by hand. The <code>From</code> and <code>Into</code> traits are how you
-        do that in Rust.
+        APIs constantly accept values that could come in different forms. A function that
+        takes a file path might receive a <code>&amp;str</code>, a <code>String</code>, or a
+        <code>PathBuf</code>. A constructor that takes a name might get a literal or an owned
+        string. Forcing every caller to convert manually &mdash; <code>.to_string()</code>
+        everywhere, <code>PathBuf::from()</code> at every call site &mdash; creates noise
+        that hides what the code actually does. The <code>From</code> and <code>Into</code>
+        traits let a function accept multiple input types and handle the conversion
+        internally. The caller passes whatever they have; the function does the rest.
       </p>
 
       <h2>The motivation</h2>

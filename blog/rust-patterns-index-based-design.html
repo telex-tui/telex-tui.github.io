@@ -30,10 +30,16 @@
       <p class="series-nav">Post 5 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Some data structures don't fit Rust's ownership model naturally. Graphs, trees with
-        parent pointers, entity-component systems &mdash; anything where things reference
-        each other in cycles or complex webs. The solution is surprisingly simple: stop
-        using references.
+        Graphs are everywhere in programming: a scene tree in a game engine, a DOM in a browser,
+        a dependency graph in a build system, a network of nodes in an audio processor. In most
+        languages, you'd model these with objects pointing to each other &mdash; each node holds
+        a reference to its neighbors. In Rust, this falls apart immediately. If node A points to
+        node B and node B points to node A, who owns whom? You can't create mutual references
+        with Rust's ownership model. <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> works
+        (<a href="rust-patterns-rc-refcell.html">Post #3</a>) but adds overhead for every node.
+        The index-based approach sidesteps the problem entirely: store all nodes in a
+        <code>Vec</code>, and use indices (plain integers) instead of pointers. No ownership
+        tangles, no reference counting, no borrow checker fights.
       </p>
 
       <h2>The motivation</h2>

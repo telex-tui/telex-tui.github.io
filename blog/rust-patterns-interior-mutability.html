@@ -30,10 +30,14 @@
       <p class="series-nav">Post 1 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have a struct with a <code>HashMap</code> field that you use for caching, and it
-        gets passed around by shared reference. Inside a method that takes <code>&amp;self</code>,
-        you need to insert into that <code>HashMap</code> &mdash; and the compiler rejects it.
-        This is the first wall.
+        Programs often have data that many parts of the code need to read but that occasionally
+        needs to change. A configuration that dozens of functions reference. A cache that stores
+        results so they don't need to be recomputed. A counter tracking how many times something
+        has happened. In most languages you'd just mutate it &mdash; everything is mutable by
+        default. In Rust, if multiple parts of the code hold references to that data, none of
+        them can mutate it. That's the borrow rule: many readers or one writer, never both.
+        Interior mutability is how you work within that rule when you genuinely need shared data
+        to change.
       </p>
 
       <h2>The motivation</h2>

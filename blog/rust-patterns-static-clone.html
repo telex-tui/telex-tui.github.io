@@ -30,11 +30,13 @@
       <p class="series-nav">Post 8 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You're spawning a thread or an async task, and the API requires <code>'static</code>.
-        But your data borrows from something, so the compiler won't let it through. You try
-        adding lifetime annotations, restructuring your code, wrapping things in
-        <code>Arc</code>. Each attempt makes the code worse. There's a simpler answer:
-        just clone the data.
+        When you spawn a thread or an async task, it might run for a millisecond or for the
+        rest of the program &mdash; there's no way to know. If that task borrows data from
+        the function that created it, and the function returns before the task finishes, the
+        borrowed data is gone and the task has a dangling reference. Rust prevents this at
+        compile time: spawning APIs require <code>'static</code>, meaning the task must own
+        everything it uses. Nothing borrowed, nothing that could disappear. The simplest way
+        to satisfy this: clone the data so the task has its own copy, then move that copy in.
       </p>
 
       <h2>The motivation</h2>

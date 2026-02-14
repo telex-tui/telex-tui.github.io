@@ -30,11 +30,14 @@
       <p class="series-nav">Post 7 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You write a function that returns a reference, or a struct that holds one. The
-        compiler asks for a lifetime annotation and you freeze. What are you supposed to
-        write? What does it even mean? Most of the confusion comes from thinking you're
-        giving the compiler instructions. You're not. You're describing relationships that
-        already exist in your code.
+        When a function returns a reference, Rust needs to know how long that reference
+        is valid. If a function takes two string slices and returns one of them, which
+        input does the output come from? The answer matters because the caller needs to
+        keep the right data alive. In simple cases &mdash; one input, one output &mdash;
+        Rust figures this out automatically (lifetime elision). But when there are multiple
+        inputs, or the relationship isn't obvious, you need to state it explicitly.
+        Lifetime annotations are that statement: they tell the compiler which input's
+        lifetime the output depends on.
       </p>
 
       <h2>The motivation</h2>

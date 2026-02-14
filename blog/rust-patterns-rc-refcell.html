@@ -30,12 +30,16 @@
       <p class="series-nav">Post 3 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        <a href="rust-patterns-interior-mutability.html">#1</a> covered
-        <code>RefCell</code>: writing through a shared reference, checked at runtime.
-        <a href="rust-patterns-shared-ownership.html">#2</a> covered <code>Rc</code>:
-        letting multiple variables own the same data, but only for reading. When you need
-        both &mdash; multiple owners who can also write &mdash; you combine them. This is
-        one of the most common patterns in single-threaded Rust.
+        <a href="rust-patterns-interior-mutability.html">Post #1</a> gave you interior
+        mutability: changing data behind a shared reference.
+        <a href="rust-patterns-shared-ownership.html">Post #2</a> gave you shared ownership:
+        multiple handles to the same data. Now put them together. You have a tree of UI
+        components where every node is shared (multiple parents, siblings, or event handlers
+        hold references). Some of those nodes need to update their state &mdash; a text field
+        stores what the user typed, a counter increments. You need both shared ownership
+        (<code>Rc</code>) and the ability to mutate through shared references
+        (<code>RefCell</code>). <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is the combination
+        that makes this work.
       </p>
 
       <h2>The motivation</h2>

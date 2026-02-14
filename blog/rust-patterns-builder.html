@@ -30,12 +30,15 @@
       <p class="series-nav">Post 13 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have a struct with twelve fields. Three are required, nine have sensible defaults.
-        If you write a constructor that takes all twelve, callers have to remember which
-        position is which. You could use <code>Default</code> and set fields one by one,
-        but then you lose validation. The builder pattern gives you a separate struct that
-        builds the real one step by step &mdash; named setters, defaults, and validation
-        all in one place.
+        As software grows, configuration gets complex. A web server needs a host, a port,
+        maybe TLS settings, connection limits, timeouts, logging levels. A database connection
+        needs a host, credentials, pool size, retry policy. When these options pile up,
+        constructors become unwieldy &mdash; a function with twelve positional arguments where
+        you can&rsquo;t remember which number is which. Some parameters are required, some
+        have sensible defaults, and some depend on each other (TLS needs a certificate path).
+        The builder pattern handles this: a separate struct that collects configuration step
+        by step, with named methods for each option and a final <code>build()</code> call
+        that validates everything together.
       </p>
 
       <h2>The motivation</h2>

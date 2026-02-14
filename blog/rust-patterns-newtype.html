@@ -30,9 +30,15 @@
       <p class="series-nav">Post 11 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Two function parameters are both <code>u64</code>. A caller swaps them by accident.
-        The program compiles, runs, and gives wrong results. The type system could have
-        caught this, but the compiler sees two <code>u64</code>s and can't tell them apart.
+        Programs are full of values that are technically the same type but mean completely
+        different things. A user ID and an order ID are both <code>u64</code>s. Latitude and
+        longitude are both <code>f64</code>s. A duration in seconds and a duration in
+        milliseconds are both numbers. If you accidentally pass a user ID where an order ID
+        is expected, or mix up seconds and milliseconds, the program compiles and runs &mdash;
+        with wrong results. The type system could prevent this, but only if these values have
+        different types. The newtype pattern wraps a primitive in a single-field struct,
+        creating a distinct type that the compiler tracks separately. Same data at runtime,
+        different type at compile time.
       </p>
 
       <h2>The motivation</h2>

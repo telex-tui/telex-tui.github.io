@@ -30,11 +30,15 @@
       <p class="series-nav">Post 12 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Say you have a connection that moves through states: disconnected, connecting,
-        connected. You should only be able to send data when connected. The straightforward
-        approach is to check the state at runtime and panic or return an error if the caller
-        does something wrong. The typestate pattern turns those mistakes into compile errors
-        instead.
+        Many things in programming have states and rules about what you can do in each state.
+        A network connection must be opened before you send data. A file must be created
+        before you write to it. A transaction must be started before you commit. In most
+        programs, these rules are checked at runtime: &ldquo;if not connected, return an
+        error.&rdquo; But runtime checks can be forgotten &mdash; you add a new method and
+        forget the state check, and the bug hides until production. The typestate pattern
+        encodes states in the type system. Each state is a separate type, and methods only
+        exist on the type where they&rsquo;re valid. Invalid operations aren&rsquo;t runtime
+        errors &mdash; they&rsquo;re compile errors.
       </p>
 
       <h2>The motivation</h2>

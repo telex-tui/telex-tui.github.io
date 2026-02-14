@@ -30,11 +30,15 @@
       <p class="series-nav">Post 6 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Should your function take <code>&amp;str</code> or <code>String</code>? If it takes
-        <code>&amp;str</code>, callers who have a <code>String</code> can just pass a reference.
-        But if the function sometimes needs to modify the string, it has to allocate a new
-        <code>String</code> every time &mdash; even when it returns the input unchanged.
-        <code>Cow</code> solves this.
+        Functions receive data and sometimes need to modify it, sometimes don't. A URL
+        normalizer might lowercase a path that has uppercase letters but leave an
+        already-lowercase path unchanged. A text processor might strip whitespace from
+        strings that have it but pass clean strings through. In these cases, cloning the
+        input "just in case" wastes memory &mdash; most of the time no modification is
+        needed. But you can't return a reference if you sometimes need to return modified
+        data. <code>Cow</code> (clone-on-write) handles both cases: it borrows the
+        original when possible and only allocates a new copy when modification is actually
+        required.
       </p>
 
       <h2>The motivation</h2>

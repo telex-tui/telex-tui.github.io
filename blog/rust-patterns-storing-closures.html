@@ -30,10 +30,14 @@
       <p class="series-nav">Post 10 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You want a struct with a callback field. What type do you give it? You want a
-        function that returns a closure. What return type do you write? The answer touches
-        one of Rust's most distinctive features: every closure has a unique, anonymous type
-        that you can't name.
+        You want to store a callback for later: an event handler in a UI framework, a retry
+        strategy in an HTTP client, a filter function in a query builder. The closure needs
+        to live inside a struct field or a collection, not just be passed as an argument and
+        used immediately. But every closure in Rust has a unique, anonymous type that the
+        compiler generates &mdash; you can't write it in a struct definition. How do you
+        store something whose type you can't name? Rust gives you two approaches: generics
+        (when you know the closure type at compile time) and trait objects (when you need to
+        store different closures interchangeably).
       </p>
 
       <h2>The motivation</h2>

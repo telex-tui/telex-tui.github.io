@@ -30,9 +30,14 @@
       <p class="series-nav">Post 4 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have a struct with two fields. A method needs to read one and write the other.
-        The compiler blocks it &mdash; it sees a borrow of the whole struct, not individual
-        fields. The fix is usually a small structural change, not a fight.
+        As programs grow, you put related data into structs &mdash; a game entity has a
+        position, a velocity, and a health value. A renderer has a framebuffer, a list of draw
+        commands, and a camera. You write a method that needs to read one field and write to
+        another. The borrow checker sees you borrowing <code>&amp;mut self</code> and refuses to
+        let you also borrow <code>&amp;self.other_field</code>, even though you're touching
+        completely separate data. The compiler doesn't see individual fields &mdash; it sees the
+        whole struct as one borrow. Split borrows are how you tell the compiler which fields
+        you're actually using, so it can verify they don't overlap.
       </p>
 
       <h2>The motivation</h2>

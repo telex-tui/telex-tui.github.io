@@ -30,13 +30,18 @@
       <p class="series-nav">Post 17 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have data that multiple threads need to read and write. You reach for
-        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> because that's what worked in
-        <a href="rust-patterns-rc-refcell.html">#3</a>. The compiler says no:
-        <code>Rc</code> is not <code>Send</code>, <code>RefCell</code> is not
-        <code>Sync</code>. The thread-safe equivalents are <code>Arc</code> and
-        <code>Mutex</code>. They wrap your data the same way, but they use atomic
-        operations and OS locks so multiple threads can share safely.
+        Some data needs to be accessed from multiple threads. A request counter that every
+        worker thread increments. A cache that any thread can read from or write to. A
+        configuration that the main thread updates and worker threads consult. In a
+        single-threaded program, <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> handles shared
+        mutable data (<a href="rust-patterns-rc-refcell.html">#3</a>). But threads introduce
+        a new danger: two threads might read and write the same memory at the exact same
+        instant, corrupting it. <code>Rc</code> uses a plain integer for its count &mdash;
+        two threads incrementing it simultaneously can lose an update. Rust prevents this at
+        compile time: <code>Rc</code> is not <code>Send</code>. The thread-safe equivalents
+        are <code>Arc</code> (atomic reference counting) and <code>Mutex</code> (mutual
+        exclusion), which use hardware-level atomic operations and OS locks to make
+        concurrent access safe.
       </p>
 
       <h2>The motivation</h2>
