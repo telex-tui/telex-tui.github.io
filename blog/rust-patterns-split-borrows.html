@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #4: Split Borrows - Telex</title>
+  <meta name="description" content="When the borrow checker blocks you from reading one field while writing another, the fix is structural — destructure, extract, or restructure.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #4: Split Borrows</h1>
+      <div class="post-meta">March 2026</div>
+
+      <p>
+        You have a struct with two fields. A method needs to read one and write the other.
+        The compiler blocks it &mdash; it sees a borrow of the whole struct, not individual
+        fields. The fix is usually a small structural change, not a fight.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        A renderer holds both a configuration and a buffer. The <code>render</code> method
+        reads the configuration to decide what to draw, then writes to the buffer.
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Renderer</span> {
+    config: <span class="ty">Config</span>,
+    buffer: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Renderer</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+        <span class="kw">let</span> width = <span class="kw">self</span>.<span class="fn">get_width</span>(); <span class="cm">// borrows &amp;self</span>
+        <span class="kw">self</span>.buffer.<span class="fn">resize</span>(width, <span class="num">0</span>);  <span class="cm">// borrows &amp;mut self — ERROR</span>
+    }
+
+    <span class="kw">fn</span> <span class="fn">get_width</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">usize</span> {
+        <span class="kw">self</span>.config.width
+    }
+}</code></pre>
+
+      <p>
+        The compiler:
+      </p>
+
+      <pre><code><span class="cm">error[E0502]: cannot borrow `self.buffer` as mutable because
+              it is also borrowed as immutable</span></code></pre>
+
+      <p>
+        <code>get_width</code> takes <code>&amp;self</code>, which borrows the entire
+        struct. While that borrow is alive (because <code>width</code> could theoretically
+        be a reference into <code>self</code>), the compiler won't let you mutably borrow
+        <code>self.buffer</code>.
+      </p>
+
+      <h2>Why the compiler does this</h2>
+
+      <p>
+        Method calls taking <code>&amp;self</code> or <code>&amp;mut self</code> borrow
+        the <em>whole</em> struct. The compiler doesn't look inside the method to see which
+        fields it actually touches. From its perspective, <code>get_width(&amp;self)</code>
+        might be reading <code>self.buffer</code>, and if it is, then the simultaneous
+        <code>&amp;mut self.buffer</code> would be unsound.
+      </p>
+      <p>
+        Direct field access is different. If you write <code>self.config.width</code>
+        instead of calling a method, the compiler can see that the borrow is only on
+        <code>self.config</code>, and <code>self.buffer</code> is disjoint. The problem
+        is specifically about method calls that borrow the whole struct.
+      </p>
+
+      <h2>Pattern 1: Direct field access</h2>
+
+      <p>
+        The simplest fix &mdash; inline the field access instead of calling a method:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+    <span class="kw">let</span> width = <span class="kw">self</span>.config.width;  <span class="cm">// borrows self.config only</span>
+    <span class="kw">self</span>.buffer.<span class="fn">resize</span>(width, <span class="num">0</span>);   <span class="cm">// borrows self.buffer — disjoint, OK</span>
+}</code></pre>
+
+      <p>
+        The compiler knows <code>self.config</code> and <code>self.buffer</code> are
+        different fields. No conflict. This works because the compiler does do field-level
+        borrow tracking for direct access &mdash; it's method calls that erase field
+        information.
+      </p>
+
+      <h2>Pattern 2: Destructuring</h2>
+
+      <p>
+        When you need to work with multiple fields across several operations, destructure
+        the struct to give each field its own binding:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+    <span class="kw">let</span> <span class="ty">Renderer</span> { config, buffer } = <span class="kw">self</span>;
+    <span class="cm">// config: &amp;Config (borrowed from self)</span>
+    <span class="cm">// buffer: &amp;mut Vec&lt;u8&gt; (borrowed from self)</span>
+    <span class="cm">// These are disjoint borrows — compiler is happy</span>
+
+    <span class="kw">let</span> width = config.width;
+    buffer.<span class="fn">resize</span>(width, <span class="num">0</span>);
+}</code></pre>
+
+      <p>
+        Destructuring splits <code>self</code> into independent borrows. The compiler can
+        see that <code>config</code> and <code>buffer</code> don't overlap.
+      </p>
+
+      <h2>Pattern 3: Helper functions on fields</h2>
+
+      <p>
+        If the logic is complex enough to warrant methods, make them take the individual
+        fields rather than <code>&amp;self</code>:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">Renderer</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+        <span class="ty">Renderer</span>::<span class="fn">fill_buffer</span>(&amp;<span class="kw">self</span>.config, &amp;<span class="kw">mut</span> <span class="kw">self</span>.buffer);
+    }
+
+    <span class="kw">fn</span> <span class="fn">fill_buffer</span>(config: &amp;<span class="ty">Config</span>, buffer: &amp;<span class="kw">mut</span> <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;) {
+        buffer.<span class="fn">resize</span>(config.width, <span class="num">0</span>);
+    }
+}</code></pre>
+
+      <p>
+        The function signature explicitly takes <code>&amp;Config</code> and
+        <code>&amp;mut Vec&lt;u8&gt;</code>. The compiler can see these are disjoint
+        borrows of <code>self</code>.
+      </p>
+
+      <h2>Pattern 4: Temporary variables</h2>
+
+      <p>
+        If you only need to read a value from one field, copy or clone it before touching
+        the other field:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+    <span class="kw">let</span> width = <span class="kw">self</span>.<span class="fn">get_width</span>(); <span class="cm">// borrows and releases &amp;self</span>
+    <span class="cm">// width is an owned usize — no borrow alive</span>
+    <span class="kw">self</span>.buffer.<span class="fn">resize</span>(width, <span class="num">0</span>);  <span class="cm">// fine — no conflicting borrow</span>
+}</code></pre>
+
+      <p>
+        Wait &mdash; this is the original code that failed. Why does it work? Actually,
+        it depends on the return type. If <code>get_width</code> returns <code>usize</code>
+        (copied, no borrow), the shared borrow of <code>self</code> is released before
+        <code>self.buffer</code> is mutably borrowed. If it returned <code>&amp;usize</code>,
+        the borrow would persist. The key insight: the compiler extends borrows only as long
+        as the returned reference lives.
+      </p>
+
+      <h2>The key insight</h2>
+
+      <p>
+        The compiler is smarter than it might seem. It tracks borrows at the field level for
+        direct access. The problem comes specifically from method calls, which borrow the
+        whole struct via <code>&amp;self</code>/<code>&amp;mut self</code>. The fixes all
+        share one strategy: give the compiler enough information to see that the borrows
+        are disjoint.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <p>
+        Anytime you get "cannot borrow X as mutable because it is also borrowed as
+        immutable" and you know the borrows are on different fields. The fix is
+        usually one of:
+      </p>
+      <ul>
+        <li>Inline the field access instead of calling a method</li>
+        <li>Destructure the struct</li>
+        <li>Use free functions or associated functions that take fields separately</li>
+        <li>Copy/clone the value to end the borrow before mutating</li>
+      </ul>
+      <p>
+        If none of these work and you genuinely have aliased mutable access, the borrow
+        checker is right to reject it. But most "split borrow" situations are false positives
+        that one of these patterns resolves.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

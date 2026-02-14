@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #19: Pin and Boxing Futures - Telex</title>
+  <meta name="description" content="Pinning means 'this value won't move in memory' — and async needs that guarantee. The mental model for Pin, Box::pin, and why trait methods that return futures need boxing.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #19: Pin and Boxing Futures</h1>
+      <div class="post-meta">September 2026</div>
+
+      <p>
+        You write an async trait method, or try to store a future in a struct, and the
+        compiler demands <code>Pin</code>. You have no mental model for what
+        <code>Pin</code> means or why async needs it. This post builds that mental model.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        You want a trait with an async method:
+      </p>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">DataSource</span> {
+    <span class="kw">async fn</span> <span class="fn">fetch</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;;
+}</code></pre>
+
+      <p>
+        In recent Rust editions, this works directly in many cases. But sometimes you
+        need to return the future as a trait object, store it in a struct, or work with
+        it manually. That's when you encounter:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">fetch</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Pin</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Future</span>&lt;<span class="ty">Output</span> = <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;&gt; + <span class="ty">Send</span> + <span class="kw">'_</span>&gt;&gt;</code></pre>
+
+      <p>
+        What is <code>Pin</code>? Why is it needed? What does <code>Box::pin</code> do?
+      </p>
+
+      <h2>Why async needs <code>Pin</code></h2>
+
+      <p>
+        An <code>async fn</code> compiles to a state machine struct. Each <code>.await</code>
+        point is a state. The struct holds the local variables that live across those
+        <code>.await</code> points.
+      </p>
+
+      <pre><code><span class="kw">async fn</span> <span class="fn">example</span>() {
+    <span class="kw">let</span> data = <span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+    <span class="kw">let</span> slice = &amp;data[..];  <span class="cm">// reference to data</span>
+    <span class="fn">some_async_op</span>().<span class="kw">await</span>;   <span class="cm">// suspend here</span>
+    <span class="mac">println!</span>(<span class="str">"{:?}"</span>, slice); <span class="cm">// use slice after await</span>
+}</code></pre>
+
+      <p>
+        The compiler-generated state machine holds both <code>data</code> and
+        <code>slice</code>. But <code>slice</code> is a reference <em>into</em>
+        <code>data</code> &mdash; it points to memory within the same struct. This is a
+        self-referential structure.
+      </p>
+      <p>
+        If the struct moves in memory (e.g., from the stack to the heap, or when a
+        <code>Vec</code> reallocates), <code>data</code> moves to a new address, but
+        <code>slice</code> still points to the old address. The reference dangles.
+      </p>
+      <p>
+        <code>Pin</code> solves this by guaranteeing: <strong>this value will not move in
+        memory.</strong> Once a future is pinned, no one can move it, so self-references
+        remain valid.
+      </p>
+
+      <h2>The mental model</h2>
+
+      <p>
+        <code>Pin&lt;&amp;mut T&gt;</code> means: "you have a mutable reference to T, but
+        you're not allowed to move T." Normally, if you have <code>&amp;mut T</code>, you
+        can call <code>std::mem::swap</code> or <code>std::mem::replace</code> to move the
+        value out. <code>Pin</code> prevents this.
+      </p>
+      <p>
+        Specifically, you can't get a <code>&amp;mut T</code> from a
+        <code>Pin&lt;&amp;mut T&gt;</code> unless <code>T: Unpin</code>.
+      </p>
+
+      <h2><code>Unpin</code></h2>
+
+      <p>
+        Most types are <code>Unpin</code>. An <code>i32</code>, a <code>String</code>,
+        a <code>Vec&lt;T&gt;</code> &mdash; they don't contain self-references, so moving
+        them is perfectly safe. For these types, <code>Pin</code> has no effect.
+      </p>
+      <p>
+        Futures generated by <code>async</code> blocks are <code>!Unpin</code> &mdash; they
+        <em>might</em> contain self-references (like the <code>data</code>/<code>slice</code>
+        example). For these types, <code>Pin</code> matters: once pinned, they can't be
+        moved.
+      </p>
+
+      <h2><code>Box::pin()</code></h2>
+
+      <p>
+        The pragmatic solution: put the future on the heap and pin it there.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::pin::<span class="ty">Pin</span>;
+<span class="kw">use</span> std::future::<span class="ty">Future</span>;
+
+<span class="kw">fn</span> <span class="fn">fetch</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Pin</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Future</span>&lt;<span class="ty">Output</span> = <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;&gt; + <span class="ty">Send</span> + <span class="kw">'_</span>&gt;&gt; {
+    <span class="ty">Box</span>::<span class="fn">pin</span>(<span class="kw">async move</span> {
+        <span class="cm">// async implementation</span>
+        <span class="fn">vec!</span>[]
+    })
+}</code></pre>
+
+      <p>
+        <code>Box::pin()</code> allocates the future on the heap and returns a
+        <code>Pin&lt;Box&lt;...&gt;&gt;</code>. The heap-allocated future won't move (the
+        <code>Box</code> pointer may move, but the data it points to stays put). The
+        self-references inside the future remain valid.
+      </p>
+
+      <h2>When you encounter <code>Pin</code></h2>
+
+      <p>
+        In practice, you'll encounter <code>Pin</code> in three situations:
+      </p>
+      <ol>
+        <li><strong>Async trait methods</strong> that need dynamic dispatch &mdash; return
+          <code>Pin&lt;Box&lt;dyn Future&gt;&gt;</code></li>
+        <li><strong>Storing futures in structs</strong> &mdash; the struct field needs to
+          be <code>Pin&lt;Box&lt;dyn Future&gt;&gt;</code></li>
+        <li><strong>Manual <code>Future</code> implementations</strong> &mdash; the
+          <code>poll</code> method takes <code>Pin&lt;&amp;mut Self&gt;</code></li>
+      </ol>
+      <p>
+        For cases 1 and 2, <code>Box::pin()</code> is the answer. Case 3 is advanced and
+        rarely needed in application code &mdash; libraries like <code>tokio</code> and
+        <code>futures</code> handle it internally.
+      </p>
+
+      <h2>Native async traits</h2>
+
+      <p>
+        Recent Rust (1.75+) supports <code>async fn</code> in traits directly. When the
+        compiler can determine the future's type statically, no boxing is needed. Boxing
+        is still required when you need dynamic dispatch (<code>dyn Trait</code>) because
+        the compiler can't know the concrete future type at compile time.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li>Returning futures from trait methods that use <code>dyn Trait</code></li>
+        <li>Storing heterogeneous futures in collections or struct fields</li>
+        <li>Any situation where the compiler asks for <code>Pin</code></li>
+      </ul>
+      <p>
+        For normal <code>async fn</code> usage, you don't think about <code>Pin</code> at
+        all. The compiler handles it. <code>Pin</code> only surfaces at the boundaries:
+        trait objects, manual future implementations, and heterogeneous storage.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

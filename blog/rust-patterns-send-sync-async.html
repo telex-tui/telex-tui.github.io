@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #20: Send / Sync in Async - Telex</title>
+  <meta name="description" content="'Future is not Send' — usually because you're holding a non-Send type across an await point. The fix is structural, not type-level.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #20: Send / Sync Bounds in Async</h1>
+      <div class="post-meta">September 2026</div>
+
+      <p>
+        You call <code>tokio::spawn(my_async_fn())</code> and the compiler says: "future
+        returned by <code>my_async_fn</code> is not <code>Send</code>." You have no idea
+        what's not <code>Send</code> or why it matters. This is the final boss of Rust's
+        async story, and the fix is almost always structural.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+
+<span class="kw">async fn</span> <span class="fn">do_work</span>() {
+    <span class="kw">let</span> data = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="str">"hello"</span>);
+    <span class="fn">some_async_call</span>().<span class="kw">await</span>;
+    <span class="mac">println!</span>(<span class="str">"{data}"</span>);
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> rt = tokio::runtime::<span class="ty">Runtime</span>::<span class="fn">new</span>().<span class="fn">unwrap</span>();
+    rt.<span class="fn">block_on</span>(<span class="kw">async</span> {
+        tokio::<span class="fn">spawn</span>(<span class="fn">do_work</span>()); <span class="cm">// ERROR</span>
+    });
+}</code></pre>
+
+      <pre><code><span class="cm">error: future cannot be sent between threads safely
+  -- within `impl Future&lt;Output = ()&gt;`, the trait `Send`
+     is not implemented for `Rc&lt;&amp;str&gt;`</span></code></pre>
+
+      <h2>Why <code>tokio::spawn</code> needs <code>Send</code></h2>
+
+      <p>
+        Tokio uses a work-stealing scheduler. A task might start on thread 1, suspend at
+        an <code>.await</code>, and resume on thread 3. The runtime moves the future between
+        threads. If the future contains non-<code>Send</code> data, that move is unsound.
+      </p>
+      <p>
+        <code>Send</code> means "safe to transfer to another thread." Types like
+        <code>Rc</code> (non-atomic reference count), <code>RefCell</code> (non-atomic borrow
+        flag), raw pointers, and some mutex guards are <code>!Send</code>. If any of these
+        are alive across an <code>.await</code> point, the future's state machine captures
+        them, and the future becomes <code>!Send</code>.
+      </p>
+
+      <h2>Finding the culprit</h2>
+
+      <p>
+        The compiler error usually tells you exactly what's wrong:
+      </p>
+
+      <pre><code><span class="cm">note: future is not `Send` as this value is used across an await
+  --&gt; src/main.rs:4:5
+   |
+3  |     let data = Rc::new("hello");
+   |         ---- has type `Rc&lt;&amp;str&gt;` which is not `Send`
+4  |     some_async_call().await;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^ await occurs here, with `data` maybe used afterwards</span></code></pre>
+
+      <p>
+        Read this carefully: it points to the variable (<code>data</code>), its type
+        (<code>Rc&lt;&amp;str&gt;</code>), and the <code>.await</code> point it's held
+        across. The fix is to make <code>data</code> not alive at the <code>.await</code>.
+      </p>
+
+      <h2>Pattern 1: Scope the non-Send value</h2>
+
+      <p>
+        Drop the non-<code>Send</code> value before the <code>.await</code>:
+      </p>
+
+      <pre><code><span class="kw">async fn</span> <span class="fn">do_work</span>() {
+    {
+        <span class="kw">let</span> data = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="str">"hello"</span>);
+        <span class="mac">println!</span>(<span class="str">"{data}"</span>);
+    } <span class="cm">// data dropped here</span>
+
+    <span class="fn">some_async_call</span>().<span class="kw">await</span>; <span class="cm">// no non-Send values alive — future is Send</span>
+}</code></pre>
+
+      <p>
+        By scoping <code>data</code> into a block that ends before the <code>.await</code>,
+        it's not part of the future's state machine at the suspension point. The future
+        becomes <code>Send</code>.
+      </p>
+
+      <h2>Pattern 2: Extract synchronous work</h2>
+
+      <p>
+        Move the non-<code>Send</code> work into a synchronous function:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">process_locally</span>() -&gt; <span class="ty">String</span> {
+    <span class="kw">let</span> data = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="str">"hello"</span>);
+    <span class="cm">// ... complex work with Rc ...</span>
+    data.<span class="fn">to_string</span>()
+}
+
+<span class="kw">async fn</span> <span class="fn">do_work</span>() {
+    <span class="kw">let</span> result = <span class="fn">process_locally</span>(); <span class="cm">// Rc lives and dies here</span>
+    <span class="fn">some_async_call</span>().<span class="kw">await</span>;        <span class="cm">// only String (Send) crosses the await</span>
+    <span class="mac">println!</span>(<span class="str">"{result}"</span>);
+}</code></pre>
+
+      <p>
+        The non-<code>Send</code> type lives entirely within the synchronous function.
+        Only the <code>Send</code>-safe result crosses the <code>.await</code>.
+      </p>
+
+      <h2>Pattern 3: Use Send-safe alternatives</h2>
+
+      <p>
+        Often the simplest fix is replacing the non-<code>Send</code> type with its
+        thread-safe counterpart:
+      </p>
+      <ul>
+        <li><code>Rc</code> &rarr; <code>Arc</code></li>
+        <li><code>RefCell</code> &rarr; <code>tokio::sync::Mutex</code> (or
+          <code>std::sync::Mutex</code>)</li>
+        <li><code>Cell</code> &rarr; <code>AtomicU32</code> / <code>AtomicBool</code> / etc.</li>
+      </ul>
+
+      <pre><code><span class="kw">use</span> std::sync::<span class="ty">Arc</span>;
+
+<span class="kw">async fn</span> <span class="fn">do_work</span>() {
+    <span class="kw">let</span> data = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="str">"hello"</span>); <span class="cm">// Arc is Send</span>
+    <span class="fn">some_async_call</span>().<span class="kw">await</span>;
+    <span class="mac">println!</span>(<span class="str">"{data}"</span>);             <span class="cm">// works — future is Send</span>
+}</code></pre>
+
+      <h2>Pattern 4: <code>spawn_local</code></h2>
+
+      <p>
+        If the task genuinely can't be <code>Send</code> (it deeply uses <code>Rc</code>
+        and restructuring is impractical), use <code>tokio::task::spawn_local</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> local = tokio::task::<span class="ty">LocalSet</span>::<span class="fn">new</span>();
+local.<span class="fn">run_until</span>(<span class="kw">async</span> {
+    tokio::task::<span class="fn">spawn_local</span>(<span class="fn">do_work</span>());
+}).<span class="kw">await</span>;</code></pre>
+
+      <p>
+        <code>spawn_local</code> runs the task on the current thread only &mdash; no
+        work stealing, no thread migration. The future doesn't need to be <code>Send</code>
+        because it never moves between threads. The trade-off is that local tasks don't
+        benefit from multi-threaded scheduling.
+      </p>
+
+      <h2><code>Sync</code> briefly</h2>
+
+      <p>
+        <code>Send</code> means "safe to move to another thread." <code>Sync</code>
+        means "safe to reference from another thread." Formally:
+        <code>T</code> is <code>Sync</code> if and only if <code>&amp;T</code> is
+        <code>Send</code>.
+      </p>
+      <p>
+        <code>Sync</code> comes up less often in async code, but the principle is the same.
+        If a shared reference to your type crosses an <code>.await</code> and ends up on
+        another thread, the type needs to be <code>Sync</code>.
+      </p>
+
+      <h2>The key insight</h2>
+
+      <p>
+        "Future is not Send" errors feel like type-system puzzles, but the fix is almost
+        always structural:
+      </p>
+      <ol>
+        <li>Find the non-<code>Send</code> value (the compiler tells you)</li>
+        <li>Find the <code>.await</code> it's held across (the compiler tells you this
+          too)</li>
+        <li>Make the value not alive at the <code>.await</code> &mdash; scope it, extract
+          it into a sync function, or replace it with a <code>Send</code> alternative</li>
+      </ol>
+      <p>
+        The fix is restructuring, not fighting the type system.
+      </p>
+
+      <h2>Series wrap-up</h2>
+
+      <p>
+        This is the twentieth and final pattern. The series started with the first wall
+        (<a href="rust-patterns-interior-mutability.html">interior mutability</a>) and
+        ends with the last one (<code>Send</code>/<code>Sync</code> in async). Each pattern
+        exists because Rust's ownership model forces you to express things that other
+        languages leave implicit. The patterns aren't workarounds &mdash; they're the
+        vocabulary of productive Rust.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

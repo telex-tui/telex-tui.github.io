@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #3: Rc RefCell - Telex</title>
+  <meta name="description" content="Rc for sharing, RefCell for mutation — together they solve the shared mutable state problem in single-threaded Rust. A legitimate pattern, not a code smell.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #3: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</h1>
+      <div class="post-meta">March 2026</div>
+
+      <p>
+        <a href="rust-patterns-interior-mutability.html">#1</a> covered
+        <code>RefCell</code>: mutation through a shared reference, checked at runtime.
+        <a href="rust-patterns-shared-ownership.html">#2</a> covered <code>Rc</code>:
+        multiple owners of the same data, but read-only. When you need both &mdash; shared
+        ownership <em>and</em> mutation &mdash; you combine them. This is one of the most
+        common patterns in single-threaded Rust.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        You're building a simple observer pattern. A subject holds a value. Multiple
+        observers watch the subject and react when it changes. Each observer needs a handle
+        to the subject so it can read (and trigger updates to) the shared value.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+
+<span class="kw">struct</span> <span class="ty">Subject</span> {
+    value: <span class="ty">i32</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> subject = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">Subject</span> { value: <span class="num">0</span> });
+
+    <span class="kw">let</span> observer_a = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;subject);
+    <span class="kw">let</span> observer_b = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;subject);
+
+    <span class="cm">// Both observers can read the value</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, observer_a.value);
+
+    <span class="cm">// But neither can modify it — Rc gives &amp;T, never &amp;mut T</span>
+}</code></pre>
+
+      <p>
+        <code>Rc</code> shares the data, but you can't mutate it. And you can't wrap
+        it in <code>RefCell</code> alone because you need multiple owners, not just one
+        with interior mutability. You need both.
+      </p>
+
+      <h2>The pattern: <code>Rc&lt;RefCell&lt;T&gt;&gt;</code></h2>
+
+      <p>
+        Wrap the data in <code>RefCell</code> for mutation, then wrap that in <code>Rc</code>
+        for sharing. Each owner gets a clone of the <code>Rc</code>. To mutate, they call
+        <code>.borrow_mut()</code> on the <code>RefCell</code> inside.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+<span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+
+<span class="kw">struct</span> <span class="ty">Subject</span> {
+    value: <span class="ty">i32</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> subject = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="ty">Subject</span> { value: <span class="num">0</span> }));
+
+    <span class="kw">let</span> observer_a = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;subject);
+    <span class="kw">let</span> observer_b = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;subject);
+
+    <span class="cm">// Observer A increments</span>
+    observer_a.<span class="fn">borrow_mut</span>().value += <span class="num">1</span>;
+
+    <span class="cm">// Observer B reads the updated value</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, observer_b.<span class="fn">borrow</span>().value); <span class="cm">// 1</span>
+
+    <span class="cm">// Observer B also mutates</span>
+    observer_b.<span class="fn">borrow_mut</span>().value += <span class="num">10</span>;
+
+    <span class="cm">// Observer A sees the change</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, observer_a.<span class="fn">borrow</span>().value); <span class="cm">// 11</span>
+}</code></pre>
+
+      <p>
+        <code>Rc</code> handles the sharing. <code>RefCell</code> handles the mutation.
+        Together they give you shared mutable state in single-threaded Rust.
+      </p>
+
+      <h2>"Is this a code smell?"</h2>
+
+      <p>
+        No. This comes up often enough that it deserves a direct answer. If you search for
+        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> online, you'll find people calling it an
+        antipattern or saying it "fights the borrow checker." That framing is wrong.
+      </p>
+      <p>
+        In garbage-collected languages, every heap object is implicitly <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
+        &mdash; shared by reference, mutable by anyone, garbage collected when nobody holds a
+        reference. Rust makes this machinery explicit. The pattern isn't fighting the borrow
+        checker; it's the standard way to express shared mutable state when the borrow
+        checker's static analysis can't model your access pattern.
+      </p>
+      <p>
+        UI frameworks, observer patterns, graph structures, callback registries &mdash; these
+        all have shared mutable state. <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is how
+        idiomatic Rust handles it.
+      </p>
+
+      <h2>In practice: Telex's <code>State&lt;T&gt;</code></h2>
+
+      <p>
+        Telex wraps this pattern in a clean API. Under the hood, <code>State&lt;T&gt;</code>
+        is an <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> with convenience methods:
+      </p>
+
+      <pre><code><span class="kw">pub struct</span> <span class="ty">State</span>&lt;<span class="ty">T</span>&gt; {
+    inner: <span class="ty">Rc</span>&lt;<span class="ty">StateInner</span>&lt;<span class="ty">T</span>&gt;&gt;,
+}
+
+<span class="cm">// Users write this:</span>
+<span class="kw">let</span> count = <span class="ty">State</span>::<span class="fn">new</span>(<span class="num">0</span>);
+<span class="mac">println!</span>(<span class="str">"{}"</span>, count.<span class="fn">get</span>());      <span class="cm">// 0</span>
+count.<span class="fn">update</span>(|n| *n += <span class="num">1</span>);
+<span class="mac">println!</span>(<span class="str">"{}"</span>, count.<span class="fn">get</span>());      <span class="cm">// 1</span></code></pre>
+
+      <p>
+        <code>State::new</code> creates the <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>.
+        <code>.get()</code> calls <code>.borrow()</code> and clones the value.
+        <code>.update()</code> calls <code>.borrow_mut()</code> and applies the closure.
+        The <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is invisible to the component author.
+        See <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework
+        &mdash; Part 1</a> for the full story.
+      </p>
+
+      <h2>The common pitfall: overlapping borrows</h2>
+
+      <p>
+        <code>RefCell</code> panics if you violate the borrow rules at runtime. The most
+        common way to trigger this is holding a <code>.borrow_mut()</code> while something
+        else tries to borrow the same cell.
+      </p>
+
+      <pre><code><span class="kw">let</span> data = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]));
+
+<span class="cm">// BAD: borrow_mut lives too long</span>
+<span class="kw">let</span> <span class="kw">mut</span> guard = data.<span class="fn">borrow_mut</span>();
+guard.<span class="fn">push</span>(<span class="num">4</span>);
+<span class="mac">println!</span>(<span class="str">"{}"</span>, data.<span class="fn">borrow</span>().<span class="fn">len</span>()); <span class="cm">// PANIC: already mutably borrowed</span></code></pre>
+
+      <p>
+        The fix: scope the mutable borrow so it's dropped before the shared borrow.
+      </p>
+
+      <pre><code><span class="kw">let</span> data = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]));
+
+<span class="cm">// GOOD: borrow_mut is scoped</span>
+{
+    data.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(<span class="num">4</span>);
+} <span class="cm">// mutable borrow dropped here</span>
+
+<span class="mac">println!</span>(<span class="str">"{}"</span>, data.<span class="fn">borrow</span>().<span class="fn">len</span>()); <span class="cm">// 4 — works</span></code></pre>
+
+      <p>
+        This is the main discipline <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> requires: keep
+        borrows short-lived. Borrow, do the work, drop the guard. Don't hold guards across
+        function calls or callbacks where another borrow might happen.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <p>
+        <strong>Good uses:</strong>
+      </p>
+      <ul>
+        <li>UI component state (exactly what Telex does)</li>
+        <li>Observer/subscriber patterns</li>
+        <li>Shared mutable caches accessed from multiple components</li>
+        <li>Graph nodes that need to be both shared and mutable</li>
+      </ul>
+      <p>
+        <strong>When not to use it:</strong>
+      </p>
+      <ul>
+        <li>Across threads &mdash; use <code>Arc&lt;Mutex&lt;T&gt;&gt;</code>
+          (<a href="rust-patterns-arc-mutex.html">#17</a>) instead</li>
+        <li>When you can use <code>&amp;mut self</code> methods and pass ownership clearly
+          &mdash; the compiler's static checking is always preferable to runtime checking</li>
+        <li>For performance-critical inner loops where even the overhead of refcounting
+          matters &mdash; consider an arena with indices
+          (<a href="rust-patterns-index-based-design.html">#5</a>) instead</li>
+      </ul>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

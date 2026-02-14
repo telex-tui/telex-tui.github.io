@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #13: Builder Pattern - Telex</title>
+  <meta name="description" content="When a struct has many optional fields or complex construction logic, a separate builder with chained methods keeps the API clean and construction safe.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #13: Builder Pattern</h1>
+      <div class="post-meta">June 2026</div>
+
+      <p>
+        A struct has twelve fields. Three are required. Nine have sensible defaults. The
+        constructor has twelve parameters and callers have to remember which position is
+        which. Or you use <code>Default</code> and field-by-field assignment, losing any
+        validation. The builder pattern separates construction from representation, giving
+        you named parameters, defaults, and validation in one clean API.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">ServerConfig</span> {
+    host: <span class="ty">String</span>,
+    port: <span class="ty">u16</span>,
+    max_connections: <span class="ty">usize</span>,
+    timeout_secs: <span class="ty">u64</span>,
+    tls_enabled: <span class="ty">bool</span>,
+    cert_path: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+    log_level: <span class="ty">String</span>,
+}
+
+<span class="cm">// The telescoping constructor:</span>
+<span class="kw">let</span> config = <span class="ty">ServerConfig</span>::<span class="fn">new</span>(
+    <span class="str">"0.0.0.0"</span>, <span class="num">8080</span>, <span class="num">100</span>, <span class="num">30</span>, <span class="kw">true</span>, <span class="ty">Some</span>(<span class="str">"/etc/cert.pem"</span>), <span class="str">"info"</span>,
+);
+<span class="cm">// Which number is the port? Which is the timeout? Which is max connections?</span></code></pre>
+
+      <p>
+        This is hard to read, easy to get wrong, and impossible to extend without breaking
+        every call site.
+      </p>
+
+      <h2>The pattern</h2>
+
+      <p>
+        A separate builder struct with chained setter methods:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">ServerConfigBuilder</span> {
+    host: <span class="ty">String</span>,
+    port: <span class="ty">u16</span>,
+    max_connections: <span class="ty">usize</span>,
+    timeout_secs: <span class="ty">u64</span>,
+    tls_enabled: <span class="ty">bool</span>,
+    cert_path: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+    log_level: <span class="ty">String</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">ServerConfig</span> {
+    <span class="kw">fn</span> <span class="fn">builder</span>(host: <span class="kw">impl</span> <span class="ty">Into</span>&lt;<span class="ty">String</span>&gt;, port: <span class="ty">u16</span>) -&gt; <span class="ty">ServerConfigBuilder</span> {
+        <span class="ty">ServerConfigBuilder</span> {
+            host: host.<span class="fn">into</span>(),
+            port,
+            max_connections: <span class="num">100</span>,
+            timeout_secs: <span class="num">30</span>,
+            tls_enabled: <span class="kw">false</span>,
+            cert_path: <span class="ty">None</span>,
+            log_level: <span class="str">"info"</span>.<span class="fn">into</span>(),
+        }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">ServerConfigBuilder</span> {
+    <span class="kw">fn</span> <span class="fn">max_connections</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, n: <span class="ty">usize</span>) -&gt; &amp;<span class="kw">mut</span> <span class="kw">Self</span> {
+        <span class="kw">self</span>.max_connections = n;
+        <span class="kw">self</span>
+    }
+
+    <span class="kw">fn</span> <span class="fn">timeout</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, secs: <span class="ty">u64</span>) -&gt; &amp;<span class="kw">mut</span> <span class="kw">Self</span> {
+        <span class="kw">self</span>.timeout_secs = secs;
+        <span class="kw">self</span>
+    }
+
+    <span class="kw">fn</span> <span class="fn">tls</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, cert_path: <span class="kw">impl</span> <span class="ty">Into</span>&lt;<span class="ty">String</span>&gt;) -&gt; &amp;<span class="kw">mut</span> <span class="kw">Self</span> {
+        <span class="kw">self</span>.tls_enabled = <span class="kw">true</span>;
+        <span class="kw">self</span>.cert_path = <span class="ty">Some</span>(cert_path.<span class="fn">into</span>());
+        <span class="kw">self</span>
+    }
+
+    <span class="kw">fn</span> <span class="fn">log_level</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, level: <span class="kw">impl</span> <span class="ty">Into</span>&lt;<span class="ty">String</span>&gt;) -&gt; &amp;<span class="kw">mut</span> <span class="kw">Self</span> {
+        <span class="kw">self</span>.log_level = level.<span class="fn">into</span>();
+        <span class="kw">self</span>
+    }
+
+    <span class="kw">fn</span> <span class="fn">build</span>(<span class="kw">self</span>) -&gt; <span class="ty">ServerConfig</span> {
+        <span class="ty">ServerConfig</span> {
+            host: <span class="kw">self</span>.host,
+            port: <span class="kw">self</span>.port,
+            max_connections: <span class="kw">self</span>.max_connections,
+            timeout_secs: <span class="kw">self</span>.timeout_secs,
+            tls_enabled: <span class="kw">self</span>.tls_enabled,
+            cert_path: <span class="kw">self</span>.cert_path,
+            log_level: <span class="kw">self</span>.log_level,
+        }
+    }
+}</code></pre>
+
+      <p>
+        Callers get a clear, self-documenting API:
+      </p>
+
+      <pre><code><span class="kw">let</span> config = <span class="ty">ServerConfig</span>::<span class="fn">builder</span>(<span class="str">"0.0.0.0"</span>, <span class="num">8080</span>)
+    .<span class="fn">max_connections</span>(<span class="num">500</span>)
+    .<span class="fn">tls</span>(<span class="str">"/etc/cert.pem"</span>)
+    .<span class="fn">build</span>();</code></pre>
+
+      <p>
+        Required parameters (<code>host</code> and <code>port</code>) go in
+        <code>builder()</code>. Optional parameters have setters with defaults.
+        <code>build()</code> produces the final struct.
+      </p>
+
+      <h2>Validation in <code>build()</code></h2>
+
+      <p>
+        The <code>build()</code> method is where you enforce invariants:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">build</span>(<span class="kw">self</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">ServerConfig</span>, <span class="ty">String</span>&gt; {
+    <span class="kw">if</span> <span class="kw">self</span>.tls_enabled &amp;&amp; <span class="kw">self</span>.cert_path.<span class="fn">is_none</span>() {
+        <span class="kw">return</span> <span class="ty">Err</span>(<span class="str">"TLS enabled but no cert path provided"</span>.<span class="fn">into</span>());
+    }
+    <span class="ty">Ok</span>(<span class="ty">ServerConfig</span> { <span class="cm">/* ... */</span> })
+}</code></pre>
+
+      <p>
+        Cross-field validation belongs here. The builder accumulates state; <code>build()</code>
+        validates the whole thing at once.
+      </p>
+
+      <h2>Consuming vs borrowing setters</h2>
+
+      <p>
+        The example above uses <code>&amp;mut self</code> setters that return
+        <code>&amp;mut Self</code>. An alternative is consuming setters that take
+        <code>self</code> and return <code>Self</code>:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">timeout</span>(<span class="kw">mut</span> <span class="kw">self</span>, secs: <span class="ty">u64</span>) -&gt; <span class="kw">Self</span> {
+    <span class="kw">self</span>.timeout_secs = secs;
+    <span class="kw">self</span>
+}</code></pre>
+
+      <p>
+        Consuming setters let you write the chain in one expression:
+        <code>let config = Builder::new().timeout(30).build();</code>.
+        Borrowing setters require a binding:
+        <code>let mut b = Builder::new(); b.timeout(30); b.build();</code>
+        (or the chain works if you use the return value). Both styles are common. Consuming
+        setters are slightly more ergonomic for chaining.
+      </p>
+
+      <h2>Derive macros</h2>
+
+      <p>
+        For straightforward cases, crates like <code>derive_builder</code> and <code>bon</code>
+        generate the builder automatically from your struct definition. They reduce
+        boilerplate when the builder is a mechanical mapping of fields to setters. For public
+        APIs where you want full control over the builder's ergonomics and documentation,
+        hand-written builders are often worth the effort.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li>Structs with more than three or four fields, especially with optional ones</li>
+        <li>Public APIs where callers shouldn't need to know field order</li>
+        <li>Construction that requires cross-field validation</li>
+        <li>Configurable objects (HTTP clients, loggers, server configs)</li>
+      </ul>
+      <p>
+        When not to: structs with two or three fields, or purely internal types where a
+        simple <code>new()</code> is clear enough. A builder for a struct with two fields
+        is overhead without benefit.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

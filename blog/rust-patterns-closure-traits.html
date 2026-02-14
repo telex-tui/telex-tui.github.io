@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #9: Fn, FnMut, FnOnce - Telex</title>
+  <meta name="description" content="Understanding the three closure traits — Fn, FnMut, and FnOnce — and why the compiler picks one but your function signature constrains it.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #9: Fn, FnMut, FnOnce</h1>
+      <div class="post-meta">May 2026</div>
+
+      <p>
+        You pass a closure to a function and get a trait mismatch. You didn't ask for any
+        trait. You just wrote a <code>||</code> block. What's happening involves how closures
+        capture their environment, and it's one of the most useful things to understand about
+        Rust.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">call_twice</span>(f: <span class="kw">impl</span> <span class="ty">Fn</span>()) {
+    <span class="fn">f</span>();
+    <span class="fn">f</span>();
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> <span class="kw">mut</span> count = <span class="num">0</span>;
+    <span class="fn">call_twice</span>(|| {
+        count += <span class="num">1</span>; <span class="cm">// ERROR</span>
+    });
+}</code></pre>
+
+      <pre><code><span class="cm">error[E0525]: expected a closure that implements the `Fn` trait,
+              but this closure only implements `FnMut`</span></code></pre>
+
+      <p>
+        The closure mutates <code>count</code>. The function requires <code>Fn</code>, which
+        doesn't allow mutation. The compiler knows what your closure does and what the
+        function expects, and they don't match.
+      </p>
+
+      <h2>The three traits</h2>
+
+      <p>
+        Every closure in Rust implements at least one of three traits, determined by how
+        it uses captured variables:
+      </p>
+      <ul>
+        <li><strong><code>FnOnce</code></strong> &mdash; can be called once. The closure
+          might consume (move out of) a captured value. After that, the value is gone and
+          the closure can't be called again.</li>
+        <li><strong><code>FnMut</code></strong> &mdash; can be called multiple times, but
+          might mutate captured values. Requires exclusive (<code>&amp;mut</code>) access
+          to the closure each time it's called.</li>
+        <li><strong><code>Fn</code></strong> &mdash; can be called multiple times with only
+          shared (<code>&amp;</code>) access. Doesn't mutate or consume anything from its
+          environment.</li>
+      </ul>
+
+      <h2>The hierarchy</h2>
+
+      <pre>
+ Fn       (most restrictive — only reads)
+  ↑
+ FnMut    (middle — reads and mutates)
+  ↑
+ FnOnce   (least restrictive — reads, mutates, consumes)</pre>
+
+      <p>
+        Every <code>Fn</code> closure is also <code>FnMut</code> (mutating nothing is a
+        valid form of mutation). Every <code>FnMut</code> closure is also <code>FnOnce</code>
+        (calling something once is a valid form of "at least once"). The hierarchy goes
+        upward: if a function accepts <code>FnOnce</code>, you can pass any closure.
+        If it requires <code>Fn</code>, only non-mutating closures qualify.
+      </p>
+
+      <h2>What determines the trait</h2>
+
+      <p>
+        The compiler picks the most permissive trait your closure qualifies for:
+      </p>
+
+      <pre><code><span class="kw">let</span> name = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Alice"</span>);
+
+<span class="cm">// Only reads `name` → implements Fn (and FnMut, and FnOnce)</span>
+<span class="kw">let</span> greet = || <span class="mac">println!</span>(<span class="str">"Hello, {name}"</span>);
+
+<span class="kw">let</span> <span class="kw">mut</span> count = <span class="num">0</span>;
+
+<span class="cm">// Mutates `count` → implements FnMut (and FnOnce), but NOT Fn</span>
+<span class="kw">let</span> <span class="kw">mut</span> increment = || count += <span class="num">1</span>;
+
+<span class="kw">let</span> data = <span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+
+<span class="cm">// Moves `data` out → implements FnOnce only</span>
+<span class="kw">let</span> consume = || <span class="fn">drop</span>(data);</code></pre>
+
+      <p>
+        The compiler examines every captured variable and how it's used. Reading:
+        <code>Fn</code>. Mutating: <code>FnMut</code>. Moving out: <code>FnOnce</code>.
+        The closure gets the least restrictive trait that covers all its captures.
+      </p>
+
+      <h2>The callee constrains it</h2>
+
+      <p>
+        The function you pass the closure to declares which trait it requires. That's
+        the constraint:
+      </p>
+
+      <pre><code><span class="cm">// "I'll call this multiple times, read-only" → Fn</span>
+<span class="kw">fn</span> <span class="fn">call_twice</span>(f: <span class="kw">impl</span> <span class="ty">Fn</span>()) { <span class="fn">f</span>(); <span class="fn">f</span>(); }
+
+<span class="cm">// "I'll call this multiple times, it may mutate" → FnMut</span>
+<span class="kw">fn</span> <span class="fn">call_twice_mut</span>(<span class="kw">mut</span> f: <span class="kw">impl</span> <span class="ty">FnMut</span>()) { <span class="fn">f</span>(); <span class="fn">f</span>(); }
+
+<span class="cm">// "I'll call this exactly once" → FnOnce</span>
+<span class="kw">fn</span> <span class="fn">call_once</span>(f: <span class="kw">impl</span> <span class="ty">FnOnce</span>()) { <span class="fn">f</span>(); }</code></pre>
+
+      <p>
+        <code>call_twice</code> requires <code>Fn</code> because it calls the closure twice
+        without exclusive access. If your closure mutates, it doesn't satisfy <code>Fn</code>,
+        and the compiler rejects it. Change the requirement to <code>FnMut</code> and it
+        works:
+      </p>
+
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> count = <span class="num">0</span>;
+<span class="fn">call_twice_mut</span>(|| count += <span class="num">1</span>); <span class="cm">// OK — FnMut accepted</span>
+<span class="mac">println!</span>(<span class="str">"{count}"</span>);              <span class="cm">// 2</span></code></pre>
+
+      <h2>The <code>move</code> keyword</h2>
+
+      <p>
+        A common confusion: <code>move</code> changes <em>ownership</em>, not the trait.
+        A <code>move</code> closure takes ownership of captured variables instead of
+        borrowing them. But if it only reads those variables, it's still <code>Fn</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> name = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Alice"</span>);
+
+<span class="kw">let</span> greet = <span class="kw">move</span> || <span class="mac">println!</span>(<span class="str">"Hello, {name}"</span>);
+<span class="cm">// `name` is moved into the closure, but only read</span>
+<span class="cm">// → still implements Fn</span>
+
+<span class="fn">greet</span>(); <span class="cm">// fine</span>
+<span class="fn">greet</span>(); <span class="cm">// fine — Fn, so can be called multiple times</span></code></pre>
+
+      <p>
+        <code>move</code> is about how data enters the closure (ownership vs borrowing).
+        The trait is about how the closure uses that data (read, mutate, consume).
+        These are independent.
+      </p>
+
+      <h2>When to use which</h2>
+
+      <p>
+        If you're <em>writing</em> a function that takes a closure:
+      </p>
+      <ul>
+        <li><strong><code>Fn</code></strong> — for callbacks called repeatedly, possibly
+          concurrently (event handlers, validators)</li>
+        <li><strong><code>FnMut</code></strong> — for operations called sequentially that
+          might accumulate state (<code>Iterator::for_each</code>, <code>fold</code>)</li>
+        <li><strong><code>FnOnce</code></strong> — for one-shot operations
+          (<code>thread::spawn</code>, <code>Option::map</code>,
+          <code>Result::unwrap_or_else</code>)</li>
+      </ul>
+      <p>
+        <strong>Default to the least restrictive trait your function needs.</strong> If you
+        only call the closure once, use <code>FnOnce</code> &mdash; it accepts all closures.
+        Only require <code>Fn</code> if you genuinely need to call it multiple times
+        without exclusive access.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

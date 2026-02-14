@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #15: From / Into Conversions - Telex</title>
+  <meta name="description" content="Implement From and get Into for free. This is the pattern behind effortless Rust APIs and seamless error conversion with the ? operator.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #15: From / Into Conversions</h1>
+      <div class="post-meta">July 2026</div>
+
+      <p>
+        You're writing an API that accepts different input types. Some callers have a
+        <code>&amp;str</code>, some have a <code>String</code>, some have a
+        <code>PathBuf</code>. You want all of them to work without forcing callers to
+        convert manually. The <code>From</code> / <code>Into</code> traits are how
+        idiomatic Rust APIs achieve this.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Email</span> {
+    address: <span class="ty">String</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Email</span> {
+    <span class="kw">fn</span> <span class="fn">new</span>(address: <span class="ty">String</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">Email</span> { address }
+    }
+}
+
+<span class="cm">// Caller with a String: fine</span>
+<span class="kw">let</span> e = <span class="ty">Email</span>::<span class="fn">new</span>(<span class="str">"a@b.com"</span>.<span class="fn">to_string</span>());
+
+<span class="cm">// Caller with a &amp;str: has to convert manually</span>
+<span class="kw">let</span> e = <span class="ty">Email</span>::<span class="fn">new</span>(<span class="str">"a@b.com"</span>.<span class="fn">to_string</span>()); <span class="cm">// verbose</span></code></pre>
+
+      <p>
+        Every caller has to write <code>.to_string()</code>. It's small, but it's friction.
+        In an API with many such functions, the friction adds up.
+      </p>
+
+      <h2>The pattern: <code>From&lt;T&gt;</code></h2>
+
+      <p>
+        Implement <code>From</code> for each type you want to accept:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">From</span>&lt;<span class="ty">String</span>&gt; <span class="kw">for</span> <span class="ty">Email</span> {
+    <span class="kw">fn</span> <span class="fn">from</span>(address: <span class="ty">String</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">Email</span> { address }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">From</span>&lt;&amp;<span class="kw">str</span>&gt; <span class="kw">for</span> <span class="ty">Email</span> {
+    <span class="kw">fn</span> <span class="fn">from</span>(address: &amp;<span class="kw">str</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">Email</span> { address: address.<span class="fn">to_string</span>() }
+    }
+}</code></pre>
+
+      <p>
+        Now callers can use <code>.into()</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> e: <span class="ty">Email</span> = <span class="str">"a@b.com"</span>.<span class="fn">into</span>();
+<span class="kw">let</span> e: <span class="ty">Email</span> = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"a@b.com"</span>).<span class="fn">into</span>();</code></pre>
+
+      <h2>The blanket impl</h2>
+
+      <p>
+        When you implement <code>From&lt;T&gt; for U</code>, the standard library
+        automatically provides <code>Into&lt;U&gt; for T</code> via a blanket impl.
+        You never need to implement <code>Into</code> directly. Always implement
+        <code>From</code>.
+      </p>
+
+      <h2>Using <code>impl Into&lt;T&gt;</code> in function signatures</h2>
+
+      <p>
+        The real payoff is in function parameters:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">send_email</span>(to: <span class="kw">impl</span> <span class="ty">Into</span>&lt;<span class="ty">Email</span>&gt;, body: <span class="kw">impl</span> <span class="ty">Into</span>&lt;<span class="ty">String</span>&gt;) {
+    <span class="kw">let</span> to = to.<span class="fn">into</span>();
+    <span class="kw">let</span> body = body.<span class="fn">into</span>();
+    <span class="cm">// ...</span>
+}
+
+<span class="cm">// All of these work:</span>
+<span class="fn">send_email</span>(<span class="str">"a@b.com"</span>, <span class="str">"Hello"</span>);
+<span class="fn">send_email</span>(<span class="ty">Email</span>::<span class="fn">from</span>(<span class="str">"a@b.com"</span>), <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Hello"</span>));
+<span class="fn">send_email</span>(<span class="str">"a@b.com"</span>, <span class="str">"Hello"</span>.<span class="fn">to_string</span>());</code></pre>
+
+      <p>
+        The caller passes whatever type they have. The conversion happens inside the function.
+        No ceremony at the call site.
+      </p>
+
+      <h2>Error handling: <code>From</code> powers <code>?</code></h2>
+
+      <p>
+        The <code>?</code> operator uses <code>From</code> to convert errors. When you write:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">read_config</span>() -&gt; <span class="ty">Result</span>&lt;<span class="ty">Config</span>, <span class="ty">MyError</span>&gt; {
+    <span class="kw">let</span> text = std::fs::<span class="fn">read_to_string</span>(<span class="str">"config.toml"</span>)?;
+    <span class="kw">let</span> config: <span class="ty">Config</span> = <span class="fn">toml::from_str</span>(&amp;text)?;
+    <span class="ty">Ok</span>(config)
+}</code></pre>
+
+      <p>
+        The first <code>?</code> might produce an <code>io::Error</code>. The second might
+        produce a <code>toml::de::Error</code>. The function returns <code>MyError</code>.
+        The <code>?</code> operator calls <code>From::from()</code> to convert each error
+        type into <code>MyError</code>. If you've implemented
+        <code>From&lt;io::Error&gt; for MyError</code> and
+        <code>From&lt;toml::de::Error&gt; for MyError</code>, it just works.
+      </p>
+      <p>
+        This is the foundation of the error handling pattern in
+        <a href="rust-patterns-error-handling.html">#16</a>. <code>thiserror</code>
+        generates these <code>From</code> impls for you.
+      </p>
+
+      <h2><code>TryFrom</code> / <code>TryInto</code></h2>
+
+      <p>
+        For conversions that can fail, use <code>TryFrom</code>:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Port</span>(<span class="ty">u16</span>);
+
+<span class="kw">impl</span> <span class="ty">TryFrom</span>&lt;<span class="ty">u32</span>&gt; <span class="kw">for</span> <span class="ty">Port</span> {
+    <span class="kw">type</span> <span class="ty">Error</span> = <span class="ty">String</span>;
+
+    <span class="kw">fn</span> <span class="fn">try_from</span>(value: <span class="ty">u32</span>) -&gt; <span class="ty">Result</span>&lt;<span class="kw">Self</span>, <span class="kw">Self</span>::<span class="ty">Error</span>&gt; {
+        <span class="kw">if</span> value &gt; <span class="num">65535</span> {
+            <span class="ty">Err</span>(<span class="mac">format!</span>(<span class="str">"{value} is not a valid port"</span>))
+        } <span class="kw">else</span> {
+            <span class="ty">Ok</span>(<span class="ty">Port</span>(value <span class="kw">as</span> <span class="ty">u16</span>))
+        }
+    }
+}
+
+<span class="kw">let</span> p: <span class="ty">Result</span>&lt;<span class="ty">Port</span>, _&gt; = <span class="num">8080_u32</span>.<span class="fn">try_into</span>(); <span class="cm">// Ok(Port(8080))</span>
+<span class="kw">let</span> p: <span class="ty">Result</span>&lt;<span class="ty">Port</span>, _&gt; = <span class="num">99999_u32</span>.<span class="fn">try_into</span>(); <span class="cm">// Err("99999 is not a valid port")</span></code></pre>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li><strong>Public API boundaries:</strong> accept <code>impl Into&lt;String&gt;</code>
+          instead of forcing callers to convert</li>
+        <li><strong>Error type conversions:</strong> implement <code>From&lt;SourceError&gt;</code>
+          for your error type so <code>?</code> converts automatically</li>
+        <li><strong>Newtype wrappers:</strong> <code>From&lt;u64&gt; for UserId</code> for
+          ergonomic construction</li>
+        <li><strong>Fallible conversions:</strong> <code>TryFrom</code> for parsing, range
+          checking, validation</li>
+      </ul>
+      <p>
+        When not to: if the conversion is lossy, surprising, or has side effects, make it
+        an explicit named method. <code>From</code> / <code>Into</code> imply a natural,
+        lossless conversion. If <code>.into()</code> would silently truncate data or change
+        semantics, use a named method instead so the caller knows what's happening.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #12: Typestate - Telex</title>
+  <meta name="description" content="Encode your state machine's states as types and transitions as consuming methods. Invalid states become compile errors, not runtime bugs.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #12: Typestate</h1>
+      <div class="post-meta">June 2026</div>
+
+      <p>
+        You have a connection that goes through states: disconnected, connecting, connected.
+        You can only send data when connected. The obvious implementation checks the state
+        at runtime and panics or returns an error on invalid transitions. The typestate
+        pattern makes invalid transitions a compile error instead.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">State</span> { <span class="ty">Disconnected</span>, <span class="ty">Connecting</span>, <span class="ty">Connected</span> }
+
+<span class="kw">struct</span> <span class="ty">Connection</span> {
+    state: <span class="ty">State</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Connection</span> {
+    <span class="kw">fn</span> <span class="fn">send</span>(&amp;<span class="kw">self</span>, data: &amp;[<span class="ty">u8</span>]) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">Error</span>&gt; {
+        <span class="kw">match</span> <span class="kw">self</span>.state {
+            <span class="ty">State</span>::<span class="ty">Connected</span> =&gt; { <span class="cm">/* actually send */</span> <span class="ty">Ok</span>(()) }
+            _ =&gt; <span class="ty">Err</span>(<span class="ty">Error</span>::<span class="fn">new</span>(<span class="str">"not connected"</span>)),
+        }
+    }
+}</code></pre>
+
+      <p>
+        The problem: every method that depends on state needs a runtime check. Forget a
+        check and you have a bug. The type system isn't helping &mdash; from the compiler's
+        perspective, a <code>Connection</code> is always the same type regardless of its
+        state.
+      </p>
+
+      <h2>The pattern: states as types</h2>
+
+      <p>
+        Encode each state as a separate zero-sized type. Make <code>Connection</code>
+        generic over the state. Transition methods consume the current state and return a
+        new one:
+      </p>
+
+      <pre><code><span class="cm">// State markers — zero-sized, exist only in the type system</span>
+<span class="kw">struct</span> <span class="ty">Disconnected</span>;
+<span class="kw">struct</span> <span class="ty">Connecting</span>;
+<span class="kw">struct</span> <span class="ty">Connected</span>;
+
+<span class="kw">struct</span> <span class="ty">Connection</span>&lt;<span class="ty">S</span>&gt; {
+    addr: <span class="ty">String</span>,
+    _state: std::marker::<span class="ty">PhantomData</span>&lt;<span class="ty">S</span>&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Connection</span>&lt;<span class="ty">Disconnected</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">new</span>(addr: <span class="ty">String</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">Connection</span> { addr, _state: std::marker::<span class="ty">PhantomData</span> }
+    }
+
+    <span class="kw">fn</span> <span class="fn">connect</span>(<span class="kw">self</span>) -&gt; <span class="ty">Connection</span>&lt;<span class="ty">Connecting</span>&gt; {
+        <span class="mac">println!</span>(<span class="str">"connecting to {}..."</span>, <span class="kw">self</span>.addr);
+        <span class="ty">Connection</span> { addr: <span class="kw">self</span>.addr, _state: std::marker::<span class="ty">PhantomData</span> }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Connection</span>&lt;<span class="ty">Connecting</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">on_connected</span>(<span class="kw">self</span>) -&gt; <span class="ty">Connection</span>&lt;<span class="ty">Connected</span>&gt; {
+        <span class="mac">println!</span>(<span class="str">"connected!"</span>);
+        <span class="ty">Connection</span> { addr: <span class="kw">self</span>.addr, _state: std::marker::<span class="ty">PhantomData</span> }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Connection</span>&lt;<span class="ty">Connected</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">send</span>(&amp;<span class="kw">self</span>, data: &amp;[<span class="ty">u8</span>]) {
+        <span class="mac">println!</span>(<span class="str">"sending {} bytes"</span>, data.<span class="fn">len</span>());
+    }
+
+    <span class="kw">fn</span> <span class="fn">disconnect</span>(<span class="kw">self</span>) -&gt; <span class="ty">Connection</span>&lt;<span class="ty">Disconnected</span>&gt; {
+        <span class="mac">println!</span>(<span class="str">"disconnected"</span>);
+        <span class="ty">Connection</span> { addr: <span class="kw">self</span>.addr, _state: std::marker::<span class="ty">PhantomData</span> }
+    }
+}</code></pre>
+
+      <p>
+        The <code>send</code> method only exists on <code>Connection&lt;Connected&gt;</code>.
+        Calling it on a disconnected connection doesn't produce a runtime error &mdash; it
+        doesn't compile:
+      </p>
+
+      <pre><code><span class="kw">let</span> conn = <span class="ty">Connection</span>::<span class="fn">new</span>(<span class="str">"127.0.0.1"</span>.<span class="fn">into</span>());
+
+<span class="cm">// conn.send(b"hello"); // ERROR: no method named `send` found</span>
+<span class="cm">//                      //        for `Connection&lt;Disconnected&gt;`</span>
+
+<span class="kw">let</span> conn = conn.<span class="fn">connect</span>();     <span class="cm">// Connection&lt;Connecting&gt;</span>
+<span class="kw">let</span> conn = conn.<span class="fn">on_connected</span>(); <span class="cm">// Connection&lt;Connected&gt;</span>
+
+conn.<span class="fn">send</span>(b<span class="str">"hello"</span>);            <span class="cm">// OK — we're connected</span>
+
+<span class="kw">let</span> conn = conn.<span class="fn">disconnect</span>();   <span class="cm">// Connection&lt;Disconnected&gt;</span>
+<span class="cm">// conn.send(b"hello");         // ERROR again — disconnected</span></code></pre>
+
+      <h2>Why transition methods consume <code>self</code></h2>
+
+      <p>
+        Each transition takes <code>self</code> by value, not by reference. This destroys
+        the old state &mdash; you can't use a <code>Connection&lt;Disconnected&gt;</code>
+        after calling <code>.connect()</code> on it. The old variable is gone. This prevents
+        you from accidentally using a stale state.
+      </p>
+
+      <h2>Zero-sized types</h2>
+
+      <p>
+        <code>struct Disconnected;</code> has no fields and occupies zero bytes. The
+        <code>PhantomData&lt;S&gt;</code> in the connection also occupies zero bytes. The
+        state marker exists purely in the type system &mdash; it's erased completely at
+        compile time. <code>Connection&lt;Disconnected&gt;</code> and
+        <code>Connection&lt;Connected&gt;</code> have the same runtime representation
+        (just the <code>addr</code> field).
+      </p>
+
+      <h2>Tradeoffs</h2>
+
+      <ul>
+        <li><strong>Type proliferation.</strong> Each state is a type. Three states = three
+          impls. If states share methods, you need a separate <code>impl Connection&lt;S&gt;</code>
+          block for shared behaviour.</li>
+        <li><strong>Can't store heterogeneous states.</strong>
+          <code>Connection&lt;Disconnected&gt;</code> and <code>Connection&lt;Connected&gt;</code>
+          are different types. You can't put them in the same <code>Vec</code> or
+          <code>HashMap</code> without erasing the state (which defeats the purpose).</li>
+        <li><strong>Dynamic state machines don't fit.</strong> If the state is determined
+          at runtime (user input, config file, external events), you need an enum &mdash;
+          the typestate pattern requires statically known transitions.</li>
+      </ul>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li>Protocol state machines (TCP connection, HTTP request/response lifecycle)</li>
+        <li>Builder patterns with required steps
+          (<a href="rust-patterns-builder.html">#13</a>)</li>
+        <li>"Must do X before Y" constraints (open a file before reading, authenticate
+          before querying)</li>
+        <li>Any state machine where the valid operations depend on the current state and
+          the transitions are known at compile time</li>
+      </ul>
+      <p>
+        When not to: dynamic state machines, state determined by runtime data, or when
+        the number of states is large and the combinatorics of state-specific methods
+        become unwieldy. Use an enum with runtime checks in those cases.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #1: Interior Mutability - Telex</title>
+  <meta name="description" content="When you need to mutate behind an immutable interface, RefCell gives you runtime borrow checking. The first pattern every Rust developer hits.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #1: Interior Mutability</h1>
+      <div class="post-meta">March 2026</div>
+
+      <p>
+        You have a struct with a cache. The struct is passed around by shared reference. You
+        need to insert into the cache inside a method that takes <code>&amp;self</code>. The
+        compiler says no. This is the first wall.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        Imagine a configuration loader that parses expensive files on demand and caches the
+        results. Callers only need a shared reference &mdash; they're reading configuration,
+        not modifying the loader itself. But the loader needs to write to its internal cache.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">struct</span> <span class="ty">ConfigLoader</span> {
+    cache: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">ConfigLoader</span> {
+    <span class="kw">fn</span> <span class="fn">get</span>(&amp;<span class="kw">self</span>, key: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Option</span>&lt;&amp;<span class="ty">String</span>&gt; {
+        <span class="kw">if</span> !<span class="kw">self</span>.cache.<span class="fn">contains_key</span>(key) {
+            <span class="kw">let</span> value = <span class="kw">self</span>.<span class="fn">load_from_disk</span>(key);
+            <span class="kw">self</span>.cache.<span class="fn">insert</span>(key.<span class="fn">to_string</span>(), value); <span class="cm">// ERROR</span>
+        }
+        <span class="kw">self</span>.cache.<span class="fn">get</span>(key)
+    }
+}</code></pre>
+
+      <p>
+        The compiler rejects this:
+      </p>
+
+      <pre><code><span class="cm">error[E0596]: cannot borrow `self.cache` as mutable,
+              as it is behind a `&` reference</span></code></pre>
+
+      <p>
+        The method takes <code>&amp;self</code> &mdash; a shared, immutable reference. Shared
+        references are read-only. That's not a suggestion; it's a guarantee the entire borrow
+        system depends on. You cannot mutate through <code>&amp;self</code>.
+      </p>
+
+      <h2>Why the compiler does this</h2>
+
+      <p>
+        Rust's core safety guarantee: if you have a <code>&amp;T</code>, nobody is mutating
+        <code>T</code> right now. If you have a <code>&amp;mut T</code>, nobody else is
+        looking at <code>T</code> right now. These two rules eliminate data races, iterator
+        invalidation, and use-after-free &mdash; at compile time. No runtime cost.
+      </p>
+      <p>
+        The problem is that the cache is a legitimate mutation behind a logically immutable
+        interface. From the caller's perspective, <code>get()</code> is a read operation. The
+        cache is an implementation detail. But the type system doesn't know that &mdash; it
+        sees a write through a shared reference and says no.
+      </p>
+
+      <h2>The pattern: <code>RefCell&lt;T&gt;</code></h2>
+
+      <p>
+        <code>RefCell&lt;T&gt;</code> moves borrow checking from compile time to runtime.
+        It wraps a value and tracks borrows dynamically: you call <code>.borrow()</code> for
+        shared access and <code>.borrow_mut()</code> for exclusive access. The rules are
+        identical &mdash; many readers or one writer, never both &mdash; but they're enforced
+        when the code runs instead of when it compiles.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+<span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">struct</span> <span class="ty">ConfigLoader</span> {
+    cache: <span class="ty">RefCell</span>&lt;<span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt;&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">ConfigLoader</span> {
+    <span class="kw">fn</span> <span class="fn">get</span>(&amp;<span class="kw">self</span>, key: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt; {
+        <span class="kw">if</span> !<span class="kw">self</span>.cache.<span class="fn">borrow</span>().<span class="fn">contains_key</span>(key) {
+            <span class="kw">let</span> value = <span class="kw">self</span>.<span class="fn">load_from_disk</span>(key);
+            <span class="kw">self</span>.cache.<span class="fn">borrow_mut</span>().<span class="fn">insert</span>(key.<span class="fn">to_string</span>(), value);
+        }
+        <span class="kw">self</span>.cache.<span class="fn">borrow</span>().<span class="fn">get</span>(key).<span class="fn">cloned</span>()
+    }
+}</code></pre>
+
+      <p>
+        The method still takes <code>&amp;self</code>. The cache is wrapped in
+        <code>RefCell</code>, which allows mutation through a shared reference. The compiler
+        is satisfied because <code>RefCell</code> promises to enforce the borrow rules itself.
+      </p>
+
+      <h2>What happens at runtime</h2>
+
+      <p>
+        <code>RefCell</code> maintains a counter. Each <code>.borrow()</code> increments
+        it; each dropped borrow decrements it. <code>.borrow_mut()</code> checks that the
+        counter is zero (no outstanding borrows) and sets a flag. If you violate the rules
+        &mdash; say, calling <code>.borrow_mut()</code> while a <code>.borrow()</code> is
+        still alive &mdash; it panics.
+      </p>
+
+      <pre><code><span class="kw">let</span> cell = <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="num">42</span>);
+
+<span class="kw">let</span> a = cell.<span class="fn">borrow</span>();     <span class="cm">// shared borrow — fine</span>
+<span class="kw">let</span> b = cell.<span class="fn">borrow</span>();     <span class="cm">// second shared borrow — fine</span>
+<span class="kw">let</span> c = cell.<span class="fn">borrow_mut</span>(); <span class="cm">// PANIC: already borrowed</span></code></pre>
+
+      <p>
+        The panic is not a bug in your program's logic (though it might indicate one). It's
+        <code>RefCell</code> enforcing the same rule the compiler would have enforced at
+        compile time: you cannot have a mutable borrow while shared borrows exist.
+      </p>
+
+      <h2>The tradeoff</h2>
+
+      <p>
+        With <code>RefCell</code>, you trade a compile-time guarantee for a runtime check.
+        The compiler no longer catches double-mutable-borrows &mdash; you'll find out at
+        runtime via a panic. This is a conscious, local relaxation of Rust's rules, not
+        a hole in the safety model. The borrow rules are still enforced; the enforcement
+        just moved.
+      </p>
+      <p>
+        The runtime cost is small &mdash; an integer check on each borrow. In practice, the
+        real cost is the possibility of panics. If you can structure your code so the compiler
+        checks borrows statically (by taking <code>&amp;mut self</code> instead), do that.
+        Reach for <code>RefCell</code> when the API genuinely requires shared access with
+        internal mutation.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <p>
+        <strong>Good uses:</strong>
+      </p>
+      <ul>
+        <li>Caches behind a shared interface (the example above)</li>
+        <li>Lazily initialized fields that compute on first access</li>
+        <li>Observer lists where the subject is shared but the list changes</li>
+        <li>Any struct where the mutation is an implementation detail invisible to callers</li>
+      </ul>
+      <p>
+        <strong>When not to use it:</strong>
+      </p>
+      <ul>
+        <li>If you can restructure to take <code>&amp;mut self</code>, do that &mdash; it's
+          strictly better (compile-time checked, no overhead)</li>
+        <li>If you need thread safety, <code>RefCell</code> won't work &mdash; it's
+          <code>!Sync</code>. Use <code>Mutex</code> or <code>RwLock</code> instead
+          (<a href="rust-patterns-arc-mutex.html">#17</a>)</li>
+      </ul>
+
+      <h2>What comes next</h2>
+
+      <p>
+        <code>RefCell</code> solves the mutation problem, but only for a single owner.
+        When multiple parts of your program need to share the same data,
+        you need <code>Rc</code> &mdash; which is <a href="rust-patterns-shared-ownership.html">the
+        next post</a>. And when you need shared ownership <em>and</em> mutation,
+        <a href="rust-patterns-rc-refcell.html">#3</a> puts the two together.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

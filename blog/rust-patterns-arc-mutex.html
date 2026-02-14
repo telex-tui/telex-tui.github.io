@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #17: Arc Mutex vs Arc RwLock - Telex</title>
+  <meta name="description" content="The thread-safe versions of Rc and RefCell. Arc for sharing across threads, Mutex or RwLock for mutation. Default to Mutex — reach for RwLock when reads dominate.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #17: <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> vs <code>Arc&lt;RwLock&lt;T&gt;&gt;</code></h1>
+      <div class="post-meta">August 2026</div>
+
+      <p>
+        You have shared state and multiple threads. You reach for
+        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> because that's what worked in
+        <a href="rust-patterns-rc-refcell.html">#3</a>. The compiler says no:
+        <code>Rc</code> is not <code>Send</code>, <code>RefCell</code> is not
+        <code>Sync</code>. The thread-safe equivalents are <code>Arc</code> and
+        <code>Mutex</code>. The shapes are identical; the guarantees are stronger.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+<span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+
+<span class="kw">let</span> counter = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="num">0</span>));
+<span class="kw">let</span> c = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;counter);
+
+std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+    *c.<span class="fn">borrow_mut</span>() += <span class="num">1</span>;
+});</code></pre>
+
+      <pre><code><span class="cm">error[E0277]: `Rc&lt;RefCell&lt;i32&gt;&gt;` cannot be sent between threads safely
+              the trait `Send` is not implemented for `Rc&lt;RefCell&lt;i32&gt;&gt;`</span></code></pre>
+
+      <p>
+        <code>Rc</code> uses a non-atomic reference count. If two threads incremented it
+        simultaneously, the count could corrupt. <code>RefCell</code> uses a non-atomic
+        borrow flag. Same problem. Neither is safe to share across threads.
+      </p>
+
+      <h2>The parallel to Part I</h2>
+
+      <p>
+        The mapping is direct:
+      </p>
+      <ul>
+        <li><code>Rc</code> &rarr; <code>Arc</code> (Atomic Reference Counted)</li>
+        <li><code>RefCell</code> &rarr; <code>Mutex</code> (mutual exclusion lock)</li>
+        <li><code>Rc&lt;RefCell&lt;T&gt;&gt;</code> &rarr; <code>Arc&lt;Mutex&lt;T&gt;&gt;</code></li>
+      </ul>
+      <p>
+        <code>Arc</code> uses atomic operations for the reference count, making it safe
+        to clone across threads. <code>Mutex</code> uses OS-level locking to ensure only
+        one thread accesses the data at a time.
+      </p>
+
+      <h2>The pattern: <code>Arc&lt;Mutex&lt;T&gt;&gt;</code></h2>
+
+      <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">Mutex</span>};
+
+<span class="kw">let</span> counter = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="num">0</span>));
+<span class="kw">let</span> <span class="kw">mut</span> handles = <span class="fn">vec!</span>[];
+
+<span class="kw">for</span> _ <span class="kw">in</span> <span class="num">0</span>..<span class="num">10</span> {
+    <span class="kw">let</span> counter = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;counter);
+    handles.<span class="fn">push</span>(std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+        <span class="kw">let</span> <span class="kw">mut</span> num = counter.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+        *num += <span class="num">1</span>;
+    }));
+}
+
+<span class="kw">for</span> h <span class="kw">in</span> handles {
+    h.<span class="fn">join</span>().<span class="fn">unwrap</span>();
+}
+
+<span class="mac">println!</span>(<span class="str">"{}"</span>, *counter.<span class="fn">lock</span>().<span class="fn">unwrap</span>()); <span class="cm">// 10</span></code></pre>
+
+      <p>
+        <code>Arc::clone</code> gives each thread its own handle to the shared data.
+        <code>.lock()</code> acquires the mutex, returning a guard that dereferences to
+        <code>&amp;mut T</code>. When the guard is dropped, the lock is released. Only one
+        thread holds the lock at a time.
+      </p>
+
+      <h2>Mutex poisoning</h2>
+
+      <p>
+        <code>.lock()</code> returns <code>Result&lt;MutexGuard, PoisonError&gt;</code>.
+        If a thread panics while holding the lock, the mutex becomes "poisoned" &mdash;
+        the data inside might be in an inconsistent state.
+      </p>
+      <p>
+        In most programs, <code>.lock().unwrap()</code> is correct. If another thread
+        panicked, your data may be corrupt, and propagating the panic is reasonable. If
+        you want to recover from a poisoned mutex (because you can validate or reset the
+        data), use <code>.lock().unwrap_or_else(|e| e.into_inner())</code>.
+      </p>
+
+      <h2><code>Arc&lt;RwLock&lt;T&gt;&gt;</code></h2>
+
+      <p>
+        <code>RwLock</code> (read-write lock) allows multiple simultaneous readers or one
+        exclusive writer:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">RwLock</span>};
+
+<span class="kw">let</span> data = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">RwLock</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]));
+
+<span class="cm">// Multiple readers — concurrent</span>
+<span class="kw">let</span> r1 = data.<span class="fn">read</span>().<span class="fn">unwrap</span>();
+<span class="kw">let</span> r2 = data.<span class="fn">read</span>().<span class="fn">unwrap</span>();
+<span class="mac">println!</span>(<span class="str">"{} {}"</span>, r1.<span class="fn">len</span>(), r2.<span class="fn">len</span>()); <span class="cm">// both held simultaneously</span>
+<span class="fn">drop</span>(r1);
+<span class="fn">drop</span>(r2);
+
+<span class="cm">// One writer — exclusive</span>
+<span class="kw">let</span> <span class="kw">mut</span> w = data.<span class="fn">write</span>().<span class="fn">unwrap</span>();
+w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// no readers or other writers can access while this is held</span></code></pre>
+
+      <p>
+        This mirrors the borrow checker's rules (many <code>&amp;T</code> or one
+        <code>&amp;mut T</code>), but enforced at runtime with locks.
+      </p>
+
+      <h2>Mutex vs RwLock</h2>
+
+      <p>
+        <code>RwLock</code> sounds strictly better &mdash; it allows concurrent reads. But
+        it has higher per-operation overhead: tracking the reader count requires additional
+        atomic operations. For a lightly contended lock or a lock where reads and writes
+        are roughly balanced, <code>Mutex</code> is faster.
+      </p>
+      <p>
+        <strong>Default to <code>Mutex</code>.</strong> Reach for <code>RwLock</code> when:
+      </p>
+      <ul>
+        <li>Reads vastly outnumber writes (100:1 or more)</li>
+        <li>Read operations are slow enough that concurrent reads matter</li>
+        <li>You've measured contention and confirmed that readers are blocking each other</li>
+      </ul>
+      <p>
+        For most applications, <code>Mutex</code> is the right choice.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li>Shared counters, caches, or configuration accessed from multiple threads</li>
+        <li>Worker pools with shared state</li>
+        <li>Any cross-thread shared mutable state</li>
+      </ul>
+      <p>
+        When not to: if you can avoid sharing state entirely (message passing &mdash;
+        <a href="rust-patterns-channels.html">#18</a>), do that. Shared mutable state
+        is harder to reason about than message passing, even with Rust's safety guarantees.
+        <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> is safe, but it's still a lock, and locks can
+        contend and deadlock if multiple are held simultaneously.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

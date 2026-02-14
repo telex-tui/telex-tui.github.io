@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #16: Error Handling - Telex</title>
+  <meta name="description" content="One error pattern for libraries (thiserror for structured, matchable errors), one for applications (anyhow for convenient, context-rich errors). Know which you're writing.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #16: Error Handling with <code>?</code> + <code>thiserror</code> + <code>anyhow</code></h1>
+      <div class="post-meta">July 2026</div>
+
+      <p>
+        Your application reads a config file, parses JSON, queries a database, and serves
+        HTTP. Each layer produces its own error type. Combining them manually means writing
+        error enums, <code>Display</code> impls, and <code>From</code> impls for every
+        source. There's a better way &mdash; and the answer depends on whether you're
+        writing a library or an application.
+      </p>
+
+      <h2>The problem</h2>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">load_config</span>() -&gt; <span class="ty">Result</span>&lt;<span class="ty">Config</span>, ???&gt; {
+    <span class="kw">let</span> text = std::fs::<span class="fn">read_to_string</span>(<span class="str">"config.json"</span>)?; <span class="cm">// io::Error</span>
+    <span class="kw">let</span> config: <span class="ty">Config</span> = <span class="fn">serde_json::from_str</span>(&amp;text)?;   <span class="cm">// serde_json::Error</span>
+    <span class="ty">Ok</span>(config)
+}</code></pre>
+
+      <p>
+        Two different error types. The <code>?</code> operator needs to convert both into
+        one return type. What goes in place of <code>???</code>?
+      </p>
+
+      <h2>The manual approach</h2>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">ConfigError</span> {
+    <span class="ty">Io</span>(std::io::<span class="ty">Error</span>),
+    <span class="ty">Parse</span>(serde_json::<span class="ty">Error</span>),
+}
+
+<span class="kw">impl</span> std::fmt::<span class="ty">Display</span> <span class="kw">for</span> <span class="ty">ConfigError</span> {
+    <span class="kw">fn</span> <span class="fn">fmt</span>(&amp;<span class="kw">self</span>, f: &amp;<span class="kw">mut</span> std::fmt::<span class="ty">Formatter</span>) -&gt; std::fmt::<span class="ty">Result</span> {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">ConfigError</span>::<span class="ty">Io</span>(e) =&gt; <span class="fn">write!</span>(f, <span class="str">"IO error: {e}"</span>),
+            <span class="ty">ConfigError</span>::<span class="ty">Parse</span>(e) =&gt; <span class="fn">write!</span>(f, <span class="str">"parse error: {e}"</span>),
+        }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">From</span>&lt;std::io::<span class="ty">Error</span>&gt; <span class="kw">for</span> <span class="ty">ConfigError</span> {
+    <span class="kw">fn</span> <span class="fn">from</span>(e: std::io::<span class="ty">Error</span>) -&gt; <span class="kw">Self</span> { <span class="ty">ConfigError</span>::<span class="ty">Io</span>(e) }
+}
+
+<span class="kw">impl</span> <span class="ty">From</span>&lt;serde_json::<span class="ty">Error</span>&gt; <span class="kw">for</span> <span class="ty">ConfigError</span> {
+    <span class="kw">fn</span> <span class="fn">from</span>(e: serde_json::<span class="ty">Error</span>) -&gt; <span class="kw">Self</span> { <span class="ty">ConfigError</span>::<span class="ty">Parse</span>(e) }
+}</code></pre>
+
+      <p>
+        This works, but it's 20 lines of boilerplate per error type. Add a database layer
+        and an HTTP layer and you're writing more error plumbing than actual logic.
+      </p>
+
+      <h2><code>thiserror</code> &mdash; for libraries</h2>
+
+      <p>
+        <code>thiserror</code> is a derive macro that generates the <code>Display</code> and
+        <code>From</code> impls:
+      </p>
+
+      <pre><code><span class="kw">use</span> thiserror::<span class="ty">Error</span>;
+
+<span class="kw">#[derive(Error, Debug)]</span>
+<span class="kw">enum</span> <span class="ty">ConfigError</span> {
+    <span class="kw">#[error("failed to read config file")]</span>
+    <span class="ty">Io</span>(<span class="kw">#[from]</span> std::io::<span class="ty">Error</span>),
+
+    <span class="kw">#[error("failed to parse config")]</span>
+    <span class="ty">Parse</span>(<span class="kw">#[from]</span> serde_json::<span class="ty">Error</span>),
+}</code></pre>
+
+      <p>
+        The <code>#[error("...")]</code> attribute generates the <code>Display</code> impl.
+        The <code>#[from]</code> attribute generates the <code>From</code> impl. What was
+        20 lines is now 8, and the intent is clear.
+      </p>
+      <p>
+        The key feature: <strong>callers can match on variants</strong>.
+      </p>
+
+      <pre><code><span class="kw">match</span> <span class="fn">load_config</span>() {
+    <span class="ty">Ok</span>(config) =&gt; { <span class="cm">/* use config */</span> }
+    <span class="ty">Err</span>(<span class="ty">ConfigError</span>::<span class="ty">Io</span>(e)) <span class="kw">if</span> e.<span class="fn">kind</span>() == <span class="ty">ErrorKind</span>::<span class="ty">NotFound</span> =&gt; {
+        <span class="cm">// file missing — use defaults</span>
+    }
+    <span class="ty">Err</span>(e) =&gt; <span class="kw">return</span> <span class="ty">Err</span>(e.<span class="fn">into</span>()),
+}</code></pre>
+
+      <p>
+        This is why <code>thiserror</code> is for libraries: downstream code can
+        programmatically handle specific error cases. The error type is part of your API.
+      </p>
+
+      <h2><code>anyhow</code> &mdash; for applications</h2>
+
+      <p>
+        In a binary (not a library), you often don't need to match on error variants. You
+        just want to bubble errors up with context, then display them to the user.
+        <code>anyhow</code> makes this trivial:
+      </p>
+
+      <pre><code><span class="kw">use</span> anyhow::{<span class="ty">Context</span>, <span class="ty">Result</span>};
+
+<span class="kw">fn</span> <span class="fn">load_config</span>() -&gt; <span class="ty">Result</span>&lt;<span class="ty">Config</span>&gt; {
+    <span class="kw">let</span> text = std::fs::<span class="fn">read_to_string</span>(<span class="str">"config.json"</span>)
+        .<span class="fn">context</span>(<span class="str">"failed to read config file"</span>)?;
+    <span class="kw">let</span> config = <span class="fn">serde_json::from_str</span>(&amp;text)
+        .<span class="fn">context</span>(<span class="str">"failed to parse config"</span>)?;
+    <span class="ty">Ok</span>(config)
+}</code></pre>
+
+      <p>
+        <code>anyhow::Result&lt;T&gt;</code> is an alias for
+        <code>Result&lt;T, anyhow::Error&gt;</code>. <code>anyhow::Error</code> wraps
+        any error type (anything implementing <code>std::error::Error</code>). You don't
+        define error enums at all.
+      </p>
+      <p>
+        <code>.context("...")</code> adds a human-readable message. When the error is
+        displayed, you get a chain:
+      </p>
+
+      <pre><code><span class="cm">Error: failed to read config file
+
+Caused by:
+    No such file or directory (os error 2)</span></code></pre>
+
+      <p>
+        This is exactly what you want in an application: clear error messages with context,
+        minimal boilerplate, and no need to define error types for every module.
+      </p>
+
+      <h2>The split</h2>
+
+      <p>
+        This is the idiomatic Rust convention:
+      </p>
+      <ul>
+        <li><strong>Libraries</strong> use <code>thiserror</code>. They define structured
+          error types that callers can match on. The error type is part of the public API.</li>
+        <li><strong>Applications</strong> (binaries) use <code>anyhow</code>. They bubble
+          errors up with context messages. Nobody matches on the error &mdash; it's displayed
+          to the user.</li>
+      </ul>
+
+      <h2>When the line blurs</h2>
+
+      <p>
+        Sometimes a library's internal code doesn't need structured errors &mdash; it's
+        private logic that will wrap errors before returning them publicly. Using
+        <code>anyhow</code> internally and converting to <code>thiserror</code> at the
+        public boundary is a valid approach.
+      </p>
+      <p>
+        Conversely, if you find yourself pattern-matching on <code>anyhow::Error</code>
+        (downcasting to specific types), that's a sign you need structured errors. Switch
+        to <code>thiserror</code>.
+      </p>
+
+      <h2>The <code>?</code> operator ties it together</h2>
+
+      <p>
+        Everything in this post works because <code>?</code> calls <code>From::from()</code>
+        to convert errors (as covered in <a href="rust-patterns-from-into.html">#15</a>).
+        <code>thiserror</code> generates the <code>From</code> impls with <code>#[from]</code>.
+        <code>anyhow</code> provides a blanket <code>From&lt;E: Error&gt;</code> for
+        <code>anyhow::Error</code>. Both patterns are built on the same conversion
+        machinery.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li><strong><code>thiserror</code></strong>: any crate published for others to
+          use, any module where callers need to handle specific error cases, any error that's
+          part of a public API</li>
+        <li><strong><code>anyhow</code></strong>: binary applications, CLI tools, scripts,
+          anything where errors are displayed to humans rather than matched on by code</li>
+        <li><strong>Manual enums</strong>: when you want full control and don't want the
+          dependency &mdash; the pattern is the same, just more verbose</li>
+      </ul>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

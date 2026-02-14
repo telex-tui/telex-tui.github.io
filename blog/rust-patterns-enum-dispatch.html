@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #14: Enum Dispatch vs Trait Objects - Telex</title>
+  <meta name="description" content="Two ways to do polymorphism in Rust: enums with match for closed sets of types, trait objects for open sets. Choose based on your extension story.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #14: Enum Dispatch vs Trait Objects</h1>
+      <div class="post-meta">July 2026</div>
+
+      <p>
+        You have different types that share common behaviour. Classic polymorphism. In most
+        languages, you'd reach for an interface or base class. Rust gives you two tools:
+        enums and trait objects. They solve the same problem differently, and choosing wrong
+        leads to friction as the code evolves.
+      </p>
+
+      <h2>Approach 1: Enum dispatch</h2>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">Shape</span> {
+    <span class="ty">Circle</span> { radius: <span class="ty">f64</span> },
+    <span class="ty">Rect</span> { width: <span class="ty">f64</span>, height: <span class="ty">f64</span> },
+    <span class="ty">Triangle</span> { base: <span class="ty">f64</span>, height: <span class="ty">f64</span> },
+}
+
+<span class="kw">impl</span> <span class="ty">Shape</span> {
+    <span class="kw">fn</span> <span class="fn">area</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span> {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">Shape</span>::<span class="ty">Circle</span> { radius } =&gt;
+                std::<span class="ty">f64</span>::consts::<span class="ty">PI</span> * radius * radius,
+            <span class="ty">Shape</span>::<span class="ty">Rect</span> { width, height } =&gt;
+                width * height,
+            <span class="ty">Shape</span>::<span class="ty">Triangle</span> { base, height } =&gt;
+                <span class="num">0.5</span> * base * height,
+        }
+    }
+
+    <span class="kw">fn</span> <span class="fn">perimeter</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span> {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">Shape</span>::<span class="ty">Circle</span> { radius } =&gt;
+                <span class="num">2.0</span> * std::<span class="ty">f64</span>::consts::<span class="ty">PI</span> * radius,
+            <span class="ty">Shape</span>::<span class="ty">Rect</span> { width, height } =&gt;
+                <span class="num">2.0</span> * (width + height),
+            <span class="ty">Shape</span>::<span class="ty">Triangle</span> { base, height } =&gt; {
+                <span class="kw">let</span> side = (base * base / <span class="num">4.0</span> + height * height).<span class="fn">sqrt</span>();
+                base + <span class="num">2.0</span> * side
+            }
+        }
+    }
+}</code></pre>
+
+      <p>
+        <strong>Adding a new operation</strong> (like <code>perimeter</code>) is easy:
+        write a new method with a <code>match</code>. All variants are handled in one place.
+      </p>
+      <p>
+        <strong>Adding a new variant</strong> (like <code>Pentagon</code>) requires changing
+        every <code>match</code> arm in every method. The compiler helps &mdash; exhaustive
+        matching means you get errors for every method you haven't updated. But the changes
+        are scattered.
+      </p>
+
+      <h2>Approach 2: Trait objects</h2>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">Shape</span> {
+    <span class="kw">fn</span> <span class="fn">area</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span>;
+    <span class="kw">fn</span> <span class="fn">perimeter</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">Circle</span> { radius: <span class="ty">f64</span> }
+<span class="kw">struct</span> <span class="ty">Rect</span> { width: <span class="ty">f64</span>, height: <span class="ty">f64</span> }
+
+<span class="kw">impl</span> <span class="ty">Shape</span> <span class="kw">for</span> <span class="ty">Circle</span> {
+    <span class="kw">fn</span> <span class="fn">area</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span> {
+        std::<span class="ty">f64</span>::consts::<span class="ty">PI</span> * <span class="kw">self</span>.radius * <span class="kw">self</span>.radius
+    }
+    <span class="kw">fn</span> <span class="fn">perimeter</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span> {
+        <span class="num">2.0</span> * std::<span class="ty">f64</span>::consts::<span class="ty">PI</span> * <span class="kw">self</span>.radius
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Shape</span> <span class="kw">for</span> <span class="ty">Rect</span> {
+    <span class="kw">fn</span> <span class="fn">area</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span> { <span class="kw">self</span>.width * <span class="kw">self</span>.height }
+    <span class="kw">fn</span> <span class="fn">perimeter</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">f64</span> { <span class="num">2.0</span> * (<span class="kw">self</span>.width + <span class="kw">self</span>.height) }
+}
+
+<span class="cm">// Usage with trait objects:</span>
+<span class="kw">let</span> shapes: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Shape</span>&gt;&gt; = <span class="fn">vec!</span>[
+    <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Circle</span> { radius: <span class="num">5.0</span> }),
+    <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Rect</span> { width: <span class="num">3.0</span>, height: <span class="num">4.0</span> }),
+];</code></pre>
+
+      <p>
+        <strong>Adding a new variant</strong> (a new struct implementing <code>Shape</code>)
+        is easy: write the struct and its impl. No existing code changes.
+      </p>
+      <p>
+        <strong>Adding a new operation</strong> (a new method on the trait) is hard:
+        every existing implementation must be updated. If the trait is in a library, adding
+        a method is a breaking change.
+      </p>
+
+      <h2>The expression problem</h2>
+
+      <p>
+        This is a well-known tradeoff in language design:
+      </p>
+      <ul>
+        <li><strong>Enums:</strong> easy to add operations, hard to add variants</li>
+        <li><strong>Trait objects:</strong> easy to add variants, hard to add operations</li>
+      </ul>
+      <p>
+        Neither is universally better. The question is: how will your code evolve? Will
+        you add new types or new operations?
+      </p>
+
+      <h2>Performance</h2>
+
+      <p>
+        Enum dispatch is static. The compiler sees the <code>match</code> and can inline
+        each arm. No heap allocation, no vtable indirection. This matters in hot loops.
+      </p>
+      <p>
+        Trait objects use dynamic dispatch: a vtable pointer for method calls, and typically
+        a <code>Box</code> for heap allocation. The indirection prevents inlining. For
+        event handlers or plugin systems called infrequently, this is irrelevant. For
+        per-pixel rendering or per-packet processing, it can matter.
+      </p>
+
+      <h2>Telex's choice</h2>
+
+      <p>
+        Telex uses an enum for its <code>View</code> type:
+      </p>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">View</span> {
+    <span class="ty">Text</span>(<span class="ty">String</span>),
+    <span class="ty">Container</span> { children: <span class="ty">Vec</span>&lt;<span class="ty">View</span>&gt; },
+    <span class="ty">Button</span> { label: <span class="ty">String</span>, on_click: <span class="ty">Rc</span>&lt;<span class="kw">dyn</span> <span class="ty">Fn</span>()&gt; },
+    <span class="cm">// ... other built-in widgets</span>
+}</code></pre>
+
+      <p>
+        The set of built-in widget types is known and controlled by the framework. New
+        widgets are added by the Telex developers, not by users. This is a closed set.
+        New operations (rendering, diffing, layout) are added more often than new widget
+        types. Enum dispatch is the natural fit. See
+        <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework &mdash;
+        Part 1</a> for the rationale.
+      </p>
+
+      <h2>When to use which</h2>
+
+      <ul>
+        <li><strong>Enum dispatch</strong> when the set of variants is known, controlled by
+          your crate, and unlikely to grow rapidly. When you add operations more often than
+          types. When performance matters.</li>
+        <li><strong>Trait objects</strong> when callers define the types: plugin systems,
+          user-extensible components, anything where downstream crates provide implementations.
+          When the set of types is open-ended.</li>
+      </ul>
+      <p>
+        The decisive question: <em>who defines the concrete types?</em> If it's you, use an
+        enum. If it's your users, use a trait.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

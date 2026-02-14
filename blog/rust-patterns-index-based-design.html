@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #5: Index-Based Design - Telex</title>
+  <meta name="description" content="Graphs, ECS, and arenas — when complex relationships make references painful, store indices into a Vec instead. Sometimes the best Rust code uses no references at all.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #5: Index-Based Design</h1>
+      <div class="post-meta">April 2026</div>
+
+      <p>
+        Some data structures don't fit Rust's ownership model naturally. Graphs, trees with
+        parent pointers, entity-component systems &mdash; anything where things reference
+        each other in cycles or complex webs. The solution is surprisingly simple: stop
+        using references.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        You're building a graph. Nodes have edges to other nodes. In Python, you'd store a
+        list of references to neighbour objects. In Rust, you try to do the same with
+        references.
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Node</span>&lt;<span class="kw">'a</span>&gt; {
+    value: <span class="ty">String</span>,
+    neighbors: <span class="ty">Vec</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">Node</span>&lt;<span class="kw">'a</span>&gt;&gt;,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> <span class="kw">mut</span> a = <span class="ty">Node</span> { value: <span class="str">"A"</span>.<span class="fn">into</span>(), neighbors: <span class="fn">vec!</span>[] };
+    <span class="kw">let</span> <span class="kw">mut</span> b = <span class="ty">Node</span> { value: <span class="str">"B"</span>.<span class="fn">into</span>(), neighbors: <span class="fn">vec!</span>[] };
+
+    a.neighbors.<span class="fn">push</span>(&amp;b);
+    b.neighbors.<span class="fn">push</span>(&amp;a); <span class="cm">// ERROR: cannot borrow `a` as immutable</span>
+                           <span class="cm">//        because it is also borrowed as mutable</span>
+}</code></pre>
+
+      <p>
+        This is the tip of the iceberg. Even if you fix this particular error, you
+        can't add nodes to a <code>Vec&lt;Node&gt;</code> while other nodes reference
+        into it &mdash; the <code>Vec</code> might reallocate, invalidating all references.
+        Self-referential structures and Rust's borrow checker are fundamentally at odds.
+      </p>
+
+      <h2>Why references don't work for graphs</h2>
+
+      <p>
+        Rust references are compile-time-checked pointers. They guarantee that the data they
+        point to is valid and not being mutated by someone else. This works beautifully for
+        tree-shaped ownership. It falls apart when the relationships form cycles or when
+        the container holding the data might move it in memory.
+      </p>
+      <p>
+        A <code>Vec</code> can reallocate when it grows. If node A stores <code>&amp;node_b</code>
+        and <code>node_b</code> lives inside a <code>Vec</code>, pushing a new node to that
+        <code>Vec</code> might move <code>node_b</code> to a new address. The reference in
+        node A is now dangling. Rust prevents this at compile time, which is why you can't
+        get a long-lived reference into a <code>Vec</code> that might change.
+      </p>
+
+      <h2>The pattern: indices into a <code>Vec</code></h2>
+
+      <p>
+        Instead of storing references to nodes, store their position in a shared array.
+        Relationships become integers, not pointers.
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Graph</span> {
+    nodes: <span class="ty">Vec</span>&lt;<span class="ty">Node</span>&gt;,
+}
+
+<span class="kw">struct</span> <span class="ty">Node</span> {
+    value: <span class="ty">String</span>,
+    neighbors: <span class="ty">Vec</span>&lt;<span class="ty">usize</span>&gt;, <span class="cm">// indices into Graph::nodes</span>
+}
+
+<span class="kw">impl</span> <span class="ty">Graph</span> {
+    <span class="kw">fn</span> <span class="fn">new</span>() -&gt; <span class="kw">Self</span> {
+        <span class="ty">Graph</span> { nodes: <span class="fn">vec!</span>[] }
+    }
+
+    <span class="kw">fn</span> <span class="fn">add_node</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, value: <span class="ty">String</span>) -&gt; <span class="ty">usize</span> {
+        <span class="kw">let</span> idx = <span class="kw">self</span>.nodes.<span class="fn">len</span>();
+        <span class="kw">self</span>.nodes.<span class="fn">push</span>(<span class="ty">Node</span> { value, neighbors: <span class="fn">vec!</span>[] });
+        idx
+    }
+
+    <span class="kw">fn</span> <span class="fn">add_edge</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, from: <span class="ty">usize</span>, to: <span class="ty">usize</span>) {
+        <span class="kw">self</span>.nodes[from].neighbors.<span class="fn">push</span>(to);
+        <span class="kw">self</span>.nodes[to].neighbors.<span class="fn">push</span>(from);
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> <span class="kw">mut</span> g = <span class="ty">Graph</span>::<span class="fn">new</span>();
+    <span class="kw">let</span> a = g.<span class="fn">add_node</span>(<span class="str">"A"</span>.<span class="fn">into</span>());
+    <span class="kw">let</span> b = g.<span class="fn">add_node</span>(<span class="str">"B"</span>.<span class="fn">into</span>());
+    g.<span class="fn">add_edge</span>(a, b); <span class="cm">// no borrow issues — just integers</span>
+}</code></pre>
+
+      <p>
+        No lifetimes, no borrow checker conflicts, no self-referential structures.
+        Relationships are just numbers. The <code>Vec</code> can grow freely because
+        nobody holds a reference into it &mdash; they hold indices, which remain valid
+        regardless of reallocation.
+      </p>
+
+      <h2>Arenas</h2>
+
+      <p>
+        A <code>Vec</code> used as a node store is called an arena. All nodes share the
+        arena's lifetime. Allocation is a <code>push</code>. Lookup is an index.
+        Deallocation happens when the arena is dropped.
+      </p>
+      <p>
+        Dedicated arena crates like <code>typed-arena</code> or <code>bumpalo</code> give
+        you stable references (nodes don't move once allocated) if you need them. But for
+        most graph-like structures, plain <code>Vec</code> + indices is sufficient and
+        requires no dependencies.
+      </p>
+
+      <h2>Making indices type-safe</h2>
+
+      <p>
+        A bare <code>usize</code> is error-prone &mdash; you could accidentally use a node
+        index as an edge index, or index into the wrong vector. The newtype pattern
+        (<a href="rust-patterns-newtype.html">#11</a>) fixes this:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">NodeId</span>(<span class="ty">usize</span>);
+<span class="kw">struct</span> <span class="ty">EdgeId</span>(<span class="ty">usize</span>);
+
+<span class="kw">struct</span> <span class="ty">Node</span> {
+    value: <span class="ty">String</span>,
+    neighbors: <span class="ty">Vec</span>&lt;<span class="ty">NodeId</span>&gt;,
+}</code></pre>
+
+      <p>
+        Now the compiler catches it if you pass an <code>EdgeId</code> where a
+        <code>NodeId</code> is expected. Zero runtime cost.
+      </p>
+
+      <h2>ECS: this pattern at scale</h2>
+
+      <p>
+        Entity Component Systems take this idea to its logical conclusion. Entities are
+        indices. Components are stored in parallel arrays keyed by entity index. To check
+        if entity 42 has a position: <code>positions[42]</code>. To check its health:
+        <code>healths[42]</code>. No references between components, no ownership tangles,
+        excellent cache locality.
+      </p>
+      <p>
+        Game engines (Bevy, Legion) and simulation systems are built entirely on this
+        principle. It scales to millions of entities precisely because it avoids the
+        pointer-chasing and lifetime complexity that references would introduce.
+      </p>
+
+      <h2>Tradeoffs</h2>
+
+      <ul>
+        <li><strong>No compile-time validity.</strong> An index is just a number. If you
+          remove a node without cleaning up references to it, the index becomes stale.
+          This is a runtime concern, not a compile-time one.</li>
+        <li><strong>Generational indices</strong> mitigate stale references: each slot has
+          a generation counter that increments on removal. An index stores both the position
+          and the generation; lookup checks that they match.</li>
+        <li><strong>Cache-friendly.</strong> Nodes live in contiguous memory. Iterating
+          over all nodes is a linear scan. This is often faster than chasing heap-allocated
+          <code>Box&lt;Node&gt;</code> pointers.</li>
+      </ul>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li>Graphs with cycles (the motivating example)</li>
+        <li>Trees where children need parent pointers</li>
+        <li>ECS and simulation systems</li>
+        <li>Any structure where Rust's ownership model and reference relationships conflict</li>
+      </ul>
+      <p>
+        When not to: if your data is a simple tree with clear parent-to-child ownership and
+        no cycles, <code>Box&lt;Node&gt;</code> works fine and the compiler checks everything
+        statically.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

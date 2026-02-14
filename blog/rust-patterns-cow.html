@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #6: Cow - Telex</title>
+  <meta name="description" content="Cow lets you borrow when you can and own when you must — the ideal pattern for functions that sometimes modify their input and sometimes don't.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #6: Cow &mdash; Borrow or Own</h1>
+      <div class="post-meta">April 2026</div>
+
+      <p>
+        Should your function take <code>&amp;str</code> or <code>String</code>? If it takes
+        <code>&amp;str</code>, callers who have a <code>String</code> can pass a reference
+        cheaply. But if the function sometimes needs to modify the string, it has to
+        allocate a new <code>String</code> every time, even when the input passes through
+        unchanged. <code>Cow</code> solves this.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        You're writing a function that escapes special characters in a string. Most strings
+        have no special characters and pass through unchanged. Occasionally, one does, and
+        you need to produce a modified copy.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">escape</span>(input: &amp;<span class="kw">str</span>) -&gt; <span class="ty">String</span> {
+    <span class="kw">if</span> input.<span class="fn">contains</span>(<span class="str">'&amp;'</span>) {
+        input.<span class="fn">replace</span>(<span class="str">'&amp;'</span>, <span class="str">"&amp;amp;"</span>)
+    } <span class="kw">else</span> {
+        input.<span class="fn">to_string</span>() <span class="cm">// allocates even though nothing changed</span>
+    }
+}</code></pre>
+
+      <p>
+        The <code>else</code> branch allocates a new <code>String</code> just to return
+        the input unchanged. If this function is called on thousands of strings and most
+        don't need escaping, that's thousands of unnecessary allocations.
+      </p>
+      <p>
+        You could return <code>&amp;str</code> instead, but then you can't return the
+        modified string &mdash; it doesn't live long enough. You need a return type that
+        can be either a borrowed reference or an owned value.
+      </p>
+
+      <h2>The pattern: <code>Cow&lt;'a, str&gt;</code></h2>
+
+      <p>
+        <code>Cow</code> stands for "clone on write." It's an enum with two variants:
+      </p>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="ty">B</span>: <span class="ty">ToOwned</span>&gt; {
+    <span class="ty">Borrowed</span>(&amp;<span class="kw">'a</span> <span class="ty">B</span>),
+    <span class="ty">Owned</span>(&lt;<span class="ty">B</span> <span class="kw">as</span> <span class="ty">ToOwned</span>&gt;::<span class="ty">Owned</span>),
+}</code></pre>
+
+      <p>
+        For strings: <code>Cow::Borrowed(&amp;str)</code> or <code>Cow::Owned(String)</code>.
+        The function returns whichever is appropriate:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Cow</span>;
+
+<span class="kw">fn</span> <span class="fn">escape</span>&lt;<span class="kw">'a</span>&gt;(input: &amp;<span class="kw">'a</span> <span class="kw">str</span>) -&gt; <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="kw">str</span>&gt; {
+    <span class="kw">if</span> input.<span class="fn">contains</span>(<span class="str">'&amp;'</span>) {
+        <span class="ty">Cow</span>::<span class="ty">Owned</span>(input.<span class="fn">replace</span>(<span class="str">'&amp;'</span>, <span class="str">"&amp;amp;"</span>))
+    } <span class="kw">else</span> {
+        <span class="ty">Cow</span>::<span class="ty">Borrowed</span>(input)
+    }
+}</code></pre>
+
+      <p>
+        When the input needs no escaping, the function returns the original reference with
+        zero allocation. When it does need escaping, it returns the new <code>String</code>.
+        Callers use the result the same way regardless of which variant it is &mdash;
+        <code>Cow&lt;str&gt;</code> implements <code>Deref&lt;Target = str&gt;</code>,
+        so it behaves like a <code>&amp;str</code> in most contexts.
+      </p>
+
+      <h2>Using <code>Cow</code> at call sites</h2>
+
+      <pre><code><span class="kw">let</span> clean = <span class="str">"hello world"</span>;
+<span class="kw">let</span> dirty = <span class="str">"Tom &amp; Jerry"</span>;
+
+<span class="kw">let</span> a = <span class="fn">escape</span>(clean); <span class="cm">// Cow::Borrowed — no allocation</span>
+<span class="kw">let</span> b = <span class="fn">escape</span>(dirty); <span class="cm">// Cow::Owned — allocated</span>
+
+<span class="cm">// Both work as &amp;str:</span>
+<span class="mac">println!</span>(<span class="str">"{} {}"</span>, a.<span class="fn">len</span>(), b.<span class="fn">len</span>());
+
+<span class="cm">// If you need a String, .into_owned() gives you one:</span>
+<span class="kw">let</span> s: <span class="ty">String</span> = a.<span class="fn">into_owned</span>(); <span class="cm">// clones only if borrowed</span></code></pre>
+
+      <p>
+        <code>.into_owned()</code> returns a <code>String</code>. If the <code>Cow</code>
+        was already <code>Owned</code>, it returns the <code>String</code> directly
+        (no allocation). If it was <code>Borrowed</code>, it clones.
+      </p>
+
+      <h2>Beyond strings</h2>
+
+      <p>
+        <code>Cow</code> works with any type that implements <code>ToOwned</code>:
+      </p>
+      <ul>
+        <li><code>Cow&lt;str&gt;</code> &mdash; <code>&amp;str</code> or <code>String</code></li>
+        <li><code>Cow&lt;[u8]&gt;</code> &mdash; <code>&amp;[u8]</code> or <code>Vec&lt;u8&gt;</code></li>
+        <li><code>Cow&lt;Path&gt;</code> &mdash; <code>&amp;Path</code> or <code>PathBuf</code></li>
+        <li><code>Cow&lt;[T]&gt;</code> &mdash; <code>&amp;[T]</code> or <code>Vec&lt;T&gt;</code></li>
+      </ul>
+      <p>
+        The pattern is the same everywhere: borrow when you can, own when you must.
+      </p>
+
+      <h2>Mutating through <code>Cow</code></h2>
+
+      <p>
+        <code>Cow</code> has a <code>.to_mut()</code> method that gives you a
+        <code>&amp;mut</code> reference to the owned data. If the <code>Cow</code> is
+        currently <code>Borrowed</code>, it clones the data into an <code>Owned</code>
+        variant first &mdash; that's the "clone on write" behaviour:
+      </p>
+
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> s: <span class="ty">Cow</span>&lt;<span class="kw">str</span>&gt; = <span class="ty">Cow</span>::<span class="ty">Borrowed</span>(<span class="str">"hello"</span>);
+
+<span class="cm">// Triggers a clone because it's currently Borrowed</span>
+s.<span class="fn">to_mut</span>().<span class="fn">push_str</span>(<span class="str">" world"</span>);
+<span class="cm">// s is now Cow::Owned("hello world")</span></code></pre>
+
+      <h2>When to use it</h2>
+
+      <p>
+        <strong>Good uses:</strong>
+      </p>
+      <ul>
+        <li>String processing that usually passes through unchanged (escaping, normalisation)</li>
+        <li>Config values with defaults: return the default as <code>Borrowed</code>,
+          user overrides as <code>Owned</code></li>
+        <li>Functions that conditionally transform input</li>
+        <li>APIs that want to accept both <code>&amp;str</code> and <code>String</code>
+          without forcing either</li>
+      </ul>
+      <p>
+        <strong>When not to use it:</strong>
+      </p>
+      <ul>
+        <li>If you always modify the input, just take <code>String</code> (or
+          <code>&amp;mut String</code>)</li>
+        <li>If you never modify the input, just take <code>&amp;str</code></li>
+        <li>If the allocation cost doesn't matter in your context, a simple
+          <code>String</code> return is clearer</li>
+      </ul>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
