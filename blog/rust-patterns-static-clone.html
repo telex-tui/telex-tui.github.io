@@ -163,6 +163,22 @@
           (<a href="rust-patterns-arc-mutex.html">#17</a>).</li>
       </ol>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        A clone costs whatever the type's <code>Clone</code> implementation does:
+        for <code>String</code>, one heap allocation and a <code>memcpy</code>;
+        for <code>Arc</code>, one atomic increment (no data copy); for
+        <code>i32</code>, nothing (it's <code>Copy</code>). The
+        <code>'static</code> bound itself costs nothing — it's a compile-time
+        constraint, not a runtime check. Moving a value into a <code>move</code>
+        closure is also free — it's a bitwise copy of the value's stack
+        representation, with no allocation. The only runtime cost in the "clone and
+        move" pattern is the clone itself. In the common case (cloning a small struct
+        before spawning a task that does milliseconds of I/O), the clone is
+        unmeasurable noise.
+      </p>
+
       <h2>When to use it</h2>
 
       <ul>

@@ -83,7 +83,7 @@
       </p>
       <p>
         Direct field access is different. If you write <code>self.config.width</code>
-        instead of calling a method, the compiler can see that the borrow is only on
+        instead of calling a method, the borrow checker determines that the borrow is only on
         <code>self.config</code>, and <code>self.buffer</code> is disjoint. The problem
         is specifically about method calls that borrow the whole struct.
       </p>
@@ -100,8 +100,8 @@
 }</code></pre>
 
       <p>
-        The compiler knows <code>self.config</code> and <code>self.buffer</code> are
-        different fields. No conflict. This works because the compiler does do field-level
+        The borrow checker recognizes that <code>self.config</code> and <code>self.buffer</code> are
+        different fields. No conflict. This works because the checker does do field-level
         borrow tracking for direct access &mdash; it's method calls that hide which
         fields are actually used.
       </p>
@@ -124,8 +124,8 @@
 }</code></pre>
 
       <p>
-        Destructuring splits <code>self</code> into independent borrows. The compiler can
-        see that <code>config</code> and <code>buffer</code> don't overlap.
+        Destructuring splits <code>self</code> into independent borrows. The borrow
+        checker confirms that <code>config</code> and <code>buffer</code> don't overlap.
       </p>
 
       <h2>Pattern 3: Helper functions on fields</h2>
@@ -147,7 +147,7 @@
 
       <p>
         The function signature explicitly takes <code>&amp;Config</code> and
-        <code>&amp;mut Vec&lt;u8&gt;</code>. The compiler can see these are disjoint
+        <code>&amp;mut Vec&lt;u8&gt;</code>. The borrow checker verifies these are disjoint
         borrows of <code>self</code>.
       </p>
 

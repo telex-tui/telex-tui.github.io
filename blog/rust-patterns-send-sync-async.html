@@ -190,6 +190,22 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
         another thread, the type needs to be <code>Sync</code>.
       </p>
 
+      <h2>What does this cost?</h2>
+
+      <p>
+        <code>Send</code> and <code>Sync</code> are marker traits — they have no
+        methods, no vtable, no runtime representation. The compiler checks them
+        at compile time and generates no code for them. A <code>Send</code> bound
+        doesn't add a branch, a check, or a byte to your binary. It's purely a
+        constraint the type checker verifies. The only "cost" is when the fix
+        involves switching from <code>Rc</code> to <code>Arc</code> or from
+        <code>RefCell</code> to <code>Mutex</code> — those replacements have their
+        own costs (atomic ops, OS locks). But the <code>Send</code>/<code>Sync</code>
+        checking itself is free. Without these marker traits, Rust would need runtime
+        thread-safety checks (like Go's race detector) or rely on programmer
+        discipline (like C/C++). The compile-time enforcement is the zero-cost part.
+      </p>
+
       <h2>The key insight</h2>
 
       <p>
@@ -197,9 +213,9 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
         always structural:
       </p>
       <ol>
-        <li>Find the non-<code>Send</code> value (the compiler tells you)</li>
-        <li>Find the <code>.await</code> it's held across (the compiler tells you this
-          too)</li>
+        <li>Find the non-<code>Send</code> value (it's named in the error)</li>
+        <li>Find the <code>.await</code> it's held across (also identified in the
+          error)</li>
         <li>Make the value not alive at the <code>.await</code> &mdash; scope it, extract
           it into a sync function, or replace it with a <code>Send</code> alternative</li>
       </ol>
