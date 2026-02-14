@@ -31,9 +31,10 @@
 
       <p>
         You write a function that returns a reference, or a struct that holds one. The
-        compiler demands a lifetime annotation and you freeze. What do you write? What does
-        it mean? The confusion usually comes from thinking lifetimes are instructions to the
-        compiler. They're not. They're descriptions of relationships that already exist.
+        compiler asks for a lifetime annotation and you freeze. What are you supposed to
+        write? What does it even mean? Most of the confusion comes from thinking you're
+        giving the compiler instructions. You're not. You're describing relationships that
+        already exist in your code.
       </p>
 
       <h2>The motivation</h2>
@@ -56,39 +57,42 @@
      from `a` or `b`</span></code></pre>
 
       <p>
-        The return type is a reference. It must refer to something that outlives it. But the
-        compiler can't tell whether the returned reference comes from <code>a</code> or
-        <code>b</code> (it depends on runtime values), so it can't check safety without
-        your help.
+        The return type is a reference, so it must point to something that's still alive
+        when the caller uses it. But the compiler can't tell whether the returned reference
+        comes from <code>a</code> or <code>b</code> &mdash; that depends on which string
+        is longer at runtime &mdash; so it can't check safety without your help.
       </p>
 
       <h2>Elision rules: what the compiler infers</h2>
 
       <p>
-        Most of the time, you don't need lifetime annotations. Rust has three elision rules
-        that let the compiler fill them in:
+        Most of the time, you don't write lifetime annotations at all. Rust has three
+        elision rules that let the compiler fill them in automatically:
       </p>
       <ol>
-        <li>Each reference parameter gets its own lifetime:
+        <li>Each reference parameter gets its own lifetime.
           <code>fn foo(a: &amp;str, b: &amp;str)</code> becomes
-          <code>fn foo&lt;'a, 'b&gt;(a: &amp;'a str, b: &amp;'b str)</code></li>
-        <li>If there's exactly one input lifetime, it's applied to all output references:
+          <code>fn foo&lt;'a, 'b&gt;(a: &amp;'a str, b: &amp;'b str)</code>.</li>
+        <li>If there's exactly one input lifetime, the compiler uses it for all output
+          references too.
           <code>fn foo(a: &amp;str) -&gt; &amp;str</code> becomes
-          <code>fn foo&lt;'a&gt;(a: &amp;'a str) -&gt; &amp;'a str</code></li>
+          <code>fn foo&lt;'a&gt;(a: &amp;'a str) -&gt; &amp;'a str</code>.</li>
         <li>If one of the parameters is <code>&amp;self</code> or
-          <code>&amp;mut self</code>, its lifetime is applied to all output references</li>
+          <code>&amp;mut self</code>, the compiler uses that lifetime for all output
+          references.</li>
       </ol>
       <p>
-        The <code>longest</code> function fails because it has <em>two</em> input lifetimes
-        and neither is <code>&amp;self</code>. The compiler can't pick one. You have to.
+        The <code>longest</code> function hits none of these rules &mdash; it has
+        <em>two</em> input lifetimes and neither is <code>&amp;self</code>. The compiler
+        doesn't know which one the return value borrows from, so you have to say.
       </p>
 
       <h2>The mental model: constraints, not instructions</h2>
 
       <p>
-        A lifetime annotation says: "these references are related." It does not make data
-        live longer or shorter. You're describing a fact about your code so the compiler can
-        check it.
+        A lifetime annotation says: "these references are connected." It doesn't make data
+        live longer or shorter. You're telling the compiler a fact about your code so it
+        can verify that fact everywhere the function is called.
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">longest</span>&lt;<span class="kw">'a</span>&gt;(a: &amp;<span class="kw">'a</span> <span class="kw">str</span>, b: &amp;<span class="kw">'a</span> <span class="kw">str</span>) -&gt; &amp;<span class="kw">'a</span> <span class="kw">str</span> {
@@ -96,22 +100,22 @@
 }</code></pre>
 
       <p>
-        Read this as: "the returned reference is valid for at least as long as the shorter
-        of <code>a</code> and <code>b</code>." Both inputs share the lifetime
-        <code>'a</code>, so the compiler uses the overlap &mdash; the time when both
-        are still alive. The return value can't outlive either one.
+        Read this as: "the returned reference lives at most as long as whichever input
+        dies first." Both inputs share the lifetime <code>'a</code>, so the compiler uses
+        the overlap &mdash; the window when both are still alive. The return value can't
+        outlive either one.
       </p>
       <p>
-        Now the compiler can check every call site. If <code>a</code> lives for 10 lines and
-        <code>b</code> lives for 5 lines, the returned reference is valid for at most 5
-        lines. If someone tries to use it on line 7, the compiler rejects it.
+        Now the compiler can check every call site. Say <code>a</code> is alive for 10 lines
+        and <code>b</code> is alive for 5. The returned reference is good for at most 5
+        lines. If you try to use it on line 7, the compiler rejects it.
       </p>
 
       <h2>Multiple lifetimes</h2>
 
       <p>
-        Sometimes the inputs have independent lifetimes and you want to express which one
-        the return borrows from:
+        Sometimes the inputs live for different amounts of time and you want to say exactly
+        which one the return value borrows from:
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">first</span>&lt;<span class="kw">'a</span>, <span class="kw">'b</span>&gt;(a: &amp;<span class="kw">'a</span> <span class="kw">str</span>, b: &amp;<span class="kw">'b</span> <span class="kw">str</span>) -&gt; &amp;<span class="kw">'a</span> <span class="kw">str</span> {
@@ -119,16 +123,17 @@
 }</code></pre>
 
       <p>
-        This says: "the return borrows from <code>a</code> only. <code>b</code>'s lifetime
-        is irrelevant." The compiler knows <code>b</code> can be dropped without affecting
-        the returned reference.
+        This says: "the return value borrows from <code>a</code> only &mdash;
+        <code>b</code> doesn't matter." So the compiler knows it's fine to drop
+        <code>b</code> even while the returned reference is still in use.
       </p>
 
       <h2>Structs that hold references</h2>
 
       <p>
-        When a struct stores a reference, it needs a lifetime parameter to express the
-        constraint: the struct can't outlive the data it borrows.
+        When a struct holds a reference in one of its fields, it needs a lifetime parameter.
+        That parameter tells the compiler: this struct can't outlive the data it's
+        borrowing.
       </p>
 
       <pre><code><span class="kw">struct</span> <span class="ty">Excerpt</span>&lt;<span class="kw">'a</span>&gt; {
@@ -145,45 +150,46 @@
 }</code></pre>
 
       <p>
-        The lifetime <code>'a</code> in <code>Excerpt&lt;'a&gt;</code> means: "this struct
-        borrows from something, and it can't outlive that something." The compiler catches
-        the dangling reference at compile time.
+        The <code>'a</code> in <code>Excerpt&lt;'a&gt;</code> means: "this struct borrows
+        data, and the data has to stay alive at least as long as the struct does." Here,
+        <code>novel</code> gets dropped at the end of the block, but <code>excerpt</code>
+        tries to live past it &mdash; so the compiler stops you.
       </p>
 
       <h2>When lifetimes get painful</h2>
 
       <p>
-        If you find yourself adding lifetime parameters to struct after struct, passing them
-        through generic bounds, and fighting increasingly complex error messages, step back.
-        The complexity is usually a signal.
+        If you keep adding lifetime parameters to struct after struct, threading them through
+        generic bounds, and fighting longer and longer error messages &mdash; stop.
+        That complexity is telling you something.
       </p>
       <p>
-        The escape hatch is ownership: use <code>String</code> instead of <code>&amp;str</code>.
-        Use <code>Vec&lt;T&gt;</code> instead of <code>&amp;[T]</code>. Owned types have no
-        lifetime constraints. The struct that holds a <code>String</code> can live anywhere,
-        be sent to threads, be stored in collections, without any of the restrictions that
-        references bring.
+        The escape hatch is to own the data. Use <code>String</code> instead of
+        <code>&amp;str</code>. Use <code>Vec&lt;T&gt;</code> instead of
+        <code>&amp;[T]</code>. Owned types have no lifetime constraints. A struct that
+        holds a <code>String</code> can live anywhere, move to another thread, sit in a
+        collection &mdash; none of the restrictions that references bring.
       </p>
       <p>
-        This isn't a cop-out. Owning data is often the right design. References are an
-        optimisation &mdash; they avoid copies by borrowing in place. If the optimisation
-        is costing you more in complexity than it saves in allocation, own the data.
-        The next post covers this trade-off directly:
+        This isn't a cop-out. Owning data is often the right call. References are an
+        optimisation &mdash; they avoid copies by pointing to the original. If that
+        optimisation costs you more in code complexity than it saves in allocations,
+        just own the data. The next post goes deeper on this trade-off:
         <a href="rust-patterns-static-clone.html"><code>'static</code> + Clone</a>.
       </p>
 
       <h2>When to use lifetime annotations</h2>
 
       <ul>
-        <li>Functions that return a reference derived from an input reference, where elision
-          doesn't apply</li>
-        <li>Structs that borrow data (parsers holding a <code>&amp;str</code>,
-          iterators holding a <code>&amp;[T]</code>)</li>
-        <li>Trait bounds where borrowed data flows through</li>
+        <li>Functions that return a reference taken from one of their inputs, when the
+          elision rules can't figure out which input it comes from</li>
+        <li>Structs that borrow data instead of owning it &mdash; like a parser holding a
+          <code>&amp;str</code>, or an iterator holding a <code>&amp;[T]</code></li>
+        <li>Trait bounds where borrowed data passes through generic code</li>
       </ul>
       <p>
-        When annotations get deeply nested or thread through many layers of generics,
-        it's usually a sign to switch from borrowing to owning.
+        If your annotations start nesting deep or spreading through many layers of generics,
+        that's usually a sign you should own the data instead of borrowing it.
       </p>
 
       <nav class="series-index" id="series-index">

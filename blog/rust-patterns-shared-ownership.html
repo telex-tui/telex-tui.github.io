@@ -30,19 +30,19 @@
       <p class="series-nav">Post 2 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Rust enforces single ownership: one variable owns each value, and when that variable
-        goes out of scope, the value is dropped. This is how Rust keeps memory safe without
-        a garbage collector. But trees, graphs, and callback registries all
-        need multiple parts of the program to hold onto the same data. Single ownership
-        doesn't cover this.
+        In Rust, one variable owns each value, and when that variable goes out of scope, the
+        value is dropped. That's how Rust avoids a garbage collector. But trees, graphs, and
+        callback registries all need multiple parts of the program to hold onto the same
+        data. Single ownership doesn't cover that.
       </p>
 
       <h2>The motivation</h2>
 
       <p>
-        You're building a tree structure. Each node has children, and you also want to keep
-        a flat list of all nodes for fast iteration. The children are owned by their parents.
-        The flat list also needs access to the same nodes.
+        You're building a tree. Each node owns its children, but you also want a flat
+        <code>Vec</code> of all nodes so you can iterate over them quickly. The tree owns the
+        nodes through the parent-child chain. The flat <code>Vec</code> also needs to point to
+        those same nodes.
       </p>
 
       <pre><code><span class="kw">struct</span> <span class="ty">Node</span> {
@@ -71,31 +71,33 @@
       <pre><code><span class="cm">error[E0382]: use of moved value: `child`</span></code></pre>
 
       <p>
-        <code>child</code> moved into <code>all_nodes</code>. It's gone. You can't also
-        put it in the parent's children. <code>Box</code> enforces single ownership &mdash;
-        when you move a <code>Box</code>, the original variable is invalidated.
+        <code>child</code> was moved into <code>all_nodes</code>, so it's gone. You can't
+        also put it in the parent's <code>children</code> vec. A <code>Box</code> has exactly
+        one owner &mdash; when you move it, the original variable becomes unusable.
       </p>
 
       <h2>Why Rust does this</h2>
 
       <p>
-        Single ownership answers a fundamental question: who frees this memory? With one
-        owner, the answer is always clear &mdash; the owner does, when it goes out of scope.
-        No double frees, no use-after-free, no garbage collector needed. <code>Box&lt;T&gt;</code>
-        is the direct expression of this: one pointer, one owner, one deallocation.
+        Because every value in Rust has exactly one owner, the compiler always knows
+        when to drop it &mdash; right when that owner goes out of scope. No double frees,
+        no use-after-free, no garbage collector. <code>Box&lt;T&gt;</code> works exactly
+        like this: one pointer, one owner, one deallocation.
       </p>
       <p>
-        But when data is genuinely shared &mdash; a node referenced from both a tree and a flat
-        list, a configuration struct used by multiple subsystems, a callback registered with
-        several event sources &mdash; single ownership doesn't model reality.
+        But sometimes multiple parts of your program need to point to the same data &mdash;
+        a node that appears in both a tree and a flat list, a config struct read by
+        multiple subsystems, a callback registered with several event sources. You can't
+        do that if only one variable is allowed to own the value.
       </p>
 
       <h2>The pattern: <code>Rc&lt;T&gt;</code></h2>
 
       <p>
-        <code>Rc&lt;T&gt;</code> is a reference-counted pointer. Multiple <code>Rc</code>s
-        can point to the same heap-allocated value. An internal counter tracks how many
-        <code>Rc</code>s exist. When the last one is dropped, the value is freed.
+        <code>Rc&lt;T&gt;</code> is a pointer that counts how many clones of itself exist.
+        Multiple <code>Rc</code>s can point to the same heap-allocated value. Each clone
+        bumps the count up; each drop bumps it down. When the last one is dropped, the
+        value is freed.
       </p>
 
       <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
@@ -123,9 +125,9 @@
 }</code></pre>
 
       <p>
-        <code>Rc::clone(&amp;child)</code> doesn't copy the <code>Node</code>. It increments
-        the reference count and returns a new <code>Rc</code> pointing to the same allocation.
-        This is cheap &mdash; incrementing an integer and copying a pointer.
+        <code>Rc::clone(&amp;child)</code> doesn't copy the <code>Node</code>. It just bumps the
+        reference count and hands back a new <code>Rc</code> pointing to the same allocation.
+        That's cheap &mdash; it's an integer increment and a pointer copy.
       </p>
 
       <h2>The <code>Rc::clone()</code> convention</h2>
@@ -141,11 +143,10 @@
       <h2>What you can't do</h2>
 
       <p>
-        <code>Rc</code> gives you <code>&amp;T</code> &mdash; shared, immutable access.
-        You can read through an <code>Rc</code>, but you can never get <code>&amp;mut T</code>
-        from it. This is fundamental: multiple pointers to the same data plus mutation
-        equals data races and aliasing bugs. <code>Rc</code> prevents this by making the data
-        read-only.
+        <code>Rc</code> only gives you <code>&amp;T</code> &mdash; you can read through it,
+        but you can never get <code>&amp;mut T</code>. This makes sense: if multiple
+        <code>Rc</code>s point to the same data and any of them could write to it, you'd
+        have aliasing bugs. <code>Rc</code> avoids this by keeping the data read-only.
       </p>
 
       <pre><code><span class="kw">let</span> data = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="str">"hello"</span>.<span class="fn">to_string</span>());
@@ -166,22 +167,22 @@
       <h2>The tradeoffs</h2>
 
       <p>
-        <code>Rc</code> has a small runtime cost: reference counting on clone and drop.
-        In practice this is negligible unless you're cloning in a tight inner loop.
+        <code>Rc</code> has a small runtime cost: it bumps the count on every clone and drop.
+        In practice this is negligible unless you're cloning in a tight loop.
       </p>
       <p>
-        The bigger constraint is that <code>Rc</code> is <strong>not thread-safe</strong>.
-        Its reference count is a plain integer, not an atomic. Sending an <code>Rc</code>
-        to another thread is a compile error &mdash; <code>Rc</code> is <code>!Send</code>.
-        If you need shared ownership across threads, use <code>Arc</code>
-        (<a href="rust-patterns-arc-mutex.html">#17</a>), which uses atomic operations
-        for the counter.
+        The bigger constraint: <code>Rc</code> is <strong>not thread-safe</strong>. Its
+        count is a plain integer, not an atomic. Sending an <code>Rc</code> to another thread
+        won't compile &mdash; <code>Rc</code> is <code>!Send</code>. For shared ownership
+        across threads, use <code>Arc</code>
+        (<a href="rust-patterns-arc-mutex.html">#17</a>), which uses atomic operations for
+        the count.
       </p>
       <p>
-        <code>Rc</code> also can't detect reference cycles. If A holds an <code>Rc</code>
-        to B and B holds an <code>Rc</code> to A, neither will ever be freed. For
-        cycles, use <code>Weak</code> (a non-owning reference that doesn't prevent
-        deallocation) to break the cycle.
+        <code>Rc</code> also can't detect cycles. If A holds an <code>Rc</code> to B and B
+        holds an <code>Rc</code> to A, the count never reaches zero and neither is ever
+        freed. Break cycles with <code>Weak</code>, which points to the data without
+        keeping it alive.
       </p>
 
       <h2>When to use it</h2>
@@ -190,18 +191,17 @@
         <strong>Good uses:</strong>
       </p>
       <ul>
-        <li>Tree structures where nodes are referenced from multiple places</li>
-        <li>Shared configuration passed to multiple subsystems</li>
-        <li>Callback registries where the same handler is registered in several places</li>
-        <li>Any situation where you need multiple owners and single ownership doesn't model
-          reality</li>
+        <li>Tree nodes that appear in both a parent's <code>children</code> vec and a flat index</li>
+        <li>A config struct that multiple subsystems need to read</li>
+        <li>A callback closure registered with several event sources</li>
+        <li>Any time you need two or more variables to point to the same heap data</li>
       </ul>
       <p>
         <strong>When not to use it:</strong>
       </p>
       <ul>
-        <li>If only one thing owns the data, use <code>Box</code> or direct ownership &mdash;
-          it's simpler and has no reference-counting overhead</li>
+        <li>If only one variable needs to own the data, use <code>Box</code> or just own it
+          directly &mdash; simpler and no counting overhead</li>
         <li>If you need thread safety, use <code>Arc</code> instead</li>
         <li>If you need mutation, <code>Rc</code> alone isn't enough &mdash; combine it with
           <code>RefCell</code> (<a href="rust-patterns-rc-refcell.html">#3</a>)</li>
@@ -210,12 +210,13 @@
       <h2>What comes next</h2>
 
       <p>
-        <code>Rc</code> gives you shared ownership but no mutation. <code>RefCell</code>
-        (<a href="rust-patterns-interior-mutability.html">#1</a>) gives you mutation but
-        single ownership. The next post puts them together: <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
-        &mdash; shared ownership with interior mutability. This is the workhorse pattern for
-        single-threaded shared mutable state, and it's exactly what Telex uses for component
-        state.
+        <code>Rc</code> lets multiple variables own the same data, but none of them can write
+        to it. <code>RefCell</code>
+        (<a href="rust-patterns-interior-mutability.html">#1</a>) lets you write through a
+        shared reference, but only one variable can own the struct. The next post puts them
+        together: <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> &mdash; multiple owners who can all
+        read and write. This is the workhorse for single-threaded Rust, and it's exactly
+        what Telex uses for component state.
       </p>
 
       <nav class="series-index" id="series-index">

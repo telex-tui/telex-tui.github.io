@@ -30,17 +30,19 @@
       <p class="series-nav">Post 1 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have a struct with a cache, passed around by shared reference. Inside a method
-        that takes <code>&amp;self</code>, you need to insert into that cache &mdash; and the
-        compiler says no. This is the first wall.
+        You have a struct with a <code>HashMap</code> field that you use for caching, and it
+        gets passed around by shared reference. Inside a method that takes <code>&amp;self</code>,
+        you need to insert into that <code>HashMap</code> &mdash; and the compiler says no.
+        This is the first wall.
       </p>
 
       <h2>The motivation</h2>
 
       <p>
-        Imagine a configuration loader that parses expensive files on demand and caches the
-        results. Callers only need a shared reference &mdash; they're reading configuration,
-        not modifying the loader itself. But the loader needs to write to its internal cache.
+        Say you have a configuration loader that parses files on demand and stores the
+        results in a <code>HashMap</code> so it doesn't have to parse them again. Callers only need
+        a shared reference &mdash; they're reading configuration, not modifying the loader
+        itself. But the loader needs to insert into its <code>HashMap</code>.
       </p>
 
       <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
@@ -67,34 +69,34 @@
               as it is behind a `&` reference</span></code></pre>
 
       <p>
-        The method takes <code>&amp;self</code> &mdash; a shared, immutable reference. Shared
-        references are read-only. That's not a suggestion; it's a guarantee the entire borrow
-        system depends on. You cannot mutate through <code>&amp;self</code>.
+        The method takes <code>&amp;self</code>, which is a shared, read-only reference. You
+        can't write through it. That's not a suggestion &mdash; the entire borrow system
+        depends on that guarantee.
       </p>
 
       <h2>Why the compiler does this</h2>
 
       <p>
-        Rust's core safety guarantee: if you have a <code>&amp;T</code>, nobody is mutating
-        <code>T</code> right now. If you have a <code>&amp;mut T</code>, nobody else is
-        looking at <code>T</code> right now. These two rules eliminate data races, iterator
-        invalidation, and use-after-free &mdash; at compile time. No runtime cost.
+        Rust's safety comes from two rules: if you have a <code>&amp;T</code>, nobody is
+        changing <code>T</code> right now. If you have a <code>&amp;mut T</code>, nobody else
+        can see <code>T</code> right now. These two rules prevent data races, iterator
+        invalidation, and use-after-free &mdash; all at compile time, with no runtime cost.
       </p>
       <p>
-        The problem is that the cache really does need to change, even though from the
-        outside <code>get()</code> looks like a read. The cache is an implementation detail
-        the caller shouldn't care about. But the type system doesn't know that &mdash; it
-        sees a write through a shared reference and says no.
+        The problem is that the <code>HashMap</code> really does need to change, even though
+        from the outside <code>get()</code> looks like a read. Caching is an implementation
+        detail the caller shouldn't care about. But the type system doesn't know that &mdash;
+        it sees a write through a shared reference and says no.
       </p>
 
       <h2>The pattern: <code>RefCell&lt;T&gt;</code></h2>
 
       <p>
         <code>RefCell&lt;T&gt;</code> moves borrow checking from compile time to runtime.
-        It wraps a value and tracks borrows dynamically: you call <code>.borrow()</code> for
-        shared access and <code>.borrow_mut()</code> for exclusive access. The rules are
-        identical &mdash; many readers or one writer, never both &mdash; but they're enforced
-        when the code runs instead of when it compiles.
+        You wrap a value in it, then call <code>.borrow()</code> to read and
+        <code>.borrow_mut()</code> to write. The same rules apply &mdash; many readers or one
+        writer, never both &mdash; but they're checked when the code runs instead of when it
+        compiles.
       </p>
 
       <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
@@ -115,19 +117,20 @@
 }</code></pre>
 
       <p>
-        The method still takes <code>&amp;self</code>. The cache is wrapped in
-        <code>RefCell</code>, which allows mutation through a shared reference. The compiler
-        is satisfied because <code>RefCell</code> promises to enforce the borrow rules itself.
+        The method still takes <code>&amp;self</code>. The <code>HashMap</code> is wrapped in a
+        <code>RefCell</code>, so you can write to it even through a shared reference. The
+        compiler allows this because <code>RefCell</code> promises to enforce the borrow rules
+        itself, at runtime.
       </p>
 
       <h2>What happens at runtime</h2>
 
       <p>
-        <code>RefCell</code> maintains a counter. Each <code>.borrow()</code> increments
-        it; each dropped borrow decrements it. <code>.borrow_mut()</code> checks that the
-        counter is zero (no outstanding borrows) and sets a flag. If you violate the rules
-        &mdash; say, calling <code>.borrow_mut()</code> while a <code>.borrow()</code> is
-        still alive &mdash; it panics.
+        Inside, <code>RefCell</code> keeps a counter. Each <code>.borrow()</code> increments
+        it; dropping the returned guard decrements it. <code>.borrow_mut()</code> checks that
+        the counter is zero &mdash; meaning nobody else is borrowing &mdash; and sets a flag.
+        If you break the rules, like calling <code>.borrow_mut()</code> while a
+        <code>.borrow()</code> guard is still alive, it panics.
       </p>
 
       <pre><code><span class="kw">let</span> cell = <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="num">42</span>);
@@ -137,25 +140,24 @@
 <span class="kw">let</span> c = cell.<span class="fn">borrow_mut</span>(); <span class="cm">// PANIC: already borrowed</span></code></pre>
 
       <p>
-        The panic is not a bug in your program's logic (though it might indicate one). It's
-        <code>RefCell</code> enforcing the same rule the compiler would have enforced at
-        compile time: you cannot have a mutable borrow while shared borrows exist.
+        That panic isn't a bug in <code>RefCell</code> (though it probably means one in your
+        code). It's <code>RefCell</code> enforcing the same rule the compiler would have
+        caught at compile time: you can't have a mutable borrow while shared borrows exist.
       </p>
 
       <h2>The tradeoff</h2>
 
       <p>
-        With <code>RefCell</code>, you trade a compile-time guarantee for a runtime check.
-        The compiler no longer catches double-mutable-borrows &mdash; you'll find out at
-        runtime via a panic. You're choosing to check the rules when the code runs instead
-        of when it compiles. The borrow rules still apply; they just moved.
+        With <code>RefCell</code>, you trade compile-time checking for runtime checking.
+        The compiler won't catch conflicting borrows anymore &mdash; you'll find out when
+        your code panics. The borrow rules still apply; they just moved from the compiler
+        to the running program.
       </p>
       <p>
-        The runtime cost is small &mdash; an integer check on each borrow. In practice, the
-        real cost is the possibility of panics. If you can structure your code so the compiler
-        checks borrows statically (by taking <code>&amp;mut self</code> instead), do that.
-        Reach for <code>RefCell</code> when callers need shared access but the struct
-        needs to change something inside.
+        The runtime cost is small &mdash; just checking an integer on each borrow. The real
+        cost is the risk of panics. If you can take <code>&amp;mut self</code> instead and let
+        the compiler check everything statically, do that. Use <code>RefCell</code> when
+        callers need shared access but the struct still needs to write to one of its fields.
       </p>
 
       <h2>When to use it</h2>
@@ -164,17 +166,17 @@
         <strong>Good uses:</strong>
       </p>
       <ul>
-        <li>Caches behind a shared interface (the example above)</li>
-        <li>Lazily initialized fields that compute on first access</li>
-        <li>Observer lists where the subject is shared but the list changes</li>
-        <li>Any struct where the mutation is an implementation detail invisible to callers</li>
+        <li>A <code>HashMap</code> used for caching behind an <code>&amp;self</code> method (the example above)</li>
+        <li>Fields that compute their value the first time they're accessed, then store it</li>
+        <li>A <code>Vec</code> of observers that gets modified even though the subject is shared</li>
+        <li>Any field that changes as an implementation detail, invisible to callers</li>
       </ul>
       <p>
         <strong>When not to use it:</strong>
       </p>
       <ul>
-        <li>If you can restructure to take <code>&amp;mut self</code>, do that &mdash; it's
-          strictly better (compile-time checked, no overhead)</li>
+        <li>If you can change the method to take <code>&amp;mut self</code>, do that &mdash;
+          the compiler checks everything for you and there's no overhead</li>
         <li>If you need thread safety, <code>RefCell</code> won't work &mdash; it's
           <code>!Sync</code>. Use <code>Mutex</code> or <code>RwLock</code> instead
           (<a href="rust-patterns-arc-mutex.html">#17</a>)</li>
@@ -183,10 +185,11 @@
       <h2>What comes next</h2>
 
       <p>
-        <code>RefCell</code> solves the mutation problem, but only for a single owner.
-        When multiple parts of your program need to share the same data,
-        you need <code>Rc</code> &mdash; which is <a href="rust-patterns-shared-ownership.html">the
-        next post</a>. And when you need shared ownership <em>and</em> mutation,
+        <code>RefCell</code> lets you write to a field through <code>&amp;self</code>, but
+        only one variable can own the struct. When multiple parts of your program need to
+        hold onto the same data, you need <code>Rc</code> &mdash; which is
+        <a href="rust-patterns-shared-ownership.html">the next post</a>. And when you
+        need multiple owners who can <em>also</em> write,
         <a href="rust-patterns-rc-refcell.html">#3</a> puts the two together.
       </p>
 

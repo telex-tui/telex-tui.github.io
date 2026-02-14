@@ -30,11 +30,11 @@
       <p class="series-nav">Post 15 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You're writing an API that accepts different input types. Some callers have a
-        <code>&amp;str</code>, some have a <code>String</code>, some have a
-        <code>PathBuf</code>. You want all of them to work without forcing callers to
-        convert manually. The <code>From</code> / <code>Into</code> traits are how
-        idiomatic Rust APIs achieve this.
+        You're writing a function that takes a string, but some callers have a
+        <code>&amp;str</code>, some have a <code>String</code>, and some have a
+        <code>PathBuf</code>. You want all of them to just work without making callers
+        convert by hand. The <code>From</code> and <code>Into</code> traits are how you
+        do that in Rust.
       </p>
 
       <h2>The motivation</h2>
@@ -56,8 +56,8 @@
 <span class="kw">let</span> e = <span class="ty">Email</span>::<span class="fn">new</span>(<span class="str">"a@b.com"</span>.<span class="fn">to_string</span>()); <span class="cm">// verbose</span></code></pre>
 
       <p>
-        Every caller has to write <code>.to_string()</code>. It's small, but it's friction.
-        In an API with many such functions, the friction adds up.
+        Every caller has to write <code>.to_string()</code>. That's a small annoyance, but
+        when your API has many functions like this, all those little conversions pile up.
       </p>
 
       <h2>The pattern: <code>From&lt;T&gt;</code></h2>
@@ -88,10 +88,9 @@
       <h2>The blanket impl</h2>
 
       <p>
-        When you implement <code>From&lt;T&gt; for U</code>, the standard library
-        automatically provides <code>Into&lt;U&gt; for T</code> via a blanket impl.
-        You never need to implement <code>Into</code> directly. Always implement
-        <code>From</code>.
+        When you implement <code>From&lt;T&gt; for U</code>, the standard library gives
+        you <code>Into&lt;U&gt; for T</code> for free through a blanket impl. So you never
+        need to implement <code>Into</code> by hand. Just implement <code>From</code>.
       </p>
 
       <h2>Using <code>impl Into&lt;T&gt;</code> in function signatures</h2>

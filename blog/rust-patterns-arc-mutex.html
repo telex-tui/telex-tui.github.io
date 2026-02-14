@@ -30,12 +30,13 @@
       <p class="series-nav">Post 17 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have shared state and multiple threads. You reach for
+        You have data that multiple threads need to read and write. You reach for
         <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> because that's what worked in
         <a href="rust-patterns-rc-refcell.html">#3</a>. The compiler says no:
         <code>Rc</code> is not <code>Send</code>, <code>RefCell</code> is not
         <code>Sync</code>. The thread-safe equivalents are <code>Arc</code> and
-        <code>Mutex</code>. The shapes are identical; the guarantees are stronger.
+        <code>Mutex</code>. They wrap your data the same way, but they use atomic
+        operations and OS locks so multiple threads can share safely.
       </p>
 
       <h2>The motivation</h2>
@@ -54,9 +55,10 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
               the trait `Send` is not implemented for `Rc&lt;RefCell&lt;i32&gt;&gt;`</span></code></pre>
 
       <p>
-        <code>Rc</code> uses a non-atomic reference count. If two threads incremented it
-        simultaneously, the count could corrupt. <code>RefCell</code> uses a non-atomic
-        borrow flag. Same problem. Neither is safe to share across threads.
+        <code>Rc</code> uses a plain integer for its reference count. If two threads
+        increment it at the same time, the count ends up wrong, and memory gets freed too
+        early or leaked. <code>RefCell</code> tracks borrows with a plain integer too.
+        Same problem. Neither is safe to share across threads.
       </p>
 
       <h2>The parallel to Part I</h2>
@@ -140,17 +142,18 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// no readers or other writers can access while this is held</span></code></pre>
 
       <p>
-        This mirrors the borrow checker's rules (many <code>&amp;T</code> or one
-        <code>&amp;mut T</code>), but enforced at runtime with locks.
+        This follows the same rule as the borrow checker (many <code>&amp;T</code> or one
+        <code>&amp;mut T</code>), but checked at runtime with locks instead of at compile
+        time.
       </p>
 
       <h2>Mutex vs RwLock</h2>
 
       <p>
-        <code>RwLock</code> sounds strictly better &mdash; it allows concurrent reads. But
-        it costs more on each lock and unlock because it has to track how many readers
-        there are. If threads aren't fighting over the lock much, or reads and writes are
-        roughly balanced, <code>Mutex</code> is faster.
+        <code>RwLock</code> sounds strictly better &mdash; it lets multiple threads read
+        at the same time. But every lock and unlock costs more because the lock has to
+        track how many readers are active. If threads aren't fighting over the lock much,
+        or reads and writes are roughly balanced, <code>Mutex</code> is faster.
       </p>
       <p>
         <strong>Default to <code>Mutex</code>.</strong> Reach for <code>RwLock</code> when:
@@ -167,16 +170,18 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
       <h2>When to use it</h2>
 
       <ul>
-        <li>Shared counters, caches, or configuration accessed from multiple threads</li>
-        <li>Worker pools with shared state</li>
-        <li>Any cross-thread shared mutable state</li>
+        <li>A counter that multiple threads increment (like a request counter)</li>
+        <li>A <code>HashMap</code> that threads read from and write to (like a lookup cache)</li>
+        <li>A config struct that the main thread updates and worker threads read</li>
+        <li>Any data that more than one thread needs to read or write</li>
       </ul>
       <p>
-        When not to: if you can avoid sharing state entirely (message passing &mdash;
-        <a href="rust-patterns-channels.html">#18</a>), do that. Shared mutable state
-        is harder to reason about than message passing, even with Rust's safety guarantees.
-        <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> is safe, but it's still a lock, and locks can
-        contend and deadlock if multiple are held simultaneously.
+        When not to: if you can avoid sharing data between threads entirely by sending
+        messages instead (<a href="rust-patterns-channels.html">#18</a>), do that. Locks
+        are safe in Rust, but they're still harder to follow than messages flowing in one
+        direction. <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> won't cause data races, but if
+        one thread grabs lock A then tries to grab lock B while another thread holds B and
+        waits on A, you get a deadlock.
       </p>
 
       <nav class="series-index" id="series-index">

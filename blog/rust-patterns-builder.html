@@ -30,11 +30,12 @@
       <p class="series-nav">Post 13 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        A struct has twelve fields. Three are required. Nine have sensible defaults. The
-        constructor has twelve parameters and callers have to remember which position is
-        which. Or you use <code>Default</code> and field-by-field assignment, losing any
-        validation. The builder pattern gives you a separate object for building the struct
-        step by step, with named setters, defaults, and validation in one clean API.
+        You have a struct with twelve fields. Three are required, nine have sensible defaults.
+        If you write a constructor that takes all twelve, callers have to remember which
+        position is which. You could use <code>Default</code> and set fields one by one,
+        but then you lose validation. The builder pattern gives you a separate struct that
+        builds the real one step by step &mdash; named setters, defaults, and validation
+        all in one place.
       </p>
 
       <h2>The motivation</h2>
@@ -63,7 +64,7 @@
       <h2>The pattern</h2>
 
       <p>
-        A separate builder struct with chained setter methods:
+        Create a separate struct whose setter methods return <code>&amp;mut Self</code> so you can chain them:
       </p>
 
       <pre><code><span class="kw">struct</span> <span class="ty">ServerConfigBuilder</span> {
@@ -143,7 +144,7 @@
       <h2>Validation in <code>build()</code></h2>
 
       <p>
-        The <code>build()</code> method is where you enforce invariants:
+        <code>build()</code> is where you check that everything makes sense together:
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">build</span>(<span class="kw">self</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">ServerConfig</span>, <span class="ty">String</span>&gt; {
@@ -154,16 +155,16 @@
 }</code></pre>
 
       <p>
-        Cross-field validation belongs here. The builder accumulates state; <code>build()</code>
-        validates the whole thing at once.
+        Checks that depend on multiple fields belong here. The setters collect values;
+        <code>build()</code> validates them all at once.
       </p>
 
       <h2>Consuming vs borrowing setters</h2>
 
       <p>
         The example above uses <code>&amp;mut self</code> setters that return
-        <code>&amp;mut Self</code>. An alternative is consuming setters that take
-        <code>self</code> and return <code>Self</code>:
+        <code>&amp;mut Self</code>. The other option is setters that take <code>self</code>
+        by value and return <code>Self</code>:
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">timeout</span>(<span class="kw">mut</span> <span class="kw">self</span>, secs: <span class="ty">u64</span>) -&gt; <span class="kw">Self</span> {
@@ -172,22 +173,22 @@
 }</code></pre>
 
       <p>
-        Consuming setters let you write the chain in one expression:
+        With consuming setters, the whole chain is one expression:
         <code>let config = Builder::new().timeout(30).build();</code>.
-        Borrowing setters require a binding:
+        With borrowing setters, you usually need a <code>let mut</code> binding first:
         <code>let mut b = Builder::new(); b.timeout(30); b.build();</code>
-        (or the chain works if you use the return value). Both styles are common. Consuming
-        setters are a bit nicer for chaining.
+        (though chaining still works if you use the return value). Both styles are common.
+        Consuming setters read a bit more naturally when chained.
       </p>
 
       <h2>Derive macros</h2>
 
       <p>
-        For straightforward cases, crates like <code>derive_builder</code> and <code>bon</code>
-        generate the builder automatically from your struct definition. They reduce
-        boilerplate when the builder is a mechanical mapping of fields to setters. For public
-        APIs where you want full control over the builder's ergonomics and documentation,
-        hand-written builders are often worth the effort.
+        For simple cases, crates like <code>derive_builder</code> and <code>bon</code>
+        generate the builder from your struct definition automatically. They save a lot of
+        typing when each field just needs a straightforward setter. For public APIs where you
+        want full control over how the builder looks and how its docs read, writing it by
+        hand is often worth the effort.
       </p>
 
       <h2>When to use it</h2>
@@ -195,13 +196,13 @@
       <ul>
         <li>Structs with more than three or four fields, especially with optional ones</li>
         <li>Public APIs where callers shouldn't need to know field order</li>
-        <li>Construction that requires cross-field validation</li>
+        <li>Construction where fields need to be checked against each other</li>
         <li>Configurable objects (HTTP clients, loggers, server configs)</li>
       </ul>
       <p>
-        When not to: structs with two or three fields, or purely internal types where a
-        simple <code>new()</code> is clear enough. A builder for a struct with two fields
-        is overhead without benefit.
+        When not to: structs with two or three fields, or internal types where a plain
+        <code>new()</code> is already clear. Writing a builder for a two-field struct is
+        more code for no payoff.
       </p>
 
       <nav class="series-index" id="series-index">

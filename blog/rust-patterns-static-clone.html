@@ -30,10 +30,11 @@
       <p class="series-nav">Post 8 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You're spawning a thread or an async task. The API requires <code>'static</code>.
-        Your data borrows from something. The compiler won't let it through. You try adding
-        lifetime annotations, restructuring, wrapping things in <code>Arc</code>. The code
-        gets more complex with each attempt. There's a simpler answer: clone the data.
+        You're spawning a thread or an async task, and the API requires <code>'static</code>.
+        But your data borrows from something, so the compiler won't let it through. You try
+        adding lifetime annotations, restructuring your code, wrapping things in
+        <code>Arc</code>. Each attempt makes the code worse. There's a simpler answer:
+        just clone the data.
       </p>
 
       <h2>The motivation</h2>
@@ -49,24 +50,26 @@
 
       <p>
         <code>thread::spawn</code> requires the closure to be <code>'static</code> &mdash;
-        it can't borrow from the enclosing function because the thread might outlive it.
-        The same applies to <code>tokio::spawn</code>, <code>rayon::spawn</code>, and any
-        API that takes <code>F: FnOnce() + Send + 'static</code>.
+        it can't borrow from the function that created it, because the thread might keep
+        running after that function returns. The same goes for <code>tokio::spawn</code>,
+        <code>rayon::spawn</code>, and any API that takes
+        <code>F: FnOnce() + Send + 'static</code>.
       </p>
 
       <h2>Why everything wants <code>'static</code></h2>
 
       <p>
-        A spawned task or thread has no guaranteed lifetime. It might run for a microsecond
-        or for the rest of the program. The runtime can't prove that borrowed data will still
-        be valid when the task reads it. <code>'static</code> means "this value is
-        self-contained &mdash; it owns everything it needs." No dangling references possible.
+        A spawned thread or task could finish instantly or run until the program exits &mdash;
+        there's no way to know. So the runtime can't guarantee that borrowed data will still
+        exist when the task tries to read it. <code>'static</code> means "this value is
+        self-contained &mdash; it owns everything it needs." Nothing can dangle.
       </p>
       <p>
-        This applies to any owned type: <code>String</code>, <code>Vec&lt;u8&gt;</code>,
-        <code>i32</code>, <code>PathBuf</code>. All owned types are <code>'static</code>
-        because they don't borrow from anything. The bound isn't asking for immortal data
-        &mdash; it's asking for data that doesn't depend on someone else's lifetime.
+        Any owned type qualifies: <code>String</code>, <code>Vec&lt;u8&gt;</code>,
+        <code>i32</code>, <code>PathBuf</code>. They're all <code>'static</code> because
+        they don't borrow from anything else. The <code>'static</code> bound isn't asking
+        for data that lives forever &mdash; it's asking for data that doesn't depend on
+        someone else staying alive.
       </p>
 
       <h2>The pattern: clone and move</h2>
@@ -79,10 +82,10 @@
 }</code></pre>
 
       <p>
-        <code>data.to_string()</code> creates an owned <code>String</code>. The
-        <code>move</code> closure takes ownership of it. The closure is now
-        <code>'static</code> because it owns everything it captures. No lifetime
-        issues.
+        <code>data.to_string()</code> creates an owned <code>String</code>.
+        The <code>move</code> closure takes ownership of that <code>String</code>, so the
+        closure is now <code>'static</code> &mdash; it owns everything inside it. No
+        lifetime problems.
       </p>
       <p>
         For structs with multiple fields:
@@ -99,34 +102,34 @@
       <h2>"But cloning is wasteful!"</h2>
 
       <p>
-        This is the most common objection, and it's almost always premature. Consider what
-        a clone actually costs:
+        This is the most common objection, and it's almost always premature. Think about
+        what a clone actually does:
       </p>
       <ul>
-        <li>Cloning a <code>String</code>: one heap allocation + <code>memcpy</code> of
-          the string's bytes</li>
-        <li>Cloning a <code>Vec&lt;T&gt;</code>: one heap allocation + <code>memcpy</code>
-          (for <code>Copy</code> types) or element-wise cloning</li>
+        <li>Cloning a <code>String</code>: one heap allocation and a <code>memcpy</code>
+          of the bytes</li>
+        <li>Cloning a <code>Vec&lt;T&gt;</code>: one heap allocation and either a
+          <code>memcpy</code> (for <code>Copy</code> types) or cloning each element</li>
         <li>Cloning a small struct with a few <code>String</code> fields: a handful of
           allocations</li>
       </ul>
       <p>
-        Now consider the context. If you're spawning a task to make a network request
-        (milliseconds), query a database (milliseconds), or do any kind of I/O, the clone
-        is nanoseconds of noise. You can't measure it. The anxiety about cloning is almost
-        always misplaced.
+        Now think about context. If you're spawning a task to make a network request
+        (milliseconds), query a database (milliseconds), or do any I/O at all, the clone
+        takes nanoseconds. You literally can't measure it against the rest of the work.
+        The worry about cloning is almost never justified.
       </p>
       <p>
-        <strong>Profile before you optimise.</strong> If your profiler shows that cloning is a
-        bottleneck, address it. Until then, clone freely.
+        <strong>Profile before you optimise.</strong> If your profiler shows cloning is a
+        bottleneck, fix it then. Until then, clone freely.
       </p>
 
       <h2><code>Arc</code> as a middle ground</h2>
 
       <p>
-        When the data is genuinely large (megabytes, or cloned thousands of times per
-        second), cloning might show up in profiles. In that case, share instead of
-        copying:
+        When the data is genuinely large &mdash; megabytes, or cloned thousands of times per
+        second &mdash; cloning might actually show up in your profiler. In that case, share
+        the data instead of copying it:
       </p>
 
       <pre><code><span class="kw">use</span> std::sync::<span class="ty">Arc</span>;
@@ -141,10 +144,10 @@
 }</code></pre>
 
       <p>
-        <code>Arc::clone</code> is a reference count increment &mdash; a single atomic
-        operation. All ten tasks share the same <code>LargeDataset</code> allocation.
-        <code>Arc&lt;T&gt;</code> is <code>'static</code> + <code>Send</code> (when
-        <code>T: Send + Sync</code>), so it satisfies spawn bounds.
+        <code>Arc::clone</code> just bumps a reference count &mdash; one atomic operation,
+        no copying. All ten tasks read from the same <code>LargeDataset</code> on the heap.
+        <code>Arc&lt;T&gt;</code> is <code>'static</code> and <code>Send</code> (when
+        <code>T: Send + Sync</code>), so it satisfies the spawn bounds.
       </p>
 
       <h2>The decision tree</h2>
@@ -164,13 +167,14 @@
 
       <ul>
         <li>Spawning threads or async tasks that need data from the calling scope</li>
-        <li>Callbacks registered across different lifetimes</li>
-        <li>Any time the compiler demands <code>'static</code> and your data borrows</li>
+        <li>Callbacks that outlive the scope where they were created</li>
+        <li>Any time the compiler demands <code>'static</code> and your data borrows from
+          something</li>
       </ul>
       <p>
-        The instinct to avoid cloning comes from languages where copies are expensive by
-        default. In Rust, cloning is explicit, visible, and usually cheap. When it's not,
-        the profiler will tell you.
+        The instinct to avoid cloning comes from languages where copies happen invisibly
+        and can be expensive. In Rust, cloning is explicit &mdash; you see it in the code
+        &mdash; and usually cheap. When it isn't, the profiler will tell you.
       </p>
 
       <nav class="series-index" id="series-index">

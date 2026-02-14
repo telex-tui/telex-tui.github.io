@@ -30,10 +30,11 @@
       <p class="series-nav">Post 12 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have a connection that goes through states: disconnected, connecting, connected.
-        You can only send data when connected. The obvious implementation checks the state
-        at runtime and panics or returns an error on invalid transitions. The typestate
-        pattern makes invalid transitions a compile error instead.
+        Say you have a connection that moves through states: disconnected, connecting,
+        connected. You should only be able to send data when connected. The straightforward
+        approach is to check the state at runtime and panic or return an error if the caller
+        does something wrong. The typestate pattern turns those mistakes into compile errors
+        instead.
       </p>
 
       <h2>The motivation</h2>
@@ -54,18 +55,17 @@
 }</code></pre>
 
       <p>
-        The problem: every method that depends on state needs a runtime check. Forget a
-        check and you have a bug. The type system isn't helping &mdash; from the compiler's
-        perspective, a <code>Connection</code> is always the same type regardless of its
-        state.
+        The problem: every method that cares about the current state needs a runtime check.
+        Miss one and you have a bug. The type system can't help here &mdash; the compiler
+        sees one <code>Connection</code> type no matter what state it's in.
       </p>
 
       <h2>The pattern: states as types</h2>
 
       <p>
-        Encode each state as a separate zero-sized type. Make <code>Connection</code>
-        generic over the state. Transition methods consume the current state and return a
-        new one:
+        Make each state its own zero-sized type. Make <code>Connection</code> generic over
+        the state. Each transition method takes ownership of the current connection and
+        returns a new one in the next state:
       </p>
 
       <pre><code><span class="cm">// State markers — zero-sized, exist only in the type system</span>
@@ -108,9 +108,9 @@
 }</code></pre>
 
       <p>
-        The <code>send</code> method only exists on <code>Connection&lt;Connected&gt;</code>.
-        Calling it on a disconnected connection doesn't produce a runtime error &mdash; it
-        doesn't compile:
+        The <code>send</code> method only exists when the connection is in the
+        <code>Connected</code> state. If you try to call it on a disconnected connection, you
+        don't get a runtime error &mdash; the code won't compile at all:
       </p>
 
       <pre><code><span class="kw">let</span> conn = <span class="ty">Connection</span>::<span class="fn">new</span>(<span class="str">"127.0.0.1"</span>.<span class="fn">into</span>());
@@ -129,36 +129,36 @@ conn.<span class="fn">send</span>(b<span class="str">"hello"</span>);           
       <h2>Why transition methods consume <code>self</code></h2>
 
       <p>
-        Each transition takes <code>self</code> by value, not by reference. This destroys
-        the old state &mdash; you can't use a <code>Connection&lt;Disconnected&gt;</code>
-        after calling <code>.connect()</code> on it. The old variable is gone. This prevents
-        you from accidentally using a stale state.
+        Each transition takes <code>self</code> by value, not by reference. That means the
+        old connection is moved and can't be used anymore. After you call
+        <code>.connect()</code>, the <code>Connection&lt;Disconnected&gt;</code> is gone.
+        You can't accidentally keep using a connection in the wrong state.
       </p>
 
       <h2>Zero-sized types</h2>
 
       <p>
-        <code>struct Disconnected;</code> has no fields and occupies zero bytes. The
-        <code>PhantomData&lt;S&gt;</code> in the connection also occupies zero bytes. The
-        state marker exists purely in the type system &mdash; it's erased completely at
-        compile time. <code>Connection&lt;Disconnected&gt;</code> and
-        <code>Connection&lt;Connected&gt;</code> have the same runtime representation
-        (just the <code>addr</code> field).
+        <code>struct Disconnected;</code> has no fields and takes up zero bytes. The
+        <code>PhantomData&lt;S&gt;</code> field also takes up zero bytes. The state only
+        exists while the compiler is checking your code &mdash; it's completely gone at
+        runtime. <code>Connection&lt;Disconnected&gt;</code> and
+        <code>Connection&lt;Connected&gt;</code> look identical in memory: just the
+        <code>addr</code> field.
       </p>
 
       <h2>Tradeoffs</h2>
 
       <ul>
-        <li><strong>Type proliferation.</strong> Each state is a type. Three states = three
-          impls. If states share methods, you need a separate <code>impl Connection&lt;S&gt;</code>
-          block for shared behaviour.</li>
-        <li><strong>Can't store heterogeneous states.</strong>
+        <li><strong>More types, more impl blocks.</strong> Each state is its own type, so
+          three states means three separate impl blocks. If some methods are the same across
+          states, you need another <code>impl Connection&lt;S&gt;</code> block just for those.</li>
+        <li><strong>You can't mix states in one collection.</strong>
           <code>Connection&lt;Disconnected&gt;</code> and <code>Connection&lt;Connected&gt;</code>
-          are different types. You can't put them in the same <code>Vec</code> or
-          <code>HashMap</code> without erasing the state (which defeats the purpose).</li>
-        <li><strong>Dynamic state machines don't fit.</strong> If the state is determined
-          at runtime (user input, config file, external events), you need an enum &mdash;
-          the typestate pattern requires statically known transitions.</li>
+          are different types, so you can't put them in the same <code>Vec</code> or
+          <code>HashMap</code> unless you erase the state (which defeats the point).</li>
+        <li><strong>Doesn't work when state depends on runtime data.</strong> If the next state
+          comes from user input, a config file, or an external event, you need an enum. The
+          typestate pattern only works when the compiler can see which transition happens.</li>
       </ul>
 
       <h2>When to use it</h2>
@@ -169,13 +169,13 @@ conn.<span class="fn">send</span>(b<span class="str">"hello"</span>);           
           (<a href="rust-patterns-builder.html">#13</a>)</li>
         <li>"Must do X before Y" constraints (open a file before reading, authenticate
           before querying)</li>
-        <li>Any state machine where the valid operations depend on the current state and
-          the transitions are known at compile time</li>
+        <li>Any situation where which methods are valid depends on the current state and the
+          transitions are known at compile time</li>
       </ul>
       <p>
-        When not to: dynamic state machines, state determined by runtime data, or when
-        the number of states is large and the state-specific methods get out of hand.
-        Use an enum with runtime checks in those cases.
+        When not to: when the state comes from runtime data, when you have many states and
+        the per-state method lists get unwieldy, or when you need to store connections in
+        mixed states. Use an enum with runtime checks in those cases.
       </p>
 
       <nav class="series-index" id="series-index">

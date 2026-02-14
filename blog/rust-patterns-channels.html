@@ -30,18 +30,19 @@
       <p class="series-nav">Post 18 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        The previous post covered <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> for shared state
-        across threads. It works, but shared mutable state is inherently complex: lock
-        ordering, potential deadlocks, contention. Channels offer an alternative: instead
-        of sharing memory and protecting it with locks, send data between threads. No shared
-        state, no locks, no deadlocks.
+        The previous post covered <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> for letting
+        multiple threads read and write the same data. It works, but you have to think
+        about which lock to grab first, whether two threads might deadlock waiting on each
+        other, and how much time threads spend blocked. Channels offer an alternative:
+        instead of sharing memory and protecting it with locks, send data between threads.
+        No shared data, no locks, no deadlocks.
       </p>
 
       <h2>The motivation</h2>
 
       <p>
-        You have a producer thread generating work items and a consumer thread processing
-        them. With shared state:
+        Say one thread is creating tasks and another thread is doing them. With shared
+        data, you'd build a queue yourself:
       </p>
 
       <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">Mutex</span>, <span class="ty">Condvar</span>};
@@ -53,8 +54,9 @@
 <span class="cm">// ... 30+ lines of careful locking</span></code></pre>
 
       <p>
-        This works but requires managing a mutex, a condition variable, and the wake-up
-        logic manually. It's error-prone and hard to extend.
+        This works but you're managing a mutex, a condition variable, and the wake-up
+        logic yourself. It's a lot of moving parts for what should be a simple "send a
+        value from A to B."
       </p>
 
       <h2>The pattern: channels</h2>
@@ -112,14 +114,14 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       <h2>Bounded vs unbounded</h2>
 
       <p>
-        <code>channel()</code> is unbounded: the producer never blocks, and the internal
-        buffer grows without limit. If the producer is faster than the consumer, memory
-        usage grows indefinitely.
+        <code>channel()</code> is unbounded: the sender never blocks, and the internal
+        buffer grows without limit. If the sender is faster than the receiver, memory
+        usage keeps climbing.
       </p>
       <p>
         <code>sync_channel(n)</code> is bounded: the buffer holds at most <code>n</code>
-        messages. If it's full, the producer blocks until the consumer takes a message.
-        This provides backpressure:
+        messages. If it's full, the sender blocks until the receiver takes a message.
+        This slows the sender down to match the receiver:
       </p>
 
       <pre><code><span class="kw">let</span> (tx, rx) = mpsc::<span class="fn">sync_channel</span>(<span class="num">10</span>); <span class="cm">// buffer of 10</span>
@@ -129,15 +131,15 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 <span class="cm">// Memory usage is bounded</span></code></pre>
 
       <p>
-        For most production systems, bounded channels are the right default. They prevent
-        unbounded memory growth and naturally balance producer/consumer speeds.
+        For most real programs, bounded channels are the right default. They cap memory
+        usage and naturally balance the sender and receiver speeds.
       </p>
 
       <h2><code>crossbeam-channel</code></h2>
 
       <p>
-        The standard library's <code>mpsc</code> covers basic cases. For more advanced
-        patterns, <code>crossbeam-channel</code> provides:
+        The standard library's <code>mpsc</code> covers simple cases. When you need
+        more, <code>crossbeam-channel</code> gives you:
       </p>
       <ul>
         <li><strong>MPMC</strong> (multiple producer, multiple consumer) &mdash; multiple
@@ -171,10 +173,10 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       <h2>Telex's use of channels</h2>
 
       <p>
-        Telex uses channels for external event integration. When a background task (file
-        watcher, network listener) needs to send events into the UI loop, it sends them
-        through a channel. The main loop receives from the channel on each tick, triggering
-        re-renders. See
+        Telex uses channels to bring outside events into the UI. When a background task
+        (a file watcher, a network listener) has something to report, it sends a message
+        through a channel. The main loop checks the channel on each tick and re-renders
+        when something arrives. See
         <a href="what-the-real-world-taught-us.html">Designing a TUI Framework &mdash;
         Part 2</a> for the full story on ports and channels.
       </p>
@@ -182,21 +184,22 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       <h2>When to use channels vs shared state</h2>
 
       <ul>
-        <li><strong>Channels:</strong> producer/consumer patterns, work queues, pipelines,
-          event systems, decoupled components. When the data flows in one direction.</li>
-        <li><strong>Shared state (<code>Arc&lt;Mutex&lt;T&gt;&gt;</code>):</strong> when
-          multiple threads need low-latency access to the same data structure (a shared
-          cache, a configuration map). When the data doesn't flow &mdash; it's consulted
-          in place.</li>
+        <li><strong>Channels:</strong> one thread produces work and another consumes it,
+          processing pipelines, event systems, any time data flows in one direction between
+          threads.</li>
+        <li><strong>Shared data (<code>Arc&lt;Mutex&lt;T&gt;&gt;</code>):</strong> when
+          multiple threads need to read or update the same <code>HashMap</code>, config
+          struct, or other data right where it lives, without copying it through a
+          channel.</li>
       </ul>
       <blockquote>
         "Don't communicate by sharing memory; share memory by communicating."
         &mdash; Go proverb, equally applicable in Rust
       </blockquote>
       <p>
-        When in doubt, start with channels. They're easier to reason about, can't deadlock
-        (no locks to hold), and keep parts of your program separate. Move to shared state
-        only when channels are too slow or force everything through a bottleneck.
+        When in doubt, start with channels. They're easier to follow, can't deadlock
+        (no locks to hold), and keep parts of your program separate. Move to shared data
+        only when channels are too slow or force everything through a single point.
       </p>
 
       <nav class="series-index" id="series-index">

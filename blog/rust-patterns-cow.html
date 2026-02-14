@@ -31,18 +31,18 @@
 
       <p>
         Should your function take <code>&amp;str</code> or <code>String</code>? If it takes
-        <code>&amp;str</code>, callers who have a <code>String</code> can pass a reference
-        cheaply. But if the function sometimes needs to modify the string, it has to
-        allocate a new <code>String</code> every time, even when the input passes through
-        unchanged. <code>Cow</code> solves this.
+        <code>&amp;str</code>, callers who have a <code>String</code> can just pass a reference.
+        But if the function sometimes needs to modify the string, it has to allocate a new
+        <code>String</code> every time &mdash; even when it returns the input unchanged.
+        <code>Cow</code> solves this.
       </p>
 
       <h2>The motivation</h2>
 
       <p>
-        You're writing a function that escapes special characters in a string. Most strings
-        have no special characters and pass through unchanged. Occasionally, one does, and
-        you need to produce a modified copy.
+        You're writing a function that escapes special characters in a string. Most of the
+        strings you'll see have nothing to escape and come back unchanged. Once in a while,
+        one does, and you need to return a modified copy.
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">escape</span>(input: &amp;<span class="kw">str</span>) -&gt; <span class="ty">String</span> {
@@ -54,14 +54,15 @@
 }</code></pre>
 
       <p>
-        The <code>else</code> branch allocates a new <code>String</code> just to return
-        the input unchanged. If this function is called on thousands of strings and most
-        don't need escaping, that's thousands of unnecessary allocations.
+        The <code>else</code> branch allocates a brand-new <code>String</code> just to hand
+        back the same text. If you call this function on thousands of strings and most of
+        them don't need escaping, you're paying for thousands of allocations you didn't need.
       </p>
       <p>
         You could return <code>&amp;str</code> instead, but then you can't return the
-        modified string &mdash; it doesn't live long enough. You need a return type that
-        can be either a borrowed reference or an owned value.
+        modified string &mdash; it's a local <code>String</code> that gets dropped at the
+        end of the function. You need a return type that can be either a reference or an
+        owned value.
       </p>
 
       <h2>The pattern: <code>Cow&lt;'a, str&gt;</code></h2>
@@ -76,8 +77,8 @@
 }</code></pre>
 
       <p>
-        For strings: <code>Cow::Borrowed(&amp;str)</code> or <code>Cow::Owned(String)</code>.
-        The function returns whichever is appropriate:
+        For strings, that means <code>Cow::Borrowed(&amp;str)</code> or
+        <code>Cow::Owned(String)</code>. Your function picks the right one:
       </p>
 
       <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Cow</span>;
@@ -91,11 +92,11 @@
 }</code></pre>
 
       <p>
-        When the input needs no escaping, the function returns the original reference with
-        zero allocation. When it does need escaping, it returns the new <code>String</code>.
-        Callers use the result the same way regardless of which variant it is &mdash;
+        When nothing needs escaping, the function hands back the original reference
+        without allocating. When something does, it returns the new <code>String</code>.
+        Either way, callers treat the result the same &mdash;
         <code>Cow&lt;str&gt;</code> implements <code>Deref&lt;Target = str&gt;</code>,
-        so it behaves like a <code>&amp;str</code> in most contexts.
+        so you can use it anywhere you'd use a <code>&amp;str</code>.
       </p>
 
       <h2>Using <code>Cow</code> at call sites</h2>
@@ -113,9 +114,9 @@
 <span class="kw">let</span> s: <span class="ty">String</span> = a.<span class="fn">into_owned</span>(); <span class="cm">// clones only if borrowed</span></code></pre>
 
       <p>
-        <code>.into_owned()</code> returns a <code>String</code>. If the <code>Cow</code>
-        was already <code>Owned</code>, it returns the <code>String</code> directly
-        (no allocation). If it was <code>Borrowed</code>, it clones.
+        <code>.into_owned()</code> gives you a <code>String</code>. If the <code>Cow</code>
+        was already <code>Owned</code>, it just unwraps and hands it over &mdash; no
+        allocation. If it was <code>Borrowed</code>, it clones.
       </p>
 
       <h2>Beyond strings</h2>
@@ -136,10 +137,10 @@
       <h2>Mutating through <code>Cow</code></h2>
 
       <p>
-        <code>Cow</code> has a <code>.to_mut()</code> method that gives you a
-        <code>&amp;mut</code> reference to the owned data. If the <code>Cow</code> is
-        currently <code>Borrowed</code>, it clones the data into an <code>Owned</code>
-        variant first &mdash; that's the "clone on write" behaviour:
+        <code>Cow</code> has a <code>.to_mut()</code> method that gives you an
+        <code>&amp;mut</code> reference to the data. If the <code>Cow</code> is
+        currently <code>Borrowed</code>, calling <code>.to_mut()</code> clones the data
+        into an <code>Owned</code> variant first &mdash; that's the "clone on write" part:
       </p>
 
       <pre><code><span class="kw">let</span> <span class="kw">mut</span> s: <span class="ty">Cow</span>&lt;<span class="kw">str</span>&gt; = <span class="ty">Cow</span>::<span class="ty">Borrowed</span>(<span class="str">"hello"</span>);
@@ -154,22 +155,21 @@ s.<span class="fn">to_mut</span>().<span class="fn">push_str</span>(<span class=
         <strong>Good uses:</strong>
       </p>
       <ul>
-        <li>String processing that usually passes through unchanged (escaping, normalisation)</li>
-        <li>Config values with defaults: return the default as <code>Borrowed</code>,
+        <li>String processing where most inputs come back unchanged (escaping, normalisation)</li>
+        <li>Config values with defaults &mdash; return the default as <code>Borrowed</code>,
           user overrides as <code>Owned</code></li>
-        <li>Functions that conditionally transform input</li>
-        <li>APIs that want to accept both <code>&amp;str</code> and <code>String</code>
-          without forcing either</li>
+        <li>Functions that only sometimes need to change their input</li>
+        <li>APIs that accept both <code>&amp;str</code> and <code>String</code>
+          without forcing callers to pick one</li>
       </ul>
       <p>
         <strong>When not to use it:</strong>
       </p>
       <ul>
-        <li>If you always modify the input, just take <code>String</code> (or
-          <code>&amp;mut String</code>)</li>
+        <li>If you always modify the input, just take and return <code>String</code></li>
         <li>If you never modify the input, just take <code>&amp;str</code></li>
-        <li>If the allocation cost doesn't matter in your context, a simple
-          <code>String</code> return is clearer</li>
+        <li>If the extra allocations don't matter in your case, returning
+          <code>String</code> is simpler to read</li>
       </ul>
 
       <nav class="series-index" id="series-index">

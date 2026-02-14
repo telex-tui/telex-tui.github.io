@@ -30,10 +30,10 @@
       <p class="series-nav">Post 9 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You pass a closure to a function and get a trait mismatch. You didn't ask for any
-        trait. You just wrote a <code>||</code> block. The answer has to do with how closures
-        capture variables from their surroundings, and it's one of the most useful things
-        to understand about Rust.
+        You pass a closure to a function and the compiler says the traits don't match.
+        You didn't pick a trait &mdash; you just wrote a <code>||</code> block. What happened?
+        It comes down to how your closure uses the variables it captures, and once you
+        see the pattern, a lot of Rust clicks into place.
       </p>
 
       <h2>The motivation</h2>
@@ -54,16 +54,16 @@
               but this closure only implements `FnMut`</span></code></pre>
 
       <p>
-        The closure mutates <code>count</code>. The function requires <code>Fn</code>, which
-        doesn't allow mutation. The compiler knows what your closure does and what the
-        function expects, and they don't match.
+        The closure changes <code>count</code>, so the compiler labels it <code>FnMut</code>.
+        But the function wants <code>Fn</code>, which means "no mutation allowed." The
+        compiler sees the mismatch and rejects it.
       </p>
 
       <h2>The three traits</h2>
 
       <p>
-        Every closure in Rust implements at least one of three traits, determined by how
-        it uses captured variables:
+        Every closure in Rust gets at least one of three traits, based on what it does
+        with the variables it captures:
       </p>
       <ul>
         <li><strong><code>FnOnce</code></strong> &mdash; can be called once. The closure

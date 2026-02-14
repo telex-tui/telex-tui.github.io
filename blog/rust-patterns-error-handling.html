@@ -115,8 +115,9 @@
 }</code></pre>
 
       <p>
-        This is why <code>thiserror</code> is for libraries: downstream code can
-        programmatically handle specific error cases. The error type is part of your API.
+        This is why <code>thiserror</code> is for libraries: the code calling your
+        library can match on specific error cases and decide what to do. The error type
+        is part of your API.
       </p>
 
       <h2><code>anyhow</code> &mdash; for applications</h2>
@@ -166,18 +167,18 @@ Caused by:
       <ul>
         <li><strong>Libraries</strong> use <code>thiserror</code>. They define structured
           error types that callers can match on. The error type is part of the public API.</li>
-        <li><strong>Applications</strong> (binaries) use <code>anyhow</code>. They bubble
-          errors up with context messages. Nobody matches on the error &mdash; it's displayed
-          to the user.</li>
+        <li><strong>Applications</strong> (binaries) use <code>anyhow</code>. They pass
+          errors up with context messages. Nobody matches on the error &mdash; it gets
+          printed for the user.</li>
       </ul>
 
       <h2>When the line blurs</h2>
 
       <p>
-        Sometimes a library's internal code doesn't need structured errors &mdash; it's
-        private logic that will wrap errors before returning them publicly. Using
-        <code>anyhow</code> internally and converting to <code>thiserror</code> at the
-        public boundary is a valid approach.
+        Sometimes the code inside a library doesn't need structured errors &mdash; it's
+        private logic that wraps errors before returning them to callers. Using
+        <code>anyhow</code> internally and converting to <code>thiserror</code> types at
+        the public boundary works fine.
       </p>
       <p>
         Conversely, if you find yourself pattern-matching on <code>anyhow::Error</code>
@@ -192,18 +193,16 @@ Caused by:
         to convert errors (as covered in <a href="rust-patterns-from-into.html">#15</a>).
         <code>thiserror</code> generates the <code>From</code> impls with <code>#[from]</code>.
         <code>anyhow</code> provides a blanket <code>From&lt;E: Error&gt;</code> for
-        <code>anyhow::Error</code>. Both patterns are built on the same conversion
-        machinery.
+        <code>anyhow::Error</code>. Both approaches plug into the same conversion system.
       </p>
 
       <h2>When to use it</h2>
 
       <ul>
         <li><strong><code>thiserror</code></strong>: any crate published for others to
-          use, any module where callers need to handle specific error cases, any error that's
-          part of a public API</li>
+          use, any module where callers need to match on specific error cases</li>
         <li><strong><code>anyhow</code></strong>: binary applications, CLI tools, scripts,
-          anything where errors are displayed to humans rather than matched on by code</li>
+          anything where errors get printed for a human rather than matched on by code</li>
         <li><strong>Manual enums</strong>: when you want full control and don't want the
           dependency &mdash; the pattern is the same, just more verbose</li>
       </ul>

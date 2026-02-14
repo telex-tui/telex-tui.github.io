@@ -30,10 +30,9 @@
       <p class="series-nav">Post 11 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        Two function parameters have the same type. A caller swaps them by accident. The
-        program compiles, runs, and produces wrong results. The type system could have caught
-        this, but both parameters were <code>u64</code> and the compiler can't tell them
-        apart.
+        Two function parameters are both <code>u64</code>. A caller swaps them by accident.
+        The program compiles, runs, and gives wrong results. The type system could have
+        caught this, but the compiler sees two <code>u64</code>s and can't tell them apart.
       </p>
 
       <h2>The motivation</h2>
@@ -57,9 +56,9 @@
 <span class="kw">fn</span> <span class="fn">transfer</span>(from: <span class="ty">UserId</span>, to: <span class="ty">UserId</span>, amount: <span class="ty">Amount</span>) { <span class="cm">/*...*/</span> }</code></pre>
 
       <p>
-        But type aliases are transparent. <code>UserId</code> and <code>u64</code> are
-        the same type to the compiler. You can still pass an <code>Amount</code> where a
-        <code>UserId</code> is expected. No protection.
+        But type aliases don't create new types. To the compiler, <code>UserId</code> is
+        still just <code>u64</code>. You can pass an <code>Amount</code> where a
+        <code>UserId</code> is expected and nothing stops you.
       </p>
 
       <h2>The pattern: newtype</h2>
@@ -97,22 +96,22 @@
       <h2>Zero-cost abstraction</h2>
 
       <p>
-        A newtype compiles to exactly the same machine code as the inner type. There's no
-        wrapper struct at runtime, no indirection, no overhead. <code>UserId(42)</code>
-        is just <code>42</code> in memory. The distinction exists only in the type system,
-        and the type system is erased at compile time.
+        A newtype compiles down to the same machine code as the inner type. At runtime there
+        is no wrapper, no indirection, no overhead. <code>UserId(42)</code> is just
+        <code>42</code> in memory. The wrapper only exists while the compiler is checking
+        your code; it's gone by the time the program runs.
       </p>
 
       <h2>The orphan rule workaround</h2>
 
       <p>
-        Rust's orphan rule prevents you from implementing a trait on a type when both are
-        defined in someone else's crate. You can't write <code>impl Display for
-        Vec&lt;u8&gt;</code> in your crate &mdash; both <code>Display</code> and
-        <code>Vec</code> come from the standard library.
+        Rust's orphan rule says you can't implement a trait on a type unless your crate
+        owns at least one of them. So you can't write <code>impl Display for
+        Vec&lt;u8&gt;</code> in your own crate &mdash; both <code>Display</code> and
+        <code>Vec</code> belong to the standard library.
       </p>
       <p>
-        The newtype pattern gives you a local type to attach the impl to:
+        A newtype gives you a type that your crate owns, so you can attach any impl to it:
       </p>
 
       <pre><code><span class="kw">use</span> std::fmt;
@@ -126,8 +125,8 @@
 }</code></pre>
 
       <p>
-        <code>Bytes</code> is a type in your crate, so you can implement any trait on it.
-        Inside, it's just a <code>Vec&lt;u8&gt;</code>.
+        <code>Bytes</code> lives in your crate, so you can implement any trait on it.
+        Under the hood, it's still just a <code>Vec&lt;u8&gt;</code>.
       </p>
 
       <h2>Accessing the inner value</h2>
@@ -148,27 +147,28 @@
 }</code></pre>
 
       <p>
-        You can also implement <code>Deref&lt;Target = u64&gt;</code> so you can use a
-        <code>&amp;UserId</code> wherever a <code>&amp;u64</code> is expected. But be
-        careful &mdash; <code>Deref</code> makes the
-        compiler automatically coerce <code>&amp;UserId</code> to <code>&amp;u64</code>,
-        which weakens the type safety you added. If you want <code>UserId</code> and
-        <code>u64</code> to be interchangeable for reads, implement <code>Deref</code>.
-        If you want the distinction enforced everywhere, don't.
+        You can also implement <code>Deref&lt;Target = u64&gt;</code>, which lets you use a
+        <code>&amp;UserId</code> anywhere a <code>&amp;u64</code> is expected. But be
+        careful &mdash; <code>Deref</code> makes the compiler silently coerce
+        <code>&amp;UserId</code> to <code>&amp;u64</code>, which chips away at the type
+        safety you just added. If you're fine with reads going through as plain
+        <code>u64</code>, implement <code>Deref</code>. If you want the distinction
+        enforced everywhere, skip it.
       </p>
 
       <h2>Deriving traits</h2>
 
       <p>
-        Newtypes often need the same traits as their inner type. Use derive:
+        You'll usually want the same traits on the newtype as on the inner type. Derive them:
       </p>
 
       <pre><code><span class="kw">#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]</span>
 <span class="kw">struct</span> <span class="ty">UserId</span>(<span class="ty">u64</span>);</code></pre>
 
       <p>
-        This gives you hashing (for <code>HashMap</code> keys), equality, debug printing,
-        and cheap copies &mdash; everything you'd expect from a <code>u64</code> wrapper.
+        Now you can use it as a <code>HashMap</code> key, compare two values, debug-print
+        them, and copy them cheaply &mdash; everything you'd expect from a <code>u64</code>
+        wrapper.
       </p>
 
       <h2>When to use it</h2>
@@ -178,16 +178,16 @@
           vs <code>ProductId</code></li>
         <li><strong>Units of measurement:</strong> <code>Meters(f64)</code> vs
           <code>Seconds(f64)</code></li>
-        <li><strong>Orphan rule workaround:</strong> implementing foreign traits on foreign types</li>
-        <li><strong>Restricting APIs:</strong> a <code>NonEmpty(Vec&lt;T&gt;)</code> that
-          enforces the vector is never empty at construction time</li>
+        <li><strong>Orphan rule workaround:</strong> implementing a trait you don't own on a type you don't own</li>
+        <li><strong>Restricting APIs:</strong> a <code>NonEmpty(Vec&lt;T&gt;)</code> whose
+          constructor refuses to create an empty vector</li>
         <li><strong>Type-safe indices:</strong> <code>NodeId(usize)</code> for arenas
           (<a href="rust-patterns-index-based-design.html">#5</a>)</li>
       </ul>
       <p>
-        When not to: if you genuinely want the types to be interchangeable (a
-        <code>type</code> alias is fine), or if the wrapping adds ceremony without catching
-        real bugs.
+        When not to: if you actually want the types to be interchangeable (a
+        <code>type</code> alias is fine for that), or if the wrapping just adds boilerplate
+        without catching any real bugs.
       </p>
 
       <nav class="series-index" id="series-index">

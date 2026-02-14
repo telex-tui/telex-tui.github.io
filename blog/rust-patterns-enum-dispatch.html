@@ -30,10 +30,11 @@
       <p class="series-nav">Post 14 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have different types that share common behaviour. Classic polymorphism. In most
-        languages, you'd reach for an interface or base class. Rust gives you two tools:
-        enums and trait objects. They solve the same problem differently, and choosing wrong
-        leads to friction as the code evolves.
+        You have several types that all need to do the same thing &mdash; like different
+        shapes that can each calculate their area. In most languages, you'd use an interface
+        or a base class. Rust gives you two options: enums and trait objects. They solve the
+        same problem in opposite ways, and picking the wrong one makes the code harder to
+        change later.
       </p>
 
       <h2>Approach 1: Enum dispatch</h2>
@@ -71,14 +72,14 @@
 }</code></pre>
 
       <p>
-        <strong>Adding a new operation</strong> (like <code>perimeter</code>) is easy:
-        write a new method with a <code>match</code>. All variants are handled in one place.
+        <strong>Adding a new operation</strong> (like <code>perimeter</code>) is easy: write
+        one new method with a <code>match</code> that covers every variant in one place.
       </p>
       <p>
-        <strong>Adding a new variant</strong> (like <code>Pentagon</code>) requires changing
-        every <code>match</code> arm in every method. The compiler helps &mdash; exhaustive
-        matching means you get errors for every method you haven't updated. But the changes
-        are scattered.
+        <strong>Adding a new variant</strong> (like <code>Pentagon</code>) means you have to
+        add a new arm to every <code>match</code> in every method. The compiler helps &mdash;
+        exhaustive matching gives you an error for each method you haven't updated yet. But
+        the changes are spread across the whole file.
       </p>
 
       <h2>Approach 2: Trait objects</h2>
@@ -112,40 +113,42 @@
 ];</code></pre>
 
       <p>
-        <strong>Adding a new variant</strong> (a new struct implementing <code>Shape</code>)
-        is easy: write the struct and its impl. No existing code changes.
+        <strong>Adding a new variant</strong> (a new struct that implements <code>Shape</code>)
+        is easy: write the struct and its impl block. You don't touch any existing code.
       </p>
       <p>
-        <strong>Adding a new operation</strong> (a new method on the trait) is hard:
-        every existing implementation must be updated. If the trait is in a library, adding
-        a method is a breaking change.
+        <strong>Adding a new operation</strong> (a new method on the trait) is hard: every
+        struct that implements the trait has to be updated. If the trait lives in a library,
+        adding a method breaks all downstream code.
       </p>
 
       <h2>The expression problem</h2>
 
       <p>
-        This tradeoff comes up in every language:
+        This tradeoff shows up in every language:
       </p>
       <ul>
         <li><strong>Enums:</strong> easy to add operations, hard to add variants</li>
         <li><strong>Trait objects:</strong> easy to add variants, hard to add operations</li>
       </ul>
       <p>
-        Neither is universally better. The question is: how will your code evolve? Will
-        you add new types or new operations?
+        Neither is always better. The question is: how will your code grow? Will you mostly
+        add new types, or mostly add new operations?
       </p>
 
       <h2>Performance</h2>
 
       <p>
-        Enum dispatch is static. The compiler sees the <code>match</code> and can inline
-        each arm. No heap allocation, no vtable indirection. This matters in hot loops.
+        Enum dispatch is resolved at compile time. The compiler sees the <code>match</code>
+        and can inline each arm. There's no heap allocation and no pointer chasing through a
+        vtable. This matters in tight loops.
       </p>
       <p>
-        Trait objects use dynamic dispatch: a vtable pointer for method calls, and typically
-        a <code>Box</code> for heap allocation. The indirection prevents inlining. For
-        event handlers or plugin systems called infrequently, this is irrelevant. For
-        per-pixel rendering or per-packet processing, it can matter.
+        Trait objects use dynamic dispatch: each method call goes through a vtable pointer,
+        and the object usually lives on the heap in a <code>Box</code>. That indirection
+        stops the compiler from inlining. For event handlers or plugin systems that run
+        occasionally, you'll never notice. For code that runs once per pixel or once per
+        network packet, it can add up.
       </p>
 
       <h2>Telex's choice</h2>
@@ -162,26 +165,26 @@
 }</code></pre>
 
       <p>
-        The set of built-in widget types is known and controlled by the framework. New
-        widgets are added by the Telex developers, not by users. This is a closed set.
-        New operations (rendering, diffing, layout) are added more often than new widget
-        types. Enum dispatch is the natural fit. See
+        The framework controls which widget types exist &mdash; users don't add new ones.
+        That's a fixed list of variants. Meanwhile, new operations on those widgets
+        (rendering, diffing, layout) get added more often than new widget types. That makes
+        enum dispatch the right fit. See
         <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework &mdash;
-        Part 1</a> for the rationale.
+        Part 1</a> for the full reasoning.
       </p>
 
       <h2>When to use which</h2>
 
       <ul>
-        <li><strong>Enum dispatch</strong> when the set of variants is known, controlled by
-          your crate, and unlikely to grow rapidly. When you add operations more often than
-          types. When performance matters.</li>
-        <li><strong>Trait objects</strong> when callers define the types: plugin systems,
-          user-extensible components, anything where downstream crates provide implementations.
-          When the set of types is open-ended.</li>
+        <li><strong>Enum dispatch</strong> when you know all the variants, your crate controls
+          them, and you'll add new operations more often than new types. Also when you need
+          the performance of static dispatch.</li>
+        <li><strong>Trait objects</strong> when your users define the types: plugin systems,
+          user-extensible components, anything where downstream crates write the
+          implementations. When you don't know ahead of time how many types there will be.</li>
       </ul>
       <p>
-        The decisive question: <em>who defines the concrete types?</em> If it's you, use an
+        The deciding question: <em>who writes the concrete types?</em> If it's you, use an
         enum. If it's your users, use a trait.
       </p>
 
