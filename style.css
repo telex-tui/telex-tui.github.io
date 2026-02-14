@@ -390,6 +390,39 @@ footer a:hover {
   color: var(--text);
 }
 
+/* ── Series Nav ── */
+
+.series-nav {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.series-index {
+  border-top: 1px solid var(--border);
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+}
+
+.series-index h2 {
+  font-size: 1.1rem;
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.series-index ol {
+  padding-left: 2rem;
+  font-size: 0.88rem;
+  line-height: 1.8;
+}
+
+.series-index li {
+  margin-bottom: 0;
+}
+
 /* ── Empty / Coming Soon ── */
 
 .empty-state {

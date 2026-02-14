@@ -27,6 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #2: Shared Ownership</h1>
       <div class="post-meta">March 2026</div>
+      <p class="series-nav">Post 2 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
         Rust enforces single ownership: one variable owns each value, and when that variable
@@ -216,6 +217,32 @@
         single-threaded shared mutable state, and it's exactly what Telex uses for component
         state.
       </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Rust Patterns That Matter &mdash; Series Index</h2>
+        <ol>
+          <li><a href="rust-patterns-interior-mutability.html">#1: Interior Mutability</a></li>
+          <li><strong>#2: Shared Ownership</strong></li>
+          <li><a href="rust-patterns-rc-refcell.html">#3: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-split-borrows.html">#4: Split Borrows</a></li>
+          <li><a href="rust-patterns-index-based-design.html">#5: Index-Based Design</a></li>
+          <li><a href="rust-patterns-cow.html">#6: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-lifetime-annotations.html">#7: Lifetime Annotations</a></li>
+          <li><a href="rust-patterns-static-clone.html">#8: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-closure-traits.html">#9: Fn, FnMut, FnOnce</a></li>
+          <li><a href="rust-patterns-storing-closures.html">#10: Storing and Returning Closures</a></li>
+          <li><a href="rust-patterns-newtype.html">#11: Newtype</a></li>
+          <li><a href="rust-patterns-typestate.html">#12: Typestate</a></li>
+          <li><a href="rust-patterns-builder.html">#13: Builder Pattern</a></li>
+          <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
+          <li><a href="rust-patterns-from-into.html">#15: From / Into Conversions</a></li>
+          <li><a href="rust-patterns-error-handling.html">#16: Error Handling</a></li>
+          <li><a href="rust-patterns-arc-mutex.html">#17: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-channels.html">#18: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-pin-futures.html">#19: Pin and Boxing Futures</a></li>
+          <li><a href="rust-patterns-send-sync-async.html">#20: Send / Sync in Async</a></li>
+        </ol>
+      </nav>
     </article>
   </main>
 
