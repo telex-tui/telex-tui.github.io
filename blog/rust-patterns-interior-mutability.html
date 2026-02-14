@@ -30,8 +30,8 @@
       <p class="series-nav">Post 1 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
-        You have a struct with a cache. The struct is passed around by shared reference. You
-        need to insert into the cache inside a method that takes <code>&amp;self</code>. The
+        You have a struct with a cache, passed around by shared reference. Inside a method
+        that takes <code>&amp;self</code>, you need to insert into that cache &mdash; and the
         compiler says no. This is the first wall.
       </p>
 
