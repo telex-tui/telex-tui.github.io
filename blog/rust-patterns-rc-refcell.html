@@ -120,8 +120,8 @@
         In garbage-collected languages, every heap object is implicitly <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
         &mdash; shared by reference, mutable by anyone, garbage collected when nobody holds a
         reference. Rust makes this machinery explicit. The pattern isn't fighting the borrow
-        checker; it's the standard way to express shared mutable state when the borrow
-        checker's static analysis can't model your access pattern.
+        checker; it's the standard way to express shared mutable state when the compiler
+        can't prove your access is safe at compile time.
       </p>
       <p>
         UI frameworks, observer patterns, graph structures, callback registries &mdash; these

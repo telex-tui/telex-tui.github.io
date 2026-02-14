@@ -62,7 +62,7 @@
         This is the tip of the iceberg. Even if you fix this particular error, you
         can't add nodes to a <code>Vec&lt;Node&gt;</code> while other nodes reference
         into it &mdash; the <code>Vec</code> might reallocate, invalidating all references.
-        Self-referential structures and Rust's borrow checker are fundamentally at odds.
+        Self-referential structures and Rust's borrow checker don't work together.
       </p>
 
       <h2>Why references don't work for graphs</h2>
@@ -174,8 +174,8 @@
       </p>
       <p>
         Game engines (Bevy, Legion) and simulation systems are built entirely on this
-        principle. It scales to millions of entities precisely because it avoids the
-        pointer-chasing and lifetime complexity that references would introduce.
+        principle. It scales to millions of entities because it avoids following pointers
+        around memory and the lifetime problems that references would create.
       </p>
 
       <h2>Tradeoffs</h2>

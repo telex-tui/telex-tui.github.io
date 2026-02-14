@@ -148,9 +148,9 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
 
       <p>
         <code>RwLock</code> sounds strictly better &mdash; it allows concurrent reads. But
-        it has higher per-operation overhead: tracking the reader count requires additional
-        atomic operations. For a lightly contended lock or a lock where reads and writes
-        are roughly balanced, <code>Mutex</code> is faster.
+        it costs more on each lock and unlock because it has to track how many readers
+        there are. If threads aren't fighting over the lock much, or reads and writes are
+        roughly balanced, <code>Mutex</code> is faster.
       </p>
       <p>
         <strong>Default to <code>Mutex</code>.</strong> Reach for <code>RwLock</code> when:

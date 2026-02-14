@@ -102,8 +102,8 @@
       <p>
         The compiler knows <code>self.config</code> and <code>self.buffer</code> are
         different fields. No conflict. This works because the compiler does do field-level
-        borrow tracking for direct access &mdash; it's method calls that erase field
-        information.
+        borrow tracking for direct access &mdash; it's method calls that hide which
+        fields are actually used.
       </p>
 
       <h2>Pattern 2: Destructuring</h2>

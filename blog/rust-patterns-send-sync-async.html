@@ -62,7 +62,7 @@
       <p>
         Tokio uses a work-stealing scheduler. A task might start on thread 1, suspend at
         an <code>.await</code>, and resume on thread 3. The runtime moves the future between
-        threads. If the future contains non-<code>Send</code> data, that move is unsound.
+        threads. If the future contains non-<code>Send</code> data, that move is unsafe.
       </p>
       <p>
         <code>Send</code> means "safe to transfer to another thread." Types like

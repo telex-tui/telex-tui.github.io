@@ -98,9 +98,8 @@
       <p>
         Read this as: "the returned reference is valid for at least as long as the shorter
         of <code>a</code> and <code>b</code>." Both inputs share the lifetime
-        <code>'a</code>, so the compiler interprets <code>'a</code> as the intersection
-        &mdash; the region where both are valid. The return value is constrained to that
-        region.
+        <code>'a</code>, so the compiler uses the overlap &mdash; the time when both
+        are still alive. The return value can't outlive either one.
       </p>
       <p>
         Now the compiler can check every call site. If <code>a</code> lives for 10 lines and

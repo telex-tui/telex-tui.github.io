@@ -195,8 +195,8 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       </blockquote>
       <p>
         When in doubt, start with channels. They're easier to reason about, can't deadlock
-        (no locks to hold), and naturally decouple components. Move to shared state only
-        when channels introduce unacceptable latency or awkward serialization of access.
+        (no locks to hold), and keep parts of your program separate. Move to shared state
+        only when channels are too slow or force everything through a bottleneck.
       </p>
 
       <nav class="series-index" id="series-index">
