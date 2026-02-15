@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rust Patterns #5: Index-Based Design - Telex</title>
+  <title>Rust Patterns #8: Index-Based Design - Telex</title>
   <meta name="description" content="Graphs, ECS, and arenas — when complex relationships make references painful, store indices into a Vec instead. Sometimes the best Rust code uses no references at all.">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
@@ -25,9 +25,9 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust Patterns That Matter #5: Index-Based Design</h1>
+      <h1>Rust Patterns That Matter #8: Index-Based Design</h1>
       <div class="post-meta">April 2026</div>
-      <p class="series-nav">Post 5 of 20 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 8 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
 
       <p>
         Some data structures don't fit Rust's ownership model naturally. Graphs, trees with
@@ -147,7 +147,7 @@
       <p>
         A bare <code>usize</code> is error-prone &mdash; you could accidentally use a node
         index as an edge index, or index into the wrong vector. The newtype pattern
-        (<a href="rust-patterns-newtype.html">#11</a>) fixes this:
+        (<a href="rust-patterns-newtype.html">#1</a>) fixes this:
       </p>
 
       <pre><code><span class="kw">struct</span> <span class="ty">NodeId</span>(<span class="ty">usize</span>);
@@ -209,26 +209,28 @@
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>
         <ol>
-          <li><a href="rust-patterns-interior-mutability.html">#1: Interior Mutability</a></li>
-          <li><a href="rust-patterns-shared-ownership.html">#2: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#3: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-split-borrows.html">#4: Split Borrows</a></li>
-          <li><strong>#5: Index-Based Design</strong></li>
-          <li><a href="rust-patterns-cow.html">#6: Cow &mdash; Borrow or Own</a></li>
-          <li><a href="rust-patterns-lifetime-annotations.html">#7: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-static-clone.html">#8: &rsquo;static + Clone</a></li>
-          <li><a href="rust-patterns-closure-traits.html">#9: Fn, FnMut, FnOnce</a></li>
-          <li><a href="rust-patterns-storing-closures.html">#10: Storing and Returning Closures</a></li>
-          <li><a href="rust-patterns-newtype.html">#11: Newtype</a></li>
-          <li><a href="rust-patterns-typestate.html">#12: Typestate</a></li>
-          <li><a href="rust-patterns-builder.html">#13: Builder Pattern</a></li>
+          <li><a href="rust-patterns-newtype.html">#1: Newtype</a></li>
+          <li><a href="rust-patterns-from-into.html">#2: From / Into Conversions</a></li>
+          <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
+          <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
+          <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
+          <li><strong>#8: Index-Based Design</strong></li>
+          <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
+          <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
-          <li><a href="rust-patterns-from-into.html">#15: From / Into Conversions</a></li>
-          <li><a href="rust-patterns-error-handling.html">#16: Error Handling</a></li>
-          <li><a href="rust-patterns-arc-mutex.html">#17: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#18: Channels &mdash; Message Passing</a></li>
-          <li><a href="rust-patterns-pin-futures.html">#19: Pin and Boxing Futures</a></li>
-          <li><a href="rust-patterns-send-sync-async.html">#20: Send / Sync in Async</a></li>
+          <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
+          <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
+          <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
+          <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
+          <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
+          <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
       </nav>
     </article>

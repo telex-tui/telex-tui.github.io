@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #12: Custom Iterators - Telex</title>
+  <meta name="description" content="Implement Iterator for your own types and unlock the full .map().filter().collect() ecosystem. The pattern behind parsers, streams, and lazy evaluation in Rust.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #12: Custom Iterators</h1>
+      <div class="post-meta">March 2026</div>
+      <p class="series-nav">Post 12 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        Everyone uses <code>.map().filter().collect()</code>. But when you need to iterate
+        over your own <code>FrameParser</code> or <code>RoomList</code>, you implement
+        <code>Iterator</code> &mdash; and the whole ecosystem unlocks.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        You're parsing a chat protocol. Messages arrive as bytes in a buffer. You need to
+        extract frames one at a time: find the delimiter, slice out the payload, advance
+        the cursor. Something like this:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">FrameParser</span>&lt;<span class="lifetime">'a</span>&gt; {
+    buf: &amp;<span class="lifetime">'a</span> [<span class="ty">u8</span>],
+    pos: <span class="ty">usize</span>,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; <span class="ty">FrameParser</span>&lt;<span class="lifetime">'a</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">next_frame</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;&amp;<span class="lifetime">'a</span> [<span class="ty">u8</span>]&gt; {
+        <span class="kw">if</span> <span class="kw">self</span>.pos &gt;= <span class="kw">self</span>.buf.<span class="fn">len</span>() {
+            <span class="kw">return</span> <span class="ty">None</span>;
+        }
+        <span class="kw">let</span> start = <span class="kw">self</span>.pos;
+        <span class="kw">match</span> <span class="kw">self</span>.buf[start..].<span class="fn">iter</span>().<span class="fn">position</span>(|&amp;b| b == <span class="num">b'\n'</span>) {
+            <span class="ty">Some</span>(offset) =&gt; {
+                <span class="kw">self</span>.pos = start + offset + <span class="num">1</span>;
+                <span class="ty">Some</span>(&amp;<span class="kw">self</span>.buf[start..start + offset])
+            }
+            <span class="ty">None</span> =&gt; {
+                <span class="kw">self</span>.pos = <span class="kw">self</span>.buf.<span class="fn">len</span>();
+                <span class="ty">Some</span>(&amp;<span class="kw">self</span>.buf[start..])
+            }
+        }
+    }
+}</code></pre>
+
+      <p>
+        This works, but now you can't use any iterator adaptors. You write manual loops
+        everywhere:
+      </p>
+
+      <pre><code><span class="kw">let mut</span> parser = <span class="ty">FrameParser</span> { buf: &amp;data, pos: <span class="num">0</span> };
+<span class="kw">let mut</span> messages = <span class="ty">Vec</span>::<span class="fn">new</span>();
+<span class="kw">while let</span> <span class="ty">Some</span>(frame) = parser.<span class="fn">next_frame</span>() {
+    <span class="kw">if let</span> <span class="ty">Ok</span>(msg) = std::str::<span class="fn">from_utf8</span>(frame) {
+        <span class="kw">if</span> !msg.<span class="fn">starts_with</span>(<span class="str">"PING"</span>) {
+            messages.<span class="fn">push</span>(msg);
+        }
+    }
+}</code></pre>
+
+      <p>
+        You'd rather write <code>parser.map(...).filter(...).collect()</code>. But
+        <code>FrameParser</code> isn't an iterator &mdash; it's just a struct with a
+        method.
+      </p>
+
+      <h2>The <code>Iterator</code> trait</h2>
+
+      <p>
+        One required method:
+      </p>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">Iterator</span> {
+    <span class="kw">type</span> <span class="ty">Item</span>;
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;;
+}</code></pre>
+
+      <p>
+        Return <code>Some(value)</code> for the next item. Return <code>None</code> when
+        done. That's it. Implement this and you get <code>.map()</code>,
+        <code>.filter()</code>, <code>.take()</code>, <code>.enumerate()</code>,
+        <code>.collect()</code>, and 70+ other adaptors for free.
+      </p>
+
+      <h2>Implementing it</h2>
+
+      <p>
+        The <code>FrameParser</code> already has the right shape &mdash;
+        <code>next_frame</code> takes <code>&amp;mut self</code> and returns
+        <code>Option</code>. Rename it:
+      </p>
+
+      <pre><code><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">FrameParser</span>&lt;<span class="lifetime">'a</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Item</span> = &amp;<span class="lifetime">'a</span> [<span class="ty">u8</span>];
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt; {
+        <span class="kw">if</span> <span class="kw">self</span>.pos &gt;= <span class="kw">self</span>.buf.<span class="fn">len</span>() {
+            <span class="kw">return</span> <span class="ty">None</span>;
+        }
+        <span class="kw">let</span> start = <span class="kw">self</span>.pos;
+        <span class="kw">match</span> <span class="kw">self</span>.buf[start..].<span class="fn">iter</span>().<span class="fn">position</span>(|&amp;b| b == <span class="num">b'\n'</span>) {
+            <span class="ty">Some</span>(offset) =&gt; {
+                <span class="kw">self</span>.pos = start + offset + <span class="num">1</span>;
+                <span class="ty">Some</span>(&amp;<span class="kw">self</span>.buf[start..start + offset])
+            }
+            <span class="ty">None</span> =&gt; {
+                <span class="kw">self</span>.pos = <span class="kw">self</span>.buf.<span class="fn">len</span>();
+                <span class="ty">Some</span>(&amp;<span class="kw">self</span>.buf[start..])
+            }
+        }
+    }
+}</code></pre>
+
+      <p>
+        Now the manual loop becomes:
+      </p>
+
+      <pre><code><span class="kw">let</span> parser = <span class="ty">FrameParser</span> { buf: &amp;data, pos: <span class="num">0</span> };
+<span class="kw">let</span> messages: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = parser
+    .<span class="fn">filter_map</span>(|frame| std::str::<span class="fn">from_utf8</span>(frame).<span class="fn">ok</span>())
+    .<span class="fn">filter</span>(|msg| !msg.<span class="fn">starts_with</span>(<span class="str">"PING"</span>))
+    .<span class="fn">collect</span>();</code></pre>
+
+      <p>
+        Same logic. No manual loop. Composable.
+      </p>
+
+      <h2><code>IntoIterator</code></h2>
+
+      <p>
+        The <code>for</code> loop in Rust doesn't call <code>.next()</code> directly &mdash;
+        it calls <code>.into_iter()</code>. That means <code>for x in collection</code>
+        works for any type that implements <code>IntoIterator</code>:
+      </p>
+
+      <pre><code><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; <span class="ty">IntoIterator</span> <span class="kw">for</span> &amp;<span class="lifetime">'a</span> <span class="ty">RoomList</span> {
+    <span class="kw">type</span> <span class="ty">Item</span> = &amp;<span class="lifetime">'a</span> <span class="ty">Room</span>;
+    <span class="kw">type</span> <span class="ty">IntoIter</span> = std::slice::<span class="ty">Iter</span>&lt;<span class="lifetime">'a</span>, <span class="ty">Room</span>&gt;;
+
+    <span class="kw">fn</span> <span class="fn">into_iter</span>(<span class="kw">self</span>) -&gt; <span class="kw">Self</span>::<span class="ty">IntoIter</span> {
+        <span class="kw">self</span>.rooms.<span class="fn">iter</span>()
+    }
+}</code></pre>
+
+      <p>
+        Now users can write <code>for room in &amp;room_list</code>. The convention is
+        three impls: <code>for &amp;T</code> (borrows), <code>for &amp;mut T</code>
+        (mutable borrows), and <code>for T</code> (consuming). Not every type needs all
+        three &mdash; implement what makes sense.
+      </p>
+
+      <h2>Lazy evaluation</h2>
+
+      <p>
+        Iterator adaptors don't do anything until you consume them. This chain:
+      </p>
+
+      <pre><code><span class="kw">let</span> result = parser
+    .<span class="fn">filter_map</span>(|frame| std::str::<span class="fn">from_utf8</span>(frame).<span class="fn">ok</span>())
+    .<span class="fn">filter</span>(|msg| !msg.<span class="fn">starts_with</span>(<span class="str">"PING"</span>))
+    .<span class="fn">take</span>(<span class="num">10</span>)
+    .<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;();</code></pre>
+
+      <p>
+        processes one element at a time through the entire chain. No intermediate
+        <code>Vec</code> is allocated between <code>filter_map</code> and
+        <code>filter</code>. And <code>.take(10)</code> stops after 10 items &mdash; it
+        doesn't process the remaining buffer. This is zero-overhead by design.
+      </p>
+
+      <h2>Useful adaptors for custom iterators</h2>
+
+      <ul>
+        <li><code>.peekable()</code> &mdash; look at the next item without consuming it.
+          Essential for parsers that need one-token lookahead.</li>
+        <li><code>.chain(other)</code> &mdash; concatenate two iterators. Useful for
+          prepending a header frame or appending a trailer.</li>
+        <li><code>.zip(other)</code> &mdash; pair items from two iterators. Good for
+          correlating parallel data.</li>
+        <li><code>.enumerate()</code> &mdash; attach an index to each item. Cheap way to
+          get position information.</li>
+        <li><code>.by_ref()</code> &mdash; borrow the iterator so you can use adaptors
+          and then continue using the original iterator.</li>
+      </ul>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li><strong>Good uses:</strong> parsers, file readers, database cursors, tree
+          traversals, any sequential data source where you want to compose
+          operations</li>
+        <li><strong>When not to:</strong> if you just need to expose a slice, return
+          <code>&amp;[T]</code> &mdash; don't wrap it in a custom iterator. Iterators
+          add value when the data is computed lazily or the traversal is non-trivial.</li>
+      </ul>
+
+      <h2>What comes next</h2>
+
+      <p>
+        Iterators let you process data lazily without allocating. But sometimes you do need
+        to own the data &mdash; especially when crossing scope boundaries into threads or
+        async tasks. That's where <code>'static</code> + <code>Clone</code> comes in &mdash;
+        <a href="rust-patterns-static-clone.html">the next post</a>.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="rust-patterns-newtype.html">#1: Newtype</a></li>
+          <li><a href="rust-patterns-from-into.html">#2: From / Into Conversions</a></li>
+          <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
+          <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
+          <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
+          <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
+          <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
+          <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><strong>#12: Custom Iterators</strong></li>
+          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
+          <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
+          <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
+          <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
+          <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
+          <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
+          <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

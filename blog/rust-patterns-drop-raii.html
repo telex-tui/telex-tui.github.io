@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Patterns #9: Drop and RAII - Telex</title>
+  <meta name="description" content="Implement Drop to run cleanup automatically when a value goes out of scope. Deterministic destruction is Rust's answer to try/finally — design your types so cleanup is automatic.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Patterns That Matter #9: Drop and RAII</h1>
+      <div class="post-meta">March 2026</div>
+      <p class="series-nav">Post 9 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        A client disconnects mid-session. They hold a slot in a room's member list, a TCP
+        stream, and a write buffer. If you forget to clean up any of these, you leak resources.
+        In Python you'd use <code>try/finally</code>. In Go, <code>defer</code>. In Rust,
+        the answer is built into the type system.
+      </p>
+
+      <h2>The motivation</h2>
+
+      <p>
+        Imagine a chat server where each connection holds several resources:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Connection</span> {
+    stream: <span class="ty">TcpStream</span>,
+    room_id: <span class="ty">RoomId</span>,
+    user_id: <span class="ty">UserId</span>,
+    buffer: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;,
+}</code></pre>
+
+      <p>
+        When a client disconnects, you need to remove them from the room, close the stream,
+        and free the buffer. The obvious approach is manual cleanup:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">handle_client</span>(conn: <span class="ty">Connection</span>, rooms: &amp;<span class="kw">mut</span> <span class="ty">RoomRegistry</span>) {
+    <span class="kw">match</span> conn.<span class="fn">run</span>() {
+        <span class="ty">Ok</span>(()) =&gt; {
+            rooms.<span class="fn">remove_user</span>(conn.room_id, conn.user_id);
+        }
+        <span class="ty">Err</span>(e) =&gt; {
+            <span class="mac">eprintln!</span>(<span class="str">"error: {e}"</span>);
+            rooms.<span class="fn">remove_user</span>(conn.room_id, conn.user_id); <span class="cm">// again</span>
+        }
+    }
+}</code></pre>
+
+      <p>
+        Every exit path needs the same cleanup. Miss one and you leak. Add an early
+        <code>return</code> or a <code>?</code> and you miss it. This doesn't scale.
+      </p>
+
+      <h2>RAII &mdash; the concept</h2>
+
+      <p>
+        Resource Acquisition Is Initialization. The idea: acquire the resource when you create
+        the value. Release it when the value is destroyed. In Rust, destruction is deterministic
+        &mdash; a value is dropped when it goes out of scope, on every path: normal returns,
+        early returns, <code>?</code> propagation, and panics (unless the process aborts).
+      </p>
+      <p>
+        You don't call a cleanup function. You don't register a finalizer. The compiler
+        inserts the cleanup at every scope exit automatically.
+      </p>
+
+      <h2>The <code>Drop</code> trait</h2>
+
+      <p>
+        Implement <code>Drop</code> to define what happens when your value is destroyed:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">RoomGuard</span> {
+    room_id: <span class="ty">RoomId</span>,
+    user_id: <span class="ty">UserId</span>,
+    rooms: <span class="ty">Rc</span>&lt;<span class="ty">RefCell</span>&lt;<span class="ty">RoomRegistry</span>&gt;&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Drop</span> <span class="kw">for</span> <span class="ty">RoomGuard</span> {
+    <span class="kw">fn</span> <span class="fn">drop</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+        <span class="kw">self</span>.rooms.<span class="fn">borrow_mut</span>().<span class="fn">remove_user</span>(<span class="kw">self</span>.room_id, <span class="kw">self</span>.user_id);
+    }
+}</code></pre>
+
+      <p>
+        Now the handler doesn't need manual cleanup at all:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">handle_client</span>(stream: <span class="ty">TcpStream</span>, rooms: <span class="ty">Rc</span>&lt;<span class="ty">RefCell</span>&lt;<span class="ty">RoomRegistry</span>&gt;&gt;) {
+    <span class="kw">let</span> user_id = rooms.<span class="fn">borrow_mut</span>().<span class="fn">add_user</span>();
+    <span class="kw">let</span> room_id = <span class="ty">RoomId</span>(<span class="num">0</span>);
+    <span class="kw">let</span> _guard = <span class="ty">RoomGuard</span> { room_id, user_id, rooms: rooms.<span class="fn">clone</span>() };
+
+    <span class="cm">// Do work here. If anything panics or returns early,</span>
+    <span class="cm">// _guard is dropped and the user is removed from the room.</span>
+}</code></pre>
+
+      <p>
+        The underscore prefix in <code>_guard</code> signals intent: we don't use the
+        variable, we hold it for its destructor. When the function exits &mdash; for any
+        reason &mdash; <code>_guard</code> is dropped and cleanup runs.
+      </p>
+
+      <h2>When <code>drop</code> runs</h2>
+
+      <p>
+        The compiler inserts drop calls at predictable points:
+      </p>
+
+      <ul>
+        <li><strong>End of scope:</strong> a local variable goes out of scope at the closing
+          brace</li>
+        <li><strong>Explicit drop:</strong> <code>drop(value)</code> drops it immediately
+          (this is just <code>fn drop&lt;T&gt;(_: T) {}</code> &mdash; it takes ownership
+          and the value is dropped when the function's parameter goes out of scope)</li>
+        <li><strong>Reassignment:</strong> <code>x = new_value</code> drops the old value
+          before assigning</li>
+        <li><strong>Collection clearing:</strong> <code>vec.clear()</code> drops each
+          element</li>
+        <li><strong>Option replacement:</strong> going from <code>Some(v)</code> to
+          <code>None</code> drops <code>v</code></li>
+      </ul>
+
+      <p>
+        Drop order within a scope is reverse declaration order &mdash; the last variable
+        declared is dropped first. This is deliberate: later variables may reference earlier
+        ones, so they must be cleaned up first.
+      </p>
+
+      <h2>What you can't do in <code>drop</code></h2>
+
+      <p>
+        The <code>drop</code> method takes <code>&amp;mut self</code> and returns nothing.
+        This means:
+      </p>
+
+      <ul>
+        <li><strong>No error returns.</strong> If cleanup can fail (e.g., flushing a buffer
+          to disk), you must handle the error inside <code>drop</code> &mdash; log it, ignore
+          it, or panic. For important fallible cleanup, provide an explicit
+          <code>close()</code> method and use <code>Drop</code> as a safety net.</li>
+        <li><strong>No moving out of <code>self</code>.</strong> You have <code>&amp;mut
+          self</code>, not <code>self</code>. You can't take ownership of fields. You can
+          use <code>Option::take()</code> if you need to move a field out during drop.</li>
+        <li><strong>Fields drop automatically after your <code>drop</code>.</strong> You
+          don't need to drop fields manually &mdash; the compiler does it after your
+          <code>drop</code> implementation runs.</li>
+      </ul>
+
+      <h2>The guard pattern</h2>
+
+      <p>
+        You've already seen guards in the standard library:
+      </p>
+
+      <ul>
+        <li><code>MutexGuard</code> &mdash; holds a lock, releases it on drop</li>
+        <li><code>RefMut</code> &mdash; holds a <code>RefCell</code> borrow, releases it
+          on drop</li>
+        <li><code>File</code> &mdash; holds a file descriptor, closes it on drop</li>
+        <li><code>TcpStream</code> &mdash; holds a socket, closes it on drop</li>
+      </ul>
+
+      <p>
+        The pattern is always the same: the guard represents a held resource. Creating
+        it acquires the resource. Dropping it releases it. No manual cleanup, no forgotten
+        releases.
+      </p>
+      <p>
+        Design your own types this way. If a value represents an acquired resource &mdash;
+        a database transaction, a temporary file, a registered callback &mdash; implement
+        <code>Drop</code> so that cleanup is automatic.
+      </p>
+
+      <h2>When to use it</h2>
+
+      <ul>
+        <li><strong>Good uses:</strong> connection cleanup, lock management, temporary files,
+          removing entries from registries, flushing buffers, restoring previous state</li>
+        <li><strong>When not to:</strong> if the only cleanup is freeing memory, you don't
+          need <code>Drop</code> &mdash; Rust handles that automatically. Implement
+          <code>Drop</code> for side effects beyond deallocation.</li>
+      </ul>
+
+      <h2>What comes next</h2>
+
+      <p>
+        Drop guarantees cleanup for owned values. But what about data that's borrowed? When
+        a struct holds a reference, the compiler needs to know how long that reference is
+        valid. That's where lifetime annotations come in &mdash;
+        <a href="rust-patterns-lifetime-annotations.html">the next post</a>.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="rust-patterns-newtype.html">#1: Newtype</a></li>
+          <li><a href="rust-patterns-from-into.html">#2: From / Into Conversions</a></li>
+          <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
+          <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
+          <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
+          <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
+          <li><strong>#9: Drop and RAII</strong></li>
+          <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
+          <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
+          <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
+          <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
+          <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
+          <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
+          <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
