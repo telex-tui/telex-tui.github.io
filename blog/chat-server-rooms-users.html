@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Server #2: Rooms and Users - Telex</title>
+  <meta name="description" content="Add rooms, users, and broadcasting to the Rust chat server. Six patterns: RefCell, Rc, Rc&lt;RefCell&gt;, split borrows, index-based design, and Drop/RAII.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Building a Chat Server in Rust #2: Rooms and Users</h1>
+      <div class="post-meta">February 2026</div>
+      <p class="series-nav">Post 2 of 6 in <a href="#series-index">Building a Chat Server in Rust</a>.
+        Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        <a href="chat-server-hello-tcp.html">Last time</a> we built an echo server &mdash;
+        one connection at a time, no state between clients. Now we add rooms, users, and
+        broadcasting. State management gets real, and we hit six patterns in the process.
+      </p>
+      <p>
+        By the end of this post, clients connect, choose a username, join a lobby, and see
+        each other's messages. The code is on the
+        <a href="https://github.com/telex-tui/rust-chat-server/tree/02-rooms-users"><code>02-rooms-users</code></a>
+        branch.
+      </p>
+
+      <h2>The problem: where does state live?</h2>
+
+      <p>
+        An echo server is stateless. A chat server is the opposite: it needs to know which
+        users are connected, which rooms exist, and who is in each room. In a language with
+        a garbage collector, you'd toss everything into shared mutable objects and move on.
+        In Rust, the ownership system forces you to think about it &mdash; and that thinking
+        produces better designs.
+      </p>
+
+      <h2>Pattern #8: Index-based design &mdash; the foundation</h2>
+
+      <p>
+        The most important decision comes first: how do we structure our data? The tempting
+        approach is to store references between objects &mdash; a room holds references to its
+        users, a user holds a reference to its room. In Rust, this means lifetimes everywhere,
+        and you quickly hit walls: self-referential structs, borrow checker battles, and
+        lifetime annotation soup.
+      </p>
+      <p>
+        The solution: <strong>don't store references. Store indices.</strong> Users go in a
+        <code>Vec</code>, rooms go in a <code>Vec</code>, and they refer to each other by ID:
+      </p>
+
+      <pre><code><span class="kw">pub struct</span> <span class="ty">Server</span> {
+    <span class="kw">pub</span> users: <span class="ty">Vec</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">User</span>&gt;&gt;,
+    <span class="kw">pub</span> rooms: <span class="ty">Vec</span>&lt;<span class="ty">Room</span>&gt;,
+    next_user_id: <span class="ty">u64</span>,
+}</code></pre>
+
+      <p>
+        <code>UserId</code> and <code>RoomId</code> (our newtypes from
+        <a href="chat-server-hello-tcp.html">Stage 1</a>) double as indices into these
+        <code>Vec</code>s. To look up a user:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">UserId</span> {
+    <span class="kw">pub fn</span> <span class="fn">index</span>(<span class="kw">self</span>) -&gt; <span class="ty">usize</span> {
+        <span class="kw">self</span>.<span class="num">0</span> <span class="kw">as</span> <span class="ty">usize</span>
+    }
+}
+
+<span class="cm">// Lookup is O(1) — just an array index.</span>
+<span class="kw">let</span> user = &amp;<span class="kw">self</span>.users[user_id.<span class="fn">index</span>()];</code></pre>
+
+      <p>
+        This is the same pattern used by ECS frameworks, arenas, and graph libraries. No
+        lifetimes, no self-referential structs, no borrow checker fights. Just data in arrays,
+        connected by IDs.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-index-based-design.html">Rust Patterns #8: Index-Based Design</a>
+        covers arenas, generational indices, and when to reach for this pattern.
+      </p>
+
+      <h2>Pattern #4: Interior mutability &mdash; RefCell</h2>
+
+      <p>
+        A room needs a member list. Multiple parts of the code need to read and modify it:
+        joining adds a member, leaving removes one, broadcasting reads the list. But the
+        room is behind a shared reference (<code>&amp;self</code>) &mdash; you can't mutate
+        through <code>&amp;</code> in Rust.
+      </p>
+      <p>
+        <code>RefCell</code> solves this by moving borrow checking to runtime. You call
+        <code>.borrow()</code> for shared access and <code>.borrow_mut()</code> for
+        exclusive access. If you violate the rules, it panics instead of refusing to compile:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+
+<span class="kw">let</span> members = <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="mac">vec!</span>[user_a, user_b]);
+
+<span class="cm">// Read the list — shared borrow.</span>
+<span class="kw">let</span> list = members.<span class="fn">borrow</span>();
+
+<span class="cm">// Mutate the list — exclusive borrow.</span>
+members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c);</code></pre>
+
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-interior-mutability.html">Rust Patterns #4: Interior Mutability</a>
+        explains when RefCell is the right tool and when it's a code smell.
+      </p>
+
+      <h2>Pattern #5: Shared ownership &mdash; Rc</h2>
+
+      <p>
+        <code>RefCell</code> gives us runtime borrow checking, but who owns it? In our
+        single-threaded server, we want the <code>Room</code> to own the member list, but
+        we may also want to hand out handles to it. <code>Rc</code> (reference counting)
+        gives shared ownership &mdash; multiple <code>Rc</code>s point to the same data,
+        and the data is freed when the last one is dropped:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+
+<span class="kw">let</span> members = <span class="ty">Rc</span>::<span class="fn">new</span>(data);
+<span class="kw">let</span> handle = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;members); <span class="cm">// cheap — just increments a counter</span></code></pre>
+
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-shared-ownership.html">Rust Patterns #5: Shared Ownership</a>
+        covers Rc, Weak references, and reference cycles.
+      </p>
+
+      <h2>Pattern #6: Rc&lt;RefCell&lt;T&gt;&gt; &mdash; the combo</h2>
+
+      <p>
+        Combine them: <code>Rc</code> for shared ownership, <code>RefCell</code> for
+        interior mutability. This is the workhorse pattern for single-threaded shared
+        mutable state:
+      </p>
+
+      <pre><code><span class="kw">pub struct</span> <span class="ty">Room</span> {
+    <span class="kw">pub</span> id: <span class="ty">RoomId</span>,
+    <span class="kw">pub</span> name: <span class="ty">String</span>,
+    <span class="kw">pub</span> members: <span class="ty">Rc</span>&lt;<span class="ty">RefCell</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">UserId</span>&gt;&gt;&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Room</span> {
+    <span class="kw">pub fn</span> <span class="fn">add_member</span>(&amp;<span class="kw">self</span>, user_id: <span class="ty">UserId</span>) {
+        <span class="kw">let</span> <span class="kw">mut</span> members = <span class="kw">self</span>.members.<span class="fn">borrow_mut</span>();
+        <span class="kw">if</span> !members.<span class="fn">contains</span>(&amp;user_id) {
+            members.<span class="fn">push</span>(user_id);
+        }
+    }
+
+    <span class="kw">pub fn</span> <span class="fn">remove_member</span>(&amp;<span class="kw">self</span>, user_id: <span class="ty">UserId</span>) {
+        <span class="kw">self</span>.members.<span class="fn">borrow_mut</span>().<span class="fn">retain</span>(|&amp;id| id != user_id);
+    }
+
+    <span class="kw">pub fn</span> <span class="fn">member_ids</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">UserId</span>&gt; {
+        <span class="kw">self</span>.members.<span class="fn">borrow</span>().<span class="fn">clone</span>()
+    }
+}</code></pre>
+
+      <p>
+        Notice: <code>add_member</code> and <code>remove_member</code> take
+        <code>&amp;self</code>, not <code>&amp;mut self</code>. The mutation happens
+        inside the <code>RefCell</code>. This is the entire point of interior mutability:
+        the method signature says "I only need shared access," but the implementation
+        can still mutate.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-rc-refcell.html">Rust Patterns #6: Rc&lt;RefCell&lt;T&gt;&gt;</a>
+        covers the full combo and the runtime panic risk.
+      </p>
+
+      <h2>Pattern #7: Split borrows &mdash; reading users while writing rooms</h2>
+
+      <p>
+        Broadcasting hits a classic borrow checker problem. To send a message to a room,
+        we need to:
+      </p>
+      <ol>
+        <li>Read the room's member list (from <code>self.rooms</code>)</li>
+        <li>Write to each member's TCP stream (in <code>self.users</code>)</li>
+      </ol>
+      <p>
+        If both were behind <code>&amp;mut self</code>, the compiler would block it &mdash;
+        it sees one mutable borrow of the whole struct. But because <code>users</code> and
+        <code>rooms</code> are separate fields, Rust allows <strong>split borrows</strong>:
+        you can borrow different fields independently.
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">broadcast</span>(
+    &amp;<span class="kw">mut</span> <span class="kw">self</span>,
+    room_id: <span class="ty">RoomId</span>,
+    sender_id: <span class="ty">UserId</span>,
+    msg: &amp;<span class="ty">Message</span>,
+) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">ChatError</span>&gt; {
+    <span class="kw">let</span> room = <span class="kw">self</span>.rooms
+        .<span class="fn">get</span>(room_id.<span class="fn">index</span>())
+        .<span class="fn">ok_or_else</span>(|| <span class="ty">ChatError</span>::<span class="fn">UnknownRoom</span>(room_id.<span class="fn">to_string</span>()))?;
+
+    <span class="cm">// Read the member list, then release the borrow on rooms.</span>
+    <span class="kw">let</span> members = room.<span class="fn">member_ids</span>();
+    <span class="kw">let</span> text = msg.<span class="fn">to_string</span>();
+
+    <span class="cm">// Now mutably access users — rooms is no longer borrowed.</span>
+    <span class="kw">for</span> &amp;member_id <span class="kw">in</span> &amp;members {
+        <span class="kw">if</span> member_id != sender_id {
+            <span class="kw">if let</span> <span class="ty">Some</span>(<span class="ty">Some</span>(member)) = <span class="kw">self</span>.users.<span class="fn">get_mut</span>(member_id.<span class="fn">index</span>()) {
+                member.<span class="fn">send</span>(&amp;text);
+            }
+        }
+    }
+
+    <span class="ty">Ok</span>(())
+}</code></pre>
+
+      <p>
+        The key technique: clone the data you need from one field (<code>member_ids()</code>
+        returns a <code>Vec</code>, releasing the borrow on <code>rooms</code>), then
+        access the other field. The compiler is happy because it can see that
+        <code>self.rooms</code> and <code>self.users</code> are disjoint.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-split-borrows.html">Rust Patterns #7: Split Borrows</a>
+        explains why the compiler can split struct borrows but not method borrows.
+      </p>
+
+      <h2>Pattern #9: Drop / RAII &mdash; automatic cleanup</h2>
+
+      <p>
+        What happens when a client disconnects? Their TCP stream should close, they should
+        be removed from all rooms, and other users should see a departure notice. In many
+        languages, you'd register a callback or remember to call <code>cleanup()</code>.
+        In Rust, you implement <code>Drop</code>:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">Drop</span> <span class="kw">for</span> <span class="ty">User</span> {
+    <span class="kw">fn</span> <span class="fn">drop</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
+        <span class="mac">println!</span>(<span class="str">"[{}] {} dropped — connection closed"</span>, <span class="kw">self</span>.id, <span class="kw">self</span>.username);
+    }
+}</code></pre>
+
+      <p>
+        When a <code>User</code> is removed from the server &mdash; by setting their slot
+        to <code>None</code> &mdash; Rust drops the value. The <code>TcpStream</code>
+        inside is also dropped, which closes the socket. Our <code>Drop</code> impl adds
+        logging. No manual close, no cleanup function, no possibility of forgetting:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">remove_user</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, user_id: <span class="ty">UserId</span>) {
+    <span class="cm">// Remove from all rooms first.</span>
+    <span class="kw">for</span> room <span class="kw">in</span> &amp;<span class="kw">self</span>.rooms {
+        room.<span class="fn">remove_member</span>(user_id);
+    }
+
+    <span class="cm">// Drop the user — RAII cleanup happens here.</span>
+    <span class="kw">if let</span> <span class="ty">Some</span>(slot) = <span class="kw">self</span>.users.<span class="fn">get_mut</span>(user_id.<span class="fn">index</span>()) {
+        *slot = <span class="ty">None</span>;  <span class="cm">// User::drop() runs, stream closes</span>
+    }
+}</code></pre>
+
+      <p>
+        This is RAII: <strong>R</strong>esource <strong>A</strong>cquisition <strong>I</strong>s
+        <strong>I</strong>nitialization. The resource (TCP connection) is acquired when the
+        <code>User</code> is created and released when it's dropped. The lifecycle is tied
+        to the value's scope, not to manual management.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-drop-raii.html">Rust Patterns #9: Drop and RAII</a>
+        covers custom Drop, drop order, and <code>ManuallyDrop</code>.
+      </p>
+
+      <h2>The full client loop</h2>
+
+      <p>
+        Here's how <code>handle_client</code> ties it all together: register the user,
+        join the lobby, read messages, broadcast, and clean up on disconnect:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">handle_client</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, stream: <span class="ty">TcpStream</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">ChatError</span>&gt; {
+    <span class="kw">let</span> peer = stream.<span class="fn">peer_addr</span>()?;
+    <span class="kw">let</span> <span class="kw">mut</span> write_stream = stream.<span class="fn">try_clone</span>()?;
+    <span class="kw">let</span> reader = <span class="ty">BufReader</span>::<span class="fn">new</span>(stream.<span class="fn">try_clone</span>()?);
+
+    <span class="mac">writeln!</span>(write_stream, <span class="str">"Enter your username:"</span>)?;
+    <span class="kw">let</span> <span class="kw">mut</span> lines = reader.<span class="fn">lines</span>();
+
+    <span class="kw">let</span> username = <span class="kw">match</span> lines.<span class="fn">next</span>() {
+        <span class="ty">Some</span>(<span class="ty">Ok</span>(name)) <span class="kw">if</span> !name.<span class="fn">trim</span>().<span class="fn">is_empty</span>() =&gt; name.<span class="fn">trim</span>().<span class="fn">to_string</span>(),
+        _ =&gt; <span class="kw">return</span> <span class="ty">Ok</span>(()),
+    };
+
+    <span class="kw">let</span> user_id = <span class="kw">self</span>.<span class="fn">add_user</span>(username.<span class="fn">clone</span>(), stream);
+    <span class="kw">let</span> lobby = <span class="ty">RoomId</span>::<span class="fn">new</span>(<span class="num">0</span>);
+    <span class="kw">self</span>.<span class="fn">join_room</span>(user_id, lobby)?;
+
+    <span class="cm">// Read messages until disconnect.</span>
+    <span class="kw">let</span> result = <span class="kw">self</span>.<span class="fn">client_loop</span>(user_id, &amp;username, lobby, lines);
+
+    <span class="cm">// Cleanup — announce departure, then remove.</span>
+    <span class="cm">// remove_user drops the User, triggering RAII cleanup.</span>
+    <span class="kw">self</span>.<span class="fn">leave_room</span>(user_id, lobby);
+    <span class="kw">self</span>.<span class="fn">remove_user</span>(user_id);
+
+    result
+}</code></pre>
+
+      <p>
+        The cleanup at the bottom runs whether the client loop returned <code>Ok</code> or
+        <code>Err</code> &mdash; we call <code>leave_room</code> and <code>remove_user</code>
+        unconditionally. The <code>User::drop()</code> handles the TCP stream cleanup.
+      </p>
+
+      <h2>Try it</h2>
+
+      <pre><code><span class="cm"># Terminal 1</span>
+git checkout 02-rooms-users
+cargo run
+
+<span class="cm"># Terminal 2</span>
+nc 127.0.0.1 8080
+alice                          <span class="cm"># → Welcome, alice! You're in #lobby.</span>
+hello everyone                 <span class="cm"># → &lt;alice&gt; hello everyone</span>
+
+<span class="cm"># Terminal 3</span>
+nc 127.0.0.1 8080
+bob                            <span class="cm"># → Welcome, bob! You're in #lobby.</span>
+                               <span class="cm"># (alice sees: * bob joined #lobby)</span>
+hi alice                       <span class="cm"># → alice sees: &lt;bob&gt; hi alice</span></code></pre>
+
+      <p>
+        Note: the server is still single-threaded, so only one client is active at a time.
+        The second client waits until the first disconnects. We'll fix that in
+        <a href="chat-server-threaded.html">Stage 5</a>.
+      </p>
+
+      <h2>What we have, what's missing</h2>
+
+      <p>
+        We now have a stateful server with six patterns working together:
+      </p>
+      <ul>
+        <li><strong>Index-based design</strong> &mdash; users and rooms in <code>Vec</code>s,
+          referenced by newtype IDs. No lifetimes, no self-referential structs.</li>
+        <li><strong>RefCell</strong> &mdash; runtime borrow checking for the member list
+          behind shared references.</li>
+        <li><strong>Rc</strong> &mdash; shared ownership of the <code>RefCell</code>-wrapped
+          member list.</li>
+        <li><strong>Rc&lt;RefCell&gt;</strong> &mdash; the combo: shared <em>and</em> mutable.
+          The workhorse of single-threaded state.</li>
+        <li><strong>Split borrows</strong> &mdash; reading <code>self.rooms</code> while
+          writing <code>self.users</code>, because they're separate struct fields.</li>
+        <li><strong>Drop / RAII</strong> &mdash; <code>User</code> cleanup is automatic.
+          When the value is dropped, the TCP stream closes and the log message prints.</li>
+      </ul>
+
+      <p>
+        What's missing: our message format is still ad hoc &mdash; just raw text lines.
+        <a href="chat-server-parsing.html">Next time</a> we build a proper wire protocol
+        with zero-copy parsing and custom iterators.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="chat-server-hello-tcp.html">#1: Hello, TCP</a></li>
+          <li><strong>#2: Rooms and Users</strong></li>
+          <li><a href="chat-server-parsing.html">#3: Parsing and Performance</a></li>
+          <li><a href="chat-server-commands.html">#4: Commands and Plugins</a></li>
+          <li><a href="chat-server-threaded.html">#5: Going Multi-threaded</a></li>
+          <li><a href="chat-server-async.html">#6: Going Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
