@@ -33,21 +33,21 @@
       <p>
         In the 1960s and 70s, a computer was the size of a room and cost more than a house. A
         university or a company might own one. Dozens of people needed to use it, but you
-        couldn't walk up to the machine and type &mdash; it had no keyboard, no screen. The
+        couldn't walk up to the machine and type - it had no keyboard, no screen. The
         computer itself was just a processor, memory, and storage in a rack. If you wanted to
         interact with it, you needed a separate device: something with a keyboard for input and
         some way to see output.
       </p>
       <p>
         That device was the <strong>terminal</strong>. The word means exactly what it sounds
-        like &mdash; the end of the line, the point where a human meets the machine. Many
+        like - the end of the line, the point where a human meets the machine. Many
         widely-used terminals were built by the Teletype Corporation: a keyboard and a printer in
         one unit. You typed a character, it traveled down a cable to the computer, the computer
         processed it and sent characters back, and the Teletype printed them on paper. That's
         where the abbreviation "TTY" comes from. It's short for Teletype.
       </p>
       <p>
-        The cable between the terminal and the computer was a serial line &mdash; a wire that
+        The cable between the terminal and the computer was a serial line - a wire that
         carried data one bit at a time, like Morse code down a telegraph wire. Every terminal
         had its own cable running back to the computer. A university might have twenty
         Teletypes scattered across a building, all wired into the same machine.
@@ -59,7 +59,7 @@
         On the computer's side, the operating system kernel had a simple job. For each serial
         cable, it read bytes coming in, handed them to whatever program the user was running, took
         that program's output bytes, and sent them back down the same cable. The kernel
-        represented each cable as a device file &mdash; <code>/dev/ttyS0</code> for the first
+        represented each cable as a device file - <code>/dev/ttyS0</code> for the first
         serial port, <code>/dev/ttyS1</code> for the second, and so on.
       </p>
       <p>
@@ -69,7 +69,7 @@
         thing: a stream of bytes in, a stream of bytes out.
       </p>
       <p>
-        This simplicity became a contract. Software was written around it. Shells, editors, compilers &mdash;
+        This simplicity became a contract. Software was written around it. Shells, editors, compilers -
         everything assumed it was talking to a character device mediated by the kernel. And that
         contract turned out to be so useful that when the physical hardware disappeared, nobody
         was willing to break it. Every complication that follows exists because the world changed
@@ -80,7 +80,7 @@
 
       <p>
         Remember that the terminal only existed as a separate device because of distance. The
-        computer was in a machine room. The people who needed it were somewhere else &mdash;
+        computer was in a machine room. The people who needed it were somewhere else -
         down the hall, across campus, eventually across the city via phone lines. The terminal
         was the endpoint of a long cable because it had to be. You couldn't sit at the computer.
       </p>
@@ -88,11 +88,11 @@
         As computers became personal, that distance collapsed. The machine moved to your desk.
         The screen and keyboard were attached directly to it. There was no "somewhere else"
         anymore, and no need for a remote endpoint. These personal machines came with graphical
-        interfaces &mdash; windows, menus, a mouse. That was the new way to interact with a
+        interfaces - windows, menus, a mouse. That was the new way to interact with a
         computer.
       </p>
       <p>
-        But by then, a decade of Unix software had been built around the TTY contract &mdash;
+        But by then, a decade of Unix software had been built around the TTY contract -
         shells, editors, compilers, all the command-line tools that assumed a character device on
         the other end. That ecosystem was too valuable to abandon. People still needed to run all
         of that software. So someone built a program that opens a window on the graphical display
@@ -101,15 +101,15 @@
       <p>
         The problem is that a window on a graphical display isn't a serial port. It has no device
         file. It's just pixels managed by a GUI application. The old software expects to read and
-        write a TTY device &mdash; so the kernel needs to fake the cable. The pseudoterminal, or
+        write a TTY device - so the kernel needs to fake the cable. The pseudoterminal, or
         PTY, is a virtual cable: a pair of connected endpoints created in software.
       </p>
       <ul>
-        <li>One end &mdash; the <strong>slave</strong> side (<code>/dev/pts/0</code>,
-          <code>/dev/pts/1</code>, etc.) &mdash; behaves exactly like a physical TTY.
+        <li>One end - the <strong>slave</strong> side (<code>/dev/pts/0</code>,
+          <code>/dev/pts/1</code>, etc.) - behaves exactly like a physical TTY.
           The shell attaches here. As far as it's concerned, it's talking to
           a serial port.</li>
-        <li>The other end &mdash; the <strong>master</strong> side &mdash; is held by the
+        <li>The other end - the <strong>master</strong> side - is held by the
           terminal emulator (Alacritty, GNOME Terminal, iTerm2, or anything else that
           displays that black rectangle with text in it).</li>
       </ul>
@@ -147,11 +147,11 @@
       <h2>Windows can resize</h2>
 
       <p>
-        A physical Teletype had a fixed width &mdash; however wide the paper roll was. A CRT
+        A physical Teletype had a fixed width - however wide the paper roll was. A CRT
         terminal had fixed dimensions too, built into the hardware. But a window on a graphical
         desktop can be dragged to any size. If you're running a program that draws a full-screen
-        layout &mdash; <code>vim</code>, <code>htop</code>, anything with columns and
-        borders &mdash; and you resize the window, the layout breaks. Columns misalign, text
+        layout - <code>vim</code>, <code>htop</code>, anything with columns and
+        borders - and you resize the window, the layout breaks. Columns misalign, text
         wraps at the old width, borders end up in the wrong place. The program drew for one size
         and is now living in another.
       </p>
@@ -171,7 +171,7 @@
 
       <p>
         You run a program. It gets stuck in an infinite loop. You press Ctrl+C and it stops. But
-        think about what just happened &mdash; the program was too busy looping to read its
+        think about what just happened - the program was too busy looping to read its
         input. It was never going to see that Ctrl+C keystroke in its input buffer. So how did it
         get killed?
       </p>
@@ -179,7 +179,7 @@
         Between the master and slave ends of every PTY, the kernel has a layer called the
         <strong>line discipline</strong>. It watches every byte flowing through the virtual cable.
         Most bytes pass straight through. But certain ones are special. When the line discipline
-        sees byte <code>0x03</code> &mdash; the code for Ctrl+C &mdash; it doesn't deliver it
+        sees byte <code>0x03</code> - the code for Ctrl+C - it doesn't deliver it
         to the program's input buffer. Instead, the kernel converts it into a signal (SIGINT) and
         delivers it directly to the process, bypassing the input queue entirely. The program
         doesn't need to cooperate. The kernel reaches in and interrupts it.
@@ -191,11 +191,11 @@
       </p>
       <p>
         But sometimes a program <em>wants</em> those keys for itself. When <code>vim</code>
-        starts, it puts the terminal into "raw mode" &mdash; telling the line discipline to stop
+        starts, it puts the terminal into "raw mode" - telling the line discipline to stop
         intercepting special bytes and pass everything through untouched. That's how
         <code>vim</code> can use Ctrl+C for its own commands instead of being killed. When
         <code>vim</code> exits, it restores the original settings. If a program crashes without
-        cleaning up, the terminal stays in raw mode &mdash; which is why your shell sometimes
+        cleaning up, the terminal stays in raw mode - which is why your shell sometimes
         acts strangely after a crash, and why <code>reset</code> exists to fix it.
       </p>
 
@@ -211,12 +211,12 @@
         The answer is the <strong>controlling terminal</strong>. When you open a terminal window,
         the shell that starts inside it is "married" to that window's PTY. That PTY becomes the
         controlling terminal for everything launched from that shell. You can see which one it is
-        by running <code>tty</code> &mdash; it prints the device path, something like
+        by running <code>tty</code> - it prints the device path, something like
         <code>/dev/pts/3</code>.
       </p>
       <p>
-        This matters for more than just prompts. When the controlling terminal goes away &mdash;
-        the window closes, the connection drops &mdash; the kernel uses this association to figure
+        This matters for more than just prompts. When the controlling terminal goes away -
+        the window closes, the connection drops - the kernel uses this association to figure
         out which processes need to be told about it.
       </p>
 
@@ -226,7 +226,7 @@
         Everything so far happens on a single machine. But sometimes the computer you need to
         use is in a data center on the other side of the country. You're sitting at your laptop
         and you need a shell on that remote machine. The problem is the same one from the 1960s
-        &mdash; you need to interact with a computer that isn't in front of you &mdash; but now
+        - you need to interact with a computer that isn't in front of you - but now
         the cable is the internet instead of a serial wire.
       </p>
       <p>
@@ -252,7 +252,7 @@
       <p>
         The remote <code>bash</code> has no idea it's being controlled from another continent. It
         sees a PTY slave and behaves as if someone were sitting right next to the machine.
-        <code>sshd</code> is just another terminal emulator &mdash; it fakes the cable, same as
+        <code>sshd</code> is just another terminal emulator - it fakes the cable, same as
         Alacritty does.
       </p>
 
@@ -260,15 +260,15 @@
 
       <p>
         There's a catch when working remotely. Programs don't just print plain text to the
-        terminal &mdash; they also send special byte sequences to control it: move the cursor to
+        terminal - they also send special byte sequences to control it: move the cursor to
         row 5 column 10, switch to red text, clear the screen. These are called escape sequences
         because they start with the escape character, signaling that what follows is a command,
         not text to display. Different terminals understand different sequences. What works on
         one might print garbage on another.
       </p>
       <p>
-        So the software on the server &mdash; <code>vim</code>, <code>htop</code>, anything that
-        draws to the screen &mdash; needs to know what kind of terminal is on the other end.
+        So the software on the server - <code>vim</code>, <code>htop</code>, anything that
+        draws to the screen - needs to know what kind of terminal is on the other end.
         When you connect, your SSH client sends along that information: "My user's terminal
         type is <code>xterm-256color</code>" (or whatever it happens to be). The remote server
         stores this in the <code>$TERM</code> environment variable, and programs look it up in
@@ -287,8 +287,8 @@
       <p>
         You're running a long build over SSH and your Wi-Fi cuts out. The SSH connection dies.
         The remote <code>sshd</code> process exits, which closes the master end of the PTY it
-        was holding. The kernel destroys the PTY. And <code>bash</code> &mdash; along with your
-        build &mdash; is killed. All your work, gone, because a wireless signal wobbled for a
+        was holding. The kernel destroys the PTY. And <code>bash</code> - along with your
+        build - is killed. All your work, gone, because a wireless signal wobbled for a
         few seconds.
       </p>
       <p>
@@ -300,14 +300,14 @@
       </p>
       <p>
         Now when your Wi-Fi dies and <code>sshd</code> exits, only the outer connection is lost.
-        <code>tmux</code> is a local process on the server &mdash; it doesn't care about the
+        <code>tmux</code> is a local process on the server - it doesn't care about the
         network. It keeps running, and the inner PTY stays alive. When you reconnect and run
         <code>tmux attach</code>, you're hooking a new SSH session into the existing
         <code>tmux</code> process. Your shell never noticed you left.
       </p>
       <p>
         The word "pseudo" in pseudoterminal earns its keep here. The PTY is a simulation of a
-        cable, and simulations can be layered &mdash; one fake cable inside another, as deep as
+        cable, and simulations can be layered - one fake cable inside another, as deep as
         you need.
       </p>
 
@@ -322,21 +322,21 @@
         Before the internet, people connected to remote computers over phone lines using modems.
         "Hanging up" meant physically disconnecting the call. The modem would detect the loss of
         signal, and the kernel needed a way to tell the programs on the other end that their user
-        was gone. The signal it sends is called SIGHUP &mdash; Signal Hangup.
+        was gone. The signal it sends is called SIGHUP - Signal Hangup.
       </p>
       <p>
         The mechanism survived long after the phone modems disappeared. Today, when the master end
-        of any PTY closes &mdash; you click the X on a terminal window, your SSH connection
-        drops, your Wi-Fi dies &mdash; the kernel sends SIGHUP to the session leader on the slave
+        of any PTY closes - you click the X on a terminal window, your SSH connection
+        drops, your Wi-Fi dies - the kernel sends SIGHUP to the session leader on the slave
         side. The session leader is typically your shell, and the shell passes the signal along to
         its child processes. Unless a program is specifically configured to ignore it, it exits.
       </p>
       <p>
-        But sometimes you want a process to keep running after the terminal closes &mdash;
+        But sometimes you want a process to keep running after the terminal closes -
         a long backup, a batch job, something that should finish whether you're watching or not.
         That's why <code>nohup</code> exists. Running <code>nohup ./long-task &amp;</code>
         tells the process to ignore SIGHUP, so it survives when the terminal goes away.
-        It's also why <code>tmux</code> works for keeping sessions alive &mdash; the inner
+        It's also why <code>tmux</code> works for keeping sessions alive - the inner
         PTY's master is <code>tmux</code> itself, which doesn't close when the outer connection
         dies, so no SIGHUP reaches your shell.
       </p>
@@ -356,8 +356,8 @@
       </p>
       <p>
         Each solution preserved the contract that programs already depended on. From the outside,
-        the result looks baroque. From the inside &mdash; following the path that got us
-        here &mdash; each step makes sense. It was always the simplest thing that could work,
+        the result looks baroque. From the inside - following the path that got us
+        here - each step makes sense. It was always the simplest thing that could work,
         given what already existed.
       </p>
     </article>
@@ -365,7 +365,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

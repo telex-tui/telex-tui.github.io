@@ -25,7 +25,7 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust Patterns That Matter #20: Channels &mdash; Message Passing</h1>
+      <h1>Rust Patterns That Matter #20: Channels - Message Passing</h1>
       <div class="post-meta">August 2026</div>
       <p class="series-nav">Post 20 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
@@ -47,14 +47,32 @@
       <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">Mutex</span>, <span class="ty">Condvar</span>};
 <span class="kw">use</span> std::collections::<span class="ty">VecDeque</span>;
 
-<span class="kw">let</span> queue = <span class="ty">Arc</span>::<span class="fn">new</span>((<span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">VecDeque</span>::<span class="fn">new</span>()), <span class="ty">Condvar</span>::<span class="fn">new</span>()));
-<span class="cm">// Producer: lock, push, notify</span>
-<span class="cm">// Consumer: lock, check if empty, wait on condvar, pop</span>
-<span class="cm">// ... 30+ lines of careful locking</span></code></pre>
+<span class="kw">let</span> pair = <span class="ty">Arc</span>::<span class="fn">new</span>((<span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">VecDeque</span>::<span class="fn">new</span>()), <span class="ty">Condvar</span>::<span class="fn">new</span>()));
+
+<span class="cm">// Producer</span>
+<span class="kw">let</span> p = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;pair);
+std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">5</span> {
+        <span class="kw">let</span> (lock, cvar) = &amp;*p;
+        lock.<span class="fn">lock</span>().<span class="fn">unwrap</span>().<span class="fn">push_back</span>(<span class="mac">format!</span>(<span class="str">"item {i}"</span>));
+        cvar.<span class="fn">notify_one</span>();
+    }
+});
+
+<span class="cm">// Consumer</span>
+<span class="kw">let</span> (lock, cvar) = &amp;*pair;
+<span class="kw">for</span> _ <span class="kw">in</span> <span class="num">0</span>..<span class="num">5</span> {
+    <span class="kw">let</span> <span class="kw">mut</span> queue = lock.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+    <span class="kw">while</span> queue.<span class="fn">is_empty</span>() {
+        queue = cvar.<span class="fn">wait</span>(queue).<span class="fn">unwrap</span>();
+    }
+    <span class="mac">println!</span>(<span class="str">"received: {}"</span>, queue.<span class="fn">pop_front</span>().<span class="fn">unwrap</span>());
+}</code></pre>
 
       <p>
-        This works but requires managing a mutex, a condition variable, and the wake-up
-        logic manually. It's error-prone and hard to extend.
+        This works, but requires managing a mutex, a condition variable, and the wake-up
+        logic manually. Lock, check if empty, wait, re-check - it's error-prone and
+        hard to extend.
       </p>
 
       <h2>The pattern: channels</h2>
@@ -140,13 +158,13 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         patterns, <code>crossbeam-channel</code> provides:
       </p>
       <ul>
-        <li><strong>MPMC</strong> (multiple producer, multiple consumer) &mdash; multiple
+        <li><strong>MPMC</strong> (multiple producer, multiple consumer) - multiple
           threads can receive from the same channel</li>
-        <li><strong><code>select!</code></strong> &mdash; wait on multiple channels
+        <li><strong><code>select!</code></strong> - wait on multiple channels
           simultaneously, acting on whichever has data first</li>
-        <li><strong>Timeouts</strong> &mdash; <code>recv_timeout</code> for non-blocking
+        <li><strong>Timeouts</strong> - <code>recv_timeout</code> for non-blocking
           waits</li>
-        <li><strong>Better performance</strong> &mdash; crossbeam channels are generally
+        <li><strong>Better performance</strong> - crossbeam channels are generally
           faster than <code>std::sync::mpsc</code></li>
       </ul>
 
@@ -175,7 +193,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         watcher, network listener) needs to send events into the UI loop, it sends them
         through a channel. The main loop receives from the channel on each tick, triggering
         re-renders. See
-        <a href="what-the-real-world-taught-us.html">Designing a TUI Framework &mdash;
+        <a href="what-the-real-world-taught-us.html">Designing a TUI Framework -
         Part 2</a> for the full story on ports and channels.
       </p>
 
@@ -186,12 +204,12 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
           event systems, decoupled components. When the data flows in one direction.</li>
         <li><strong>Shared state (<code>Arc&lt;Mutex&lt;T&gt;&gt;</code>):</strong> when
           multiple threads need low-latency access to the same data structure (a shared
-          cache, a configuration map). When the data doesn't flow &mdash; it's consulted
+          cache, a configuration map). When the data doesn't flow - it's consulted
           in place.</li>
       </ul>
       <blockquote>
         "Don't communicate by sharing memory; share memory by communicating."
-        &mdash; Go proverb, equally applicable in Rust
+        - Go proverb, equally applicable in Rust
       </blockquote>
       <p>
         When in doubt, start with channels. They're easier to reason about, can't deadlock
@@ -211,21 +229,21 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><strong>#20: Channels &mdash; Message Passing</strong></li>
+          <li><strong>#20: Channels - Message Passing</strong></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -235,7 +253,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

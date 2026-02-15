@@ -31,7 +31,7 @@
         Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
 
       <p>
-        We're building a chat server. Not a toy &mdash; a real TCP server that accepts
+        We're building a chat server. Not a toy - a real TCP server that accepts
         connections, parses messages, handles errors, and will eventually support rooms,
         commands, threads, and async. But we start simple: accept a connection, read lines,
         parse them, echo them back.
@@ -74,17 +74,17 @@
         and every integer is just an integer. Let's fix all three.
       </p>
 
-      <h2>Pattern #1: Newtypes &mdash; making the compiler your ally</h2>
+      <h2>Pattern #1: Newtypes - making the compiler your ally</h2>
 
       <p>
         Our server will have users and rooms. Both will have integer IDs. Without newtypes,
         both are <code>u64</code>, and the compiler can't tell them apart:
       </p>
 
-      <pre><code><span class="kw">fn</span> <span class="fn">kick_user</span>(user: <span class="ty">u64</span>, room: <span class="ty">u64</span>) { <span class="cm">/* ... */</span> }
+      <pre><code><span class="kw">fn</span> <span class="fn">register_client</span>(id: <span class="ty">u64</span>, room: <span class="ty">u64</span>) { <span class="cm">/* ... */</span> }
 
-<span class="cm">// Oops: arguments swapped. Compiles fine.</span>
-<span class="fn">kick_user</span>(room_id, user_id);</code></pre>
+<span class="cm">// Oops: which is the user, which is the room?</span>
+<span class="fn">register_client</span>(room_id, client_id);</code></pre>
 
       <p>
         Wrap each in a single-field tuple struct and the bug becomes a compile error:
@@ -113,7 +113,7 @@
       <p>
         <code>UserId</code> and <code>RoomId</code> are different types now. Same
         representation at runtime (<code>u64</code>), zero overhead, but the compiler
-        rejects mix-ups. We define <code>RoomId</code> the same way &mdash; it'll be used
+        rejects mix-ups. We define <code>RoomId</code> the same way - it'll be used
         from <a href="chat-server-rooms-users.html">Stage 2</a> onward.
       </p>
       <p>
@@ -121,7 +121,7 @@
         covers the full pattern including the orphan rule workaround.
       </p>
 
-      <h2>Pattern #2: From / Into &mdash; a message wire format</h2>
+      <h2>Pattern #2: From / Into - a message wire format</h2>
 
       <p>
         Our server needs a message format. Something simple: <code>username:message body\n</code>.
@@ -139,7 +139,7 @@
 }</code></pre>
 
       <p>
-        Parsing can fail &mdash; the line might not have a <code>:</code> delimiter, or the
+        Parsing can fail - the line might not have a <code>:</code> delimiter, or the
         username might be empty. So we implement <code>FromStr</code>, which lets us write
         <code>line.parse::&lt;Message&gt;()</code> and get a <code>Result</code> back:
       </p>
@@ -165,8 +165,8 @@
 }</code></pre>
 
       <p>
-        For the other direction &mdash; turning a <code>Message</code> into a string for
-        display &mdash; we implement <code>Display</code>:
+        For the other direction - turning a <code>Message</code> into a string for
+        display - we implement <code>Display</code>:
       </p>
 
       <pre><code><span class="kw">impl</span> fmt::<span class="ty">Display</span> <span class="kw">for</span> <span class="ty">Message</span> {
@@ -187,7 +187,7 @@
         gives you <code>Into</code> for free.
       </p>
 
-      <h2>Pattern #3: Error handling &mdash; ? and thiserror</h2>
+      <h2>Pattern #3: Error handling - ? and thiserror</h2>
 
       <p>
         Our server has two kinds of errors: network failures (<code>io::Error</code>) and
@@ -312,12 +312,12 @@ no delimiter here          <span class="cm"># → ERROR: parse error: missing ':
         Three patterns are already working:
       </p>
       <ul>
-        <li><strong>Newtypes</strong> &mdash; <code>UserId</code> and <code>RoomId</code>
+        <li><strong>Newtypes</strong> - <code>UserId</code> and <code>RoomId</code>
           prevent ID mix-ups at zero cost</li>
-        <li><strong>From / Into</strong> &mdash; <code>FromStr</code> for parsing,
+        <li><strong>From / Into</strong> - <code>FromStr</code> for parsing,
           <code>Display</code> for output, <code>?</code> calls <code>.into()</code>
           on errors</li>
-        <li><strong>Error handling</strong> &mdash; <code>ChatError</code> with
+        <li><strong>Error handling</strong> - <code>ChatError</code> with
           <code>thiserror</code>, <code>?</code> propagation, graceful recovery on
           parse errors</li>
       </ul>
@@ -325,7 +325,7 @@ no delimiter here          <span class="cm"># → ERROR: parse error: missing ':
       <p>
         What's missing: the server handles one connection at a time. There are no rooms,
         no broadcasting, no shared state. That's <a href="chat-server-rooms-users.html">the next post</a>
-        &mdash; and it's where ownership gets interesting.
+        - and it's where ownership gets interesting.
       </p>
 
       <nav class="series-index" id="series-index">
@@ -344,7 +344,7 @@ no delimiter here          <span class="cm"># → ERROR: parse error: missing ':
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

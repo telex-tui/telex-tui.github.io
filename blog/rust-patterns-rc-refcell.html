@@ -25,7 +25,7 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust Patterns That Matter #6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</h1>
+      <h1>Rust Patterns That Matter #6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</h1>
       <div class="post-meta">March 2026</div>
       <p class="series-nav">Post 6 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
@@ -33,8 +33,8 @@
         <a href="rust-patterns-interior-mutability.html">#4</a> covered
         <code>RefCell</code>: mutation through a shared reference, checked at runtime.
         <a href="rust-patterns-shared-ownership.html">#5</a> covered <code>Rc</code>:
-        multiple owners of the same data, but read-only. When you need both &mdash; shared
-        ownership <em>and</em> mutation &mdash; you combine them. This is one of the most
+        multiple owners of the same data, but read-only. When you need both - shared
+        ownership <em>and</em> mutation - you combine them. This is one of the most
         common patterns in single-threaded Rust.
       </p>
 
@@ -118,13 +118,13 @@
       </p>
       <p>
         In garbage-collected languages, every heap object is implicitly <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
-        &mdash; shared by reference, mutable by anyone, garbage collected when nobody holds a
+        - shared by reference, mutable by anyone, garbage collected when nobody holds a
         reference. Rust makes this machinery explicit. The pattern isn't fighting the borrow
         checker; it's the standard way to express shared mutable state when the borrow
         checker's static analysis can't model your access pattern.
       </p>
       <p>
-        UI frameworks, observer patterns, graph structures, callback registries &mdash; these
+        UI frameworks, observer patterns, graph structures, callback registries - these
         all have shared mutable state. <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is how
         idiomatic Rust handles it.
       </p>
@@ -152,7 +152,7 @@ count.<span class="fn">update</span>(|n| *n += <span class="num">1</span>);
         <code>.update()</code> calls <code>.borrow_mut()</code> and applies the closure.
         The <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is invisible to the component author.
         See <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework
-        &mdash; Part 1</a> for the full story.
+        - Part 1</a> for the full story.
       </p>
 
       <h2>The common pitfall: overlapping borrows</h2>
@@ -204,12 +204,12 @@ guard.<span class="fn">push</span>(<span class="num">4</span>);
         <strong>When not to use it:</strong>
       </p>
       <ul>
-        <li>Across threads &mdash; use <code>Arc&lt;Mutex&lt;T&gt;&gt;</code>
+        <li>Across threads - use <code>Arc&lt;Mutex&lt;T&gt;&gt;</code>
           (<a href="rust-patterns-arc-mutex.html">#19</a>) instead</li>
         <li>When you can use <code>&amp;mut self</code> methods and pass ownership clearly
-          &mdash; the compiler's static checking is always preferable to runtime checking</li>
+          - the compiler's static checking is always preferable to runtime checking</li>
         <li>For performance-critical inner loops where even the overhead of refcounting
-          matters &mdash; consider an arena with indices
+          matters - consider an arena with indices
           (<a href="rust-patterns-index-based-design.html">#8</a>) instead</li>
       </ul>
 
@@ -225,21 +225,21 @@ guard.<span class="fn">push</span>(<span class="num">4</span>);
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><strong>#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</strong></li>
+          <li><strong>#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</strong></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -249,7 +249,7 @@ guard.<span class="fn">push</span>(<span class="num">4</span>);
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

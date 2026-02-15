@@ -52,7 +52,7 @@
               cannot be known at compile time</span></code></pre>
 
       <p>
-        <code>dyn Fn()</code> is a trait object &mdash; it has no fixed size. You can't
+        <code>dyn Fn()</code> is a trait object - it has no fixed size. You can't
         put an unsized type directly in a struct field.
       </p>
 
@@ -185,7 +185,7 @@
 }</code></pre>
 
       <p>
-        Both branches return <code>Box&lt;dyn Fn(i32) -&gt; i32&gt;</code> &mdash; a single
+        Both branches return <code>Box&lt;dyn Fn(i32) -&gt; i32&gt;</code> - a single
         concrete type (the box) wrapping different trait objects. This compiles.
       </p>
 
@@ -197,24 +197,24 @@
         into multiple event handlers (a button's click handler registered with both a
         keyboard shortcut and a mouse target). <code>Rc</code> allows sharing the same
         closure without heap-allocating separate copies. See
-        <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework &mdash;
+        <a href="designing-a-tui-framework-in-rust.html">Designing a TUI Framework -
         Part 1</a> for details.
       </p>
 
       <h2>When to use which</h2>
 
       <ul>
-        <li><strong><code>Box&lt;dyn Fn&gt;</code></strong> &mdash; struct fields,
+        <li><strong><code>Box&lt;dyn Fn&gt;</code></strong> - struct fields,
           heterogeneous collections, any time you need to store a closure and the type
           can vary</li>
-        <li><strong>Generics (<code>F: Fn</code>)</strong> &mdash; hot paths where you
+        <li><strong>Generics (<code>F: Fn</code>)</strong> - hot paths where you
           want inlining, or when the struct has a single closure that's known at construction
           time</li>
-        <li><strong><code>impl Fn</code></strong> &mdash; return types when there's one
+        <li><strong><code>impl Fn</code></strong> - return types when there's one
           concrete closure being returned</li>
-        <li><strong><code>Rc&lt;dyn Fn&gt;</code></strong> &mdash; when the same closure
+        <li><strong><code>Rc&lt;dyn Fn&gt;</code></strong> - when the same closure
           needs to be shared (cloned) across multiple owners</li>
-        <li><strong><code>fn()</code> pointer</strong> &mdash; when the closure captures
+        <li><strong><code>fn()</code> pointer</strong> - when the closure captures
           nothing (function pointers are simpler and have no allocation)</li>
       </ul>
 
@@ -230,21 +230,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><strong>#16: Storing and Returning Closures</strong></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -254,7 +254,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

@@ -33,7 +33,7 @@
         Your application reads a config file, parses JSON, queries a database, and serves
         HTTP. Each layer produces its own error type. Combining them manually means writing
         error enums, <code>Display</code> impls, and <code>From</code> impls for every
-        source. There's a better way &mdash; and the answer depends on whether you're
+        source. There's a better way - and the answer depends on whether you're
         writing a library or an application.
       </p>
 
@@ -79,7 +79,7 @@
         and an HTTP layer and you're writing more error plumbing than actual logic.
       </p>
 
-      <h2><code>thiserror</code> &mdash; for libraries</h2>
+      <h2><code>thiserror</code> - for libraries</h2>
 
       <p>
         <code>thiserror</code> is a derive macro that generates the <code>Display</code> and
@@ -119,7 +119,7 @@
         programmatically handle specific error cases. The error type is part of your API.
       </p>
 
-      <h2><code>anyhow</code> &mdash; for applications</h2>
+      <h2><code>anyhow</code> - for applications</h2>
 
       <p>
         In a binary (not a library), you often don't need to match on error variants. You
@@ -167,14 +167,14 @@ Caused by:
         <li><strong>Libraries</strong> use <code>thiserror</code>. They define structured
           error types that callers can match on. The error type is part of the public API.</li>
         <li><strong>Applications</strong> (binaries) use <code>anyhow</code>. They bubble
-          errors up with context messages. Nobody matches on the error &mdash; it's displayed
+          errors up with context messages. Nobody matches on the error - it's displayed
           to the user.</li>
       </ul>
 
       <h2>When the line blurs</h2>
 
       <p>
-        Sometimes a library's internal code doesn't need structured errors &mdash; it's
+        Sometimes a library's internal code doesn't need structured errors - it's
         private logic that will wrap errors before returning them publicly. Using
         <code>anyhow</code> internally and converting to <code>thiserror</code> at the
         public boundary is a valid approach.
@@ -205,7 +205,7 @@ Caused by:
         <li><strong><code>anyhow</code></strong>: binary applications, CLI tools, scripts,
           anything where errors are displayed to humans rather than matched on by code</li>
         <li><strong>Manual enums</strong>: when you want full control and don't want the
-          dependency &mdash; the pattern is the same, just more verbose</li>
+          dependency - the pattern is the same, just more verbose</li>
       </ul>
 
       <p>
@@ -221,21 +221,21 @@ Caused by:
           <li><strong>#3: Error Handling</strong></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -245,7 +245,7 @@ Caused by:
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

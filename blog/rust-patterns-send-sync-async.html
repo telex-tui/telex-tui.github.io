@@ -143,10 +143,10 @@
         thread-safe counterpart:
       </p>
       <ul>
-        <li><code>Rc</code> &rarr; <code>Arc</code></li>
-        <li><code>RefCell</code> &rarr; <code>tokio::sync::Mutex</code> (or
+        <li><code>Rc</code> -> <code>Arc</code></li>
+        <li><code>RefCell</code> -> <code>tokio::sync::Mutex</code> (or
           <code>std::sync::Mutex</code>)</li>
-        <li><code>Cell</code> &rarr; <code>AtomicU32</code> / <code>AtomicBool</code> / etc.</li>
+        <li><code>Cell</code> -> <code>AtomicU32</code> / <code>AtomicBool</code> / etc.</li>
       </ul>
 
       <pre><code><span class="kw">use</span> std::sync::<span class="ty">Arc</span>;
@@ -170,7 +170,7 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
 }).<span class="kw">await</span>;</code></pre>
 
       <p>
-        <code>spawn_local</code> runs the task on the current thread only &mdash; no
+        <code>spawn_local</code> runs the task on the current thread only - no
         work stealing, no thread migration. The future doesn't need to be <code>Send</code>
         because it never moves between threads. The trade-off is that local tasks don't
         benefit from multi-threaded scheduling.
@@ -200,7 +200,7 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
         <li>Find the non-<code>Send</code> value (the compiler tells you)</li>
         <li>Find the <code>.await</code> it's held across (the compiler tells you this
           too)</li>
-        <li>Make the value not alive at the <code>.await</code> &mdash; scope it, extract
+        <li>Make the value not alive at the <code>.await</code> - scope it, extract
           it into a sync function, or replace it with a <code>Send</code> alternative</li>
       </ol>
       <p>
@@ -214,7 +214,7 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
         (<a href="rust-patterns-interior-mutability.html">interior mutability</a>) and
         ends with the last one (<code>Send</code>/<code>Sync</code> in async). Each pattern
         exists because Rust's ownership model forces you to express things that other
-        languages leave implicit. The patterns aren't workarounds &mdash; they're the
+        languages leave implicit. The patterns aren't workarounds - they're the
         vocabulary of productive Rust.
       </p>
 
@@ -230,21 +230,21 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><strong>#22: Send / Sync in Async</strong></li>
         </ol>
@@ -254,7 +254,7 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

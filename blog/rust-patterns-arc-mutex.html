@@ -65,9 +65,9 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         The mapping is direct:
       </p>
       <ul>
-        <li><code>Rc</code> &rarr; <code>Arc</code> (Atomic Reference Counted)</li>
-        <li><code>RefCell</code> &rarr; <code>Mutex</code> (mutual exclusion lock)</li>
-        <li><code>Rc&lt;RefCell&lt;T&gt;&gt;</code> &rarr; <code>Arc&lt;Mutex&lt;T&gt;&gt;</code></li>
+        <li><code>Rc</code> -> <code>Arc</code> (Atomic Reference Counted)</li>
+        <li><code>RefCell</code> -> <code>Mutex</code> (mutual exclusion lock)</li>
+        <li><code>Rc&lt;RefCell&lt;T&gt;&gt;</code> -> <code>Arc&lt;Mutex&lt;T&gt;&gt;</code></li>
       </ul>
       <p>
         <code>Arc</code> uses atomic operations for the reference count, making it safe
@@ -107,7 +107,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 
       <p>
         <code>.lock()</code> returns <code>Result&lt;MutexGuard, PoisonError&gt;</code>.
-        If a thread panics while holding the lock, the mutex becomes "poisoned" &mdash;
+        If a thread panics while holding the lock, the mutex becomes "poisoned" -
         the data inside might be in an inconsistent state.
       </p>
       <p>
@@ -147,7 +147,7 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
       <h2>Mutex vs RwLock</h2>
 
       <p>
-        <code>RwLock</code> sounds strictly better &mdash; it allows concurrent reads. But
+        <code>RwLock</code> sounds strictly better - it allows concurrent reads. But
         it has higher per-operation overhead: tracking the reader count requires additional
         atomic operations. For a lightly contended lock or a lock where reads and writes
         are roughly balanced, <code>Mutex</code> is faster.
@@ -172,7 +172,7 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
         <li>Any cross-thread shared mutable state</li>
       </ul>
       <p>
-        When not to: if you can avoid sharing state entirely (message passing &mdash;
+        When not to: if you can avoid sharing state entirely (message passing -
         <a href="rust-patterns-channels.html">#20</a>), do that. Shared mutable state
         is harder to reason about than message passing, even with Rust's safety guarantees.
         <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> is safe, but it's still a lock, and locks can
@@ -191,21 +191,21 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><strong>#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</strong></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -215,7 +215,7 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

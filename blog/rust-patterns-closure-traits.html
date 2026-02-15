@@ -66,13 +66,13 @@
         it uses captured variables:
       </p>
       <ul>
-        <li><strong><code>FnOnce</code></strong> &mdash; can be called once. The closure
+        <li><strong><code>FnOnce</code></strong> - can be called once. The closure
           might consume (move out of) a captured value. After that, the value is gone and
           the closure can't be called again.</li>
-        <li><strong><code>FnMut</code></strong> &mdash; can be called multiple times, but
+        <li><strong><code>FnMut</code></strong> - can be called multiple times, but
           might mutate captured values. Requires exclusive (<code>&amp;mut</code>) access
           to the closure each time it's called.</li>
-        <li><strong><code>Fn</code></strong> &mdash; can be called multiple times with only
+        <li><strong><code>Fn</code></strong> - can be called multiple times with only
           shared (<code>&amp;</code>) access. Doesn't mutate or consume anything from its
           environment.</li>
       </ul>
@@ -187,7 +187,7 @@
       </ul>
       <p>
         <strong>Default to the least restrictive trait your function needs.</strong> If you
-        only call the closure once, use <code>FnOnce</code> &mdash; it accepts all closures.
+        only call the closure once, use <code>FnOnce</code> - it accepts all closures.
         Only require <code>Fn</code> if you genuinely need to call it multiple times
         without exclusive access.
       </p>
@@ -204,21 +204,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><strong>#15: Fn, FnMut, FnOnce</strong></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -228,7 +228,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

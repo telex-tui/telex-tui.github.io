@@ -25,12 +25,12 @@
 
   <main class="container">
     <article class="post">
-      <h1>Designing a TUI Framework in Rust &mdash; Part 2</h1>
+      <h1>Designing a TUI Framework in Rust - Part 2</h1>
       <div class="post-meta">February 2026</div>
 
       <p>
         The <a href="designing-a-tui-framework-in-rust.html">first version</a> of Telex worked well
-        for self-contained applications &mdash; counters, forms, lists. But real applications need
+        for self-contained applications - counters, forms, lists. But real applications need
         to talk to the outside world, recover from errors, and run side effects. Here's what changed
         and why.
       </p>
@@ -40,7 +40,7 @@
       <p>
         The original Telex had two hook APIs. The first was index-based, following React's model:
         hooks were stored in a <code>Vec</code>, and each call to <code>use_state</code> returned
-        the next item by incrementing a counter. This worked, but it came with React's rules &mdash;
+        the next item by incrementing a counter. This worked, but it came with React's rules -
         no hooks in conditionals, no hooks in loops, always call them in the same order, or the
         indices desynchronize and the wrong state comes back.
       </p>
@@ -68,7 +68,7 @@
 
       <p>
         The first version of Telex had no story for external events. If you wanted to read from a
-        WebSocket or a MIDI device, you were on your own &mdash; spawn a thread, put data somewhere,
+        WebSocket or a MIDI device, you were on your own - spawn a thread, put data somewhere,
         hope the render loop notices. There was no mechanism for a background thread to wake the
         event loop, so data sat in a buffer until the next keypress triggered a re-render.
       </p>
@@ -93,14 +93,14 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
     <span class="cm">// process this frame's messages</span>
 }</code></pre>
       <p>
-        The <code>Sender</code> is <code>Send</code> &mdash; it crosses the thread boundary.
+        The <code>Sender</code> is <code>Send</code> - it crosses the thread boundary.
         Everything else (<code>State</code>, <code>View</code>, <code>Scope</code>) stays on the
         main thread. No <code>Arc</code>, no <code>Send</code> bounds on components, no mutex
         contention on state.
       </p>
       <p>
         At the top of each frame, the run loop drains all registered channels. Components see only
-        messages that arrived since the last render. This is frame-buffered delivery &mdash; messages
+        messages that arrived since the last render. This is frame-buffered delivery - messages
         are batched per frame rather than processed one at a time.
       </p>
 
@@ -116,7 +116,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       <h2>Effects</h2>
 
       <p>
-        Side effects &mdash; logging, starting a timer, opening a file &mdash; can't happen during
+        Side effects - logging, starting a timer, opening a file - can't happen during
         tree construction. The component function builds a description of the UI; it shouldn't
         mutate the world while doing so. Effects run after render, when the view tree is complete
         and the buffer has been flushed:
@@ -135,7 +135,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
     || <span class="fn">println!</span>(<span class="str">"Cleanup on exit"</span>)
 });</code></pre>
       <p>
-        Effects use the same <code>TypeId</code> keying as state &mdash; order-independent, safe in
+        Effects use the same <code>TypeId</code> keying as state - order-independent, safe in
         conditionals. The run loop renders, flushes effects, and if any effect modified state,
         re-renders once more. A cycle detector panics if effects fire more than 100 times in 10
         frames, catching infinite loops early rather than hanging the terminal.
@@ -164,7 +164,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         When a panic occurs inside the boundary, <code>catch_unwind</code> catches it, the subtree
         is replaced with the fallback view, effect cleanups for the failed subtree run, and the rest
         of the application continues. Without an error boundary wrapping it, a panic propagates to
-        the run loop and terminates the app &mdash; same as before. Safety is opt-in, not forced
+        the run loop and terminates the app - same as before. Safety is opt-in, not forced
         overhead.
       </p>
 
@@ -172,9 +172,9 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 
       <p>
         The <code>View</code> enum is closed by design. You can compose existing widgets to build
-        new ones &mdash; a settings panel is a <code>VStack</code> of <code>TextInput</code> and
+        new ones - a settings panel is a <code>VStack</code> of <code>TextInput</code> and
         <code>Checkbox</code> widgets. But some things can't be composed. A piano roll, a
-        spectrogram, a hex editor &mdash; these need direct control over character cells.
+        spectrogram, a hex editor - these need direct control over character cells.
       </p>
       <p>
         <code>View::Custom</code> is the escape hatch. It accepts anything implementing the
@@ -188,7 +188,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       <p>
         A custom widget participates fully in layout, focus navigation, and the render pipeline. It
         gets a rectangular area and a mutable reference to the cell buffer. The framework doesn't
-        know or care what it draws &mdash; it just reserves the space and hands over control.
+        know or care what it draws - it just reserves the space and hands over control.
       </p>
       <p>
         This is the trade-off acknowledged in the first post made explicit: the enum is closed for
@@ -200,7 +200,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 
       <p>
         The first version re-rendered every frame unconditionally. For a TUI app that's mostly idle
-        &mdash; waiting for the user to press a key &mdash; this wastes CPU rebuilding the same
+        - waiting for the user to press a key - this wastes CPU rebuilding the same
         view tree and diffing the same buffer, finding nothing changed.
       </p>
       <p>
@@ -213,14 +213,14 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
       </ul>
       <p>
         If none of these are true, the event loop skips the entire render pass and goes back to
-        sleep. Idle CPU drops from 5&ndash;10% to near zero.
+        sleep. Idle CPU drops from 5-10% to near zero.
       </p>
       <p>
         This sounds straightforward, but getting it right means every path that produces new data
         must set the appropriate flag. A recent bug illustrated this precisely: the
         <code>stream!</code>, <code>text_stream!</code>, and <code>text_stream_with_restart!</code>
         macros used plain <code>mpsc::Sender</code> with no wake mechanism. Tokens arrived from
-        background threads, but the event loop never noticed &mdash; no dirty flag, no re-render.
+        background threads, but the event loop never noticed - no dirty flag, no re-render.
         Data sat invisible until the user happened to press a key. The fix was to add a wake flag
         to stream handles, set by the background thread on each token, checked by the event loop
         alongside the other dirty sources.
@@ -235,10 +235,10 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 
       <p>
         The architecture is stable, but there's room to grow. Component-level memoization would let
-        subtrees skip re-evaluation when their inputs haven't changed &mdash; not needed yet at TUI
+        subtrees skip re-evaluation when their inputs haven't changed - not needed yet at TUI
         scale, but the component identity mechanism is already in place to support it. Layout caching
         would avoid recalculating constraints that haven't changed. And there's a model layer question:
-        ports and reducers hint at state that doesn't belong to any one component &mdash; a database
+        ports and reducers hint at state that doesn't belong to any one component - a database
         handle, a network connection, a shared resource. <code>use_context</code> partially addresses
         this, but a standalone store that lives outside the component tree may eventually be needed.
       </p>
@@ -254,7 +254,7 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

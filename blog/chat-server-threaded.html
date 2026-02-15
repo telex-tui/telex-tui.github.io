@@ -32,7 +32,7 @@
 
       <p>
         Until now, our server handled one client at a time. Connect a second client
-        and it blocks until the first disconnects. That's not a chat server &mdash; it's
+        and it blocks until the first disconnects. That's not a chat server - it's
         a queue. Now we spawn a thread per client and make the server state thread-safe.
         Two patterns make this work.
       </p>
@@ -51,16 +51,16 @@
         and you can't have multiple mutable references anyway. Two things need to change:
       </p>
       <ol>
-        <li><code>Rc&lt;RefCell&gt;</code> &rarr; <code>Arc&lt;Mutex&gt;</code> for shared state</li>
-        <li>Direct writes &rarr; <strong>channels</strong> for message delivery</li>
+        <li><code>Rc&lt;RefCell&gt;</code> -> <code>Arc&lt;Mutex&gt;</code> for shared state</li>
+        <li>Direct writes -> <strong>channels</strong> for message delivery</li>
       </ol>
 
-      <h2>Pattern #19: Arc&lt;Mutex&lt;T&gt;&gt; &mdash; shared state across threads</h2>
+      <h2>Pattern #19: Arc&lt;Mutex&lt;T&gt;&gt; - shared state across threads</h2>
 
       <p>
-        <code>Rc</code> isn't <code>Send</code> &mdash; it can't cross thread boundaries
+        <code>Rc</code> isn't <code>Send</code> - it can't cross thread boundaries
         because its reference count isn't atomic. <code>RefCell</code> isn't <code>Sync</code>
-        &mdash; it can't be shared between threads because its borrow flag isn't atomic.
+        - it can't be shared between threads because its borrow flag isn't atomic.
       </p>
       <p>
         The thread-safe equivalents: <code>Arc</code> (atomic reference counting) for
@@ -92,7 +92,7 @@
 }</code></pre>
 
       <p>
-        Each thread gets its own <code>Arc</code> handle (cheap &mdash; just an atomic
+        Each thread gets its own <code>Arc</code> handle (cheap - just an atomic
         increment). When a thread needs server state, it calls <code>.lock().unwrap()</code>
         to get exclusive access:
       </p>
@@ -116,12 +116,12 @@
         covers when to use Mutex vs RwLock and common deadlock patterns.
       </p>
 
-      <h2>Pattern #20: Channels &mdash; message passing</h2>
+      <h2>Pattern #20: Channels - message passing</h2>
 
       <p>
         The lock discipline creates a problem: how do we deliver messages to clients
         without holding the server lock? We can't write to a socket while the lock is
-        held &mdash; that would block all other threads during a slow write.
+        held - that would block all other threads during a slow write.
       </p>
       <p>
         The answer: channels. Each client gets an <code>mpsc::Sender</code> registered
@@ -150,7 +150,7 @@
       <p>
         When the server broadcasts a message, it locks briefly, reads the member list,
         and sends the event through each member's channel. The actual TCP write happens
-        in each client's writer thread &mdash; no lock held:
+        in each client's writer thread - no lock held:
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">broadcast_message</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, room_id: <span class="ty">RoomId</span>, sender_id: <span class="ty">UserId</span>, username: &amp;<span class="kw">str</span>, body: &amp;<span class="kw">str</span>) {
@@ -221,9 +221,9 @@ hello from bob                 <span class="cm"># → alice sees: &lt;bob&gt; he
       <h2>What we have, what's missing</h2>
 
       <ul>
-        <li><strong>Arc&lt;Mutex&gt;</strong> &mdash; shared server state across threads.
+        <li><strong>Arc&lt;Mutex&gt;</strong> - shared server state across threads.
           Brief locks, no lock during IO.</li>
-        <li><strong>Channels</strong> &mdash; mpsc for delivering events to client writer
+        <li><strong>Channels</strong> - mpsc for delivering events to client writer
           threads. Decouples server logic from TCP writes.</li>
       </ul>
 
@@ -249,7 +249,7 @@ hello from bob                 <span class="cm"># → alice sees: &lt;bob&gt; he
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

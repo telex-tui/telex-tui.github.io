@@ -31,7 +31,7 @@
         Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
 
       <p>
-        <a href="chat-server-threaded.html">Last time</a> we went multi-threaded &mdash;
+        <a href="chat-server-threaded.html">Last time</a> we went multi-threaded -
         one OS thread per client. It works, but threads are expensive: each one costs
         ~8KB of stack, and context switching adds up. For thousands of concurrent
         connections, we want async: lightweight tasks on a small thread pool.
@@ -57,9 +57,10 @@
 
       <p>
         In Stage 4, our filter system used <code>Box&lt;dyn FnMut(...)&gt;</code>. In
-        async, we want filters that can do async work (maybe query a database, call an
-        API). But async methods return futures, and futures have anonymous types &mdash;
-        you can't name them.
+        async, even simple filters need to <code>.await</code> - our counting filter
+        acquires a <code>tokio::Mutex</code>, which requires <code>.await</code>. The moment
+        a filter does any async work, its return type must be a <code>Future</code>. But
+        async methods return futures with anonymous types - you can't name them.
       </p>
       <p>
         The solution: return a <code>Pin&lt;Box&lt;dyn Future&gt;&gt;</code>:
@@ -77,12 +78,12 @@
         Three layers, each solving a specific problem:
       </p>
       <ul>
-        <li><strong>Future</strong> &mdash; the async computation. Every <code>async fn</code>
+        <li><strong>Future</strong> - the async computation. Every <code>async fn</code>
           returns one, but its concrete type is unnameable.</li>
-        <li><strong>Box</strong> &mdash; heap-allocate to erase the concrete type. Different
+        <li><strong>Box</strong> - heap-allocate to erase the concrete type. Different
           implementations can return different future types, but they all look like
           <code>Box&lt;dyn Future&gt;</code>.</li>
-        <li><strong>Pin</strong> &mdash; guarantee the future won't move in memory. Async
+        <li><strong>Pin</strong> - guarantee the future won't move in memory. Async
           state machines can contain self-references (a reference to a local variable
           that's part of the state machine). Moving would invalidate those references.
           <code>Pin</code> prevents that.</li>
@@ -128,10 +129,10 @@
 <span class="cm">// the trait `Send` is not implemented for `Rc&lt;...&gt;`</span></code></pre>
 
       <p>
-        This is why every step of our evolution mattered: <code>Rc</code> &rarr;
-        <code>Arc</code> (Arc is Send + Sync), <code>RefCell</code> &rarr;
+        This is why every step of our evolution mattered: <code>Rc</code> ->
+        <code>Arc</code> (Arc is Send + Sync), <code>RefCell</code> ->
         <code>Mutex</code> (Mutex is Send + Sync), <code>Box&lt;dyn FnMut&gt;</code>
-        &rarr; <code>Box&lt;dyn FnMut + Send&gt;</code>.
+        -> <code>Box&lt;dyn FnMut + Send&gt;</code>.
       </p>
       <p>
         The <code>AsyncFilter</code> trait requires <code>Send + Sync</code>:
@@ -207,24 +208,24 @@ hello!                         <span class="cm"># → bob sees: &lt;alice&gt; he
         Six posts, six branches, 22 patterns:
       </p>
       <ol>
-        <li><strong><a href="chat-server-hello-tcp.html">Hello, TCP</a></strong> &mdash;
+        <li><strong><a href="chat-server-hello-tcp.html">Hello, TCP</a></strong> -
           Newtype, From/Into, Error Handling</li>
-        <li><strong><a href="chat-server-rooms-users.html">Rooms and Users</a></strong> &mdash;
+        <li><strong><a href="chat-server-rooms-users.html">Rooms and Users</a></strong> -
           RefCell, Rc, Rc&lt;RefCell&gt;, Split Borrows, Index-Based Design, Drop/RAII</li>
-        <li><strong><a href="chat-server-parsing.html">Parsing and Performance</a></strong> &mdash;
-          Lifetime Annotations, Cow, Custom Iterators, &rsquo;static+Clone</li>
-        <li><strong><a href="chat-server-commands.html">Commands and Plugins</a></strong> &mdash;
+        <li><strong><a href="chat-server-parsing.html">Parsing and Performance</a></strong> -
+          Lifetime Annotations, Cow, Custom Iterators, 'static+Clone</li>
+        <li><strong><a href="chat-server-commands.html">Commands and Plugins</a></strong> -
           Enum Dispatch, Fn/FnMut/FnOnce, Storing Closures, Builder, Typestate</li>
-        <li><strong><a href="chat-server-threaded.html">Going Multi-threaded</a></strong> &mdash;
+        <li><strong><a href="chat-server-threaded.html">Going Multi-threaded</a></strong> -
           Arc&lt;Mutex&gt;, Channels</li>
-        <li><strong>Going Async</strong> &mdash;
+        <li><strong>Going Async</strong> -
           Pin+Boxing Futures, Send/Sync in Async</li>
       </ol>
 
       <p>
         Every pattern was motivated by a real problem in a real project. The companion
-        series &mdash; <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>
-        &mdash; covers each pattern in depth.
+        series - <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>
+        - covers each pattern in depth.
       </p>
 
       <nav class="series-index" id="series-index">
@@ -243,7 +244,7 @@ hello!                         <span class="cm"># → bob sees: &lt;alice&gt; he
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

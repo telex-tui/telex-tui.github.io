@@ -31,7 +31,7 @@
         Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
 
       <p>
-        <a href="chat-server-hello-tcp.html">Last time</a> we built an echo server &mdash;
+        <a href="chat-server-hello-tcp.html">Last time</a> we built an echo server -
         one connection at a time, no state between clients. Now we add rooms, users, and
         broadcasting. State management gets real, and we hit six patterns in the process.
       </p>
@@ -48,15 +48,15 @@
         An echo server is stateless. A chat server is the opposite: it needs to know which
         users are connected, which rooms exist, and who is in each room. In a language with
         a garbage collector, you'd toss everything into shared mutable objects and move on.
-        In Rust, the ownership system forces you to think about it &mdash; and that thinking
+        In Rust, the ownership system forces you to think about it - and that thinking
         produces better designs.
       </p>
 
-      <h2>Pattern #8: Index-based design &mdash; the foundation</h2>
+      <h2>Pattern #8: Index-based design - the foundation</h2>
 
       <p>
         The most important decision comes first: how do we structure our data? The tempting
-        approach is to store references between objects &mdash; a room holds references to its
+        approach is to store references between objects - a room holds references to its
         users, a user holds a reference to its room. In Rust, this means lifetimes everywhere,
         and you quickly hit walls: self-referential structs, borrow checker battles, and
         lifetime annotation soup.
@@ -97,12 +97,12 @@
         covers arenas, generational indices, and when to reach for this pattern.
       </p>
 
-      <h2>Pattern #4: Interior mutability &mdash; RefCell</h2>
+      <h2>Pattern #4: Interior mutability - RefCell</h2>
 
       <p>
         A room needs a member list. Multiple parts of the code need to read and modify it:
         joining adds a member, leaving removes one, broadcasting reads the list. But the
-        room is behind a shared reference (<code>&amp;self</code>) &mdash; you can't mutate
+        room is behind a shared reference (<code>&amp;self</code>) - you can't mutate
         through <code>&amp;</code> in Rust.
       </p>
       <p>
@@ -126,14 +126,15 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
         explains when RefCell is the right tool and when it's a code smell.
       </p>
 
-      <h2>Pattern #5: Shared ownership &mdash; Rc</h2>
+      <h2>Pattern #5: Shared ownership - Rc</h2>
 
       <p>
-        <code>RefCell</code> gives us runtime borrow checking, but who owns it? In our
-        single-threaded server, we want the <code>Room</code> to own the member list, but
-        we may also want to hand out handles to it. <code>Rc</code> (reference counting)
-        gives shared ownership &mdash; multiple <code>Rc</code>s point to the same data,
-        and the data is freed when the last one is dropped:
+        <code>RefCell</code> gives us runtime borrow checking, but who owns the member
+        list? The Server's <code>broadcast</code> method needs to read the member list
+        while also accessing individual clients. Without shared ownership, you'd have to
+        clone the entire <code>Vec&lt;UserId&gt;</code> on every broadcast.
+        <code>Rc</code> makes this cheap - clone the handle (one counter increment),
+        iterate members, drop it:
       </p>
 
       <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
@@ -146,7 +147,7 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
         covers Rc, Weak references, and reference cycles.
       </p>
 
-      <h2>Pattern #6: Rc&lt;RefCell&lt;T&gt;&gt; &mdash; the combo</h2>
+      <h2>Pattern #6: Rc&lt;RefCell&lt;T&gt;&gt; - the combo</h2>
 
       <p>
         Combine them: <code>Rc</code> for shared ownership, <code>RefCell</code> for
@@ -189,7 +190,7 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
         covers the full combo and the runtime panic risk.
       </p>
 
-      <h2>Pattern #7: Split borrows &mdash; reading users while writing rooms</h2>
+      <h2>Pattern #7: Split borrows - reading users while writing rooms</h2>
 
       <p>
         Broadcasting hits a classic borrow checker problem. To send a message to a room,
@@ -200,7 +201,7 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
         <li>Write to each member's TCP stream (in <code>self.users</code>)</li>
       </ol>
       <p>
-        If both were behind <code>&amp;mut self</code>, the compiler would block it &mdash;
+        If both were behind <code>&amp;mut self</code>, the compiler would block it -
         it sees one mutable borrow of the whole struct. But because <code>users</code> and
         <code>rooms</code> are separate fields, Rust allows <strong>split borrows</strong>:
         you can borrow different fields independently.
@@ -243,7 +244,7 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
         explains why the compiler can split struct borrows but not method borrows.
       </p>
 
-      <h2>Pattern #9: Drop / RAII &mdash; automatic cleanup</h2>
+      <h2>Pattern #9: Drop / RAII - automatic cleanup</h2>
 
       <p>
         What happens when a client disconnects? Their TCP stream should close, they should
@@ -259,8 +260,8 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
 }</code></pre>
 
       <p>
-        When a <code>User</code> is removed from the server &mdash; by setting their slot
-        to <code>None</code> &mdash; Rust drops the value. The <code>TcpStream</code>
+        When a <code>User</code> is removed from the server - by setting their slot
+        to <code>None</code> - Rust drops the value. The <code>TcpStream</code>
         inside is also dropped, which closes the socket. Our <code>Drop</code> impl adds
         logging. No manual close, no cleanup function, no possibility of forgetting:
       </p>
@@ -325,7 +326,7 @@ members.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(user_c
 
       <p>
         The cleanup at the bottom runs whether the client loop returned <code>Ok</code> or
-        <code>Err</code> &mdash; we call <code>leave_room</code> and <code>remove_user</code>
+        <code>Err</code> - we call <code>leave_room</code> and <code>remove_user</code>
         unconditionally. The <code>User::drop()</code> handles the TCP stream cleanup.
       </p>
 
@@ -358,22 +359,22 @@ hi alice                       <span class="cm"># → alice sees: &lt;bob&gt; hi
         We now have a stateful server with six patterns working together:
       </p>
       <ul>
-        <li><strong>Index-based design</strong> &mdash; users and rooms in <code>Vec</code>s,
+        <li><strong>Index-based design</strong> - users and rooms in <code>Vec</code>s,
           referenced by newtype IDs. No lifetimes, no self-referential structs.</li>
-        <li><strong>RefCell</strong> &mdash; runtime borrow checking for the member list
+        <li><strong>RefCell</strong> - runtime borrow checking for the member list
           behind shared references.</li>
-        <li><strong>Rc</strong> &mdash; shared ownership of the <code>RefCell</code>-wrapped
+        <li><strong>Rc</strong> - shared ownership of the <code>RefCell</code>-wrapped
           member list.</li>
-        <li><strong>Rc&lt;RefCell&gt;</strong> &mdash; the combo: shared <em>and</em> mutable.
+        <li><strong>Rc&lt;RefCell&gt;</strong> - the combo: shared <em>and</em> mutable.
           The workhorse of single-threaded state.</li>
-        <li><strong>Split borrows</strong> &mdash; reading <code>self.rooms</code> while
+        <li><strong>Split borrows</strong> - reading <code>self.rooms</code> while
           writing <code>self.users</code>, because they're separate struct fields.</li>
-        <li><strong>Drop / RAII</strong> &mdash; <code>User</code> cleanup is automatic.
+        <li><strong>Drop / RAII</strong> - <code>User</code> cleanup is automatic.
           When the value is dropped, the TCP stream closes and the log message prints.</li>
       </ul>
 
       <p>
-        What's missing: our message format is still ad hoc &mdash; just raw text lines.
+        What's missing: our message format is still ad hoc - just raw text lines.
         <a href="chat-server-parsing.html">Next time</a> we build a proper wire protocol
         with zero-copy parsing and custom iterators.
       </p>
@@ -394,7 +395,7 @@ hi alice                       <span class="cm"># → alice sees: &lt;bob&gt; hi
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

@@ -31,7 +31,7 @@
 
       <p>
         Some data structures don't fit Rust's ownership model naturally. Graphs, trees with
-        parent pointers, entity-component systems &mdash; anything where things reference
+        parent pointers, entity-component systems - anything where things reference
         each other in cycles or complex webs. The solution is surprisingly simple: stop
         using references.
       </p>
@@ -61,7 +61,7 @@
       <p>
         This is the tip of the iceberg. Even if you fix this particular error, you
         can't add nodes to a <code>Vec&lt;Node&gt;</code> while other nodes reference
-        into it &mdash; the <code>Vec</code> might reallocate, invalidating all references.
+        into it - the <code>Vec</code> might reallocate, invalidating all references.
         Self-referential structures and Rust's borrow checker are fundamentally at odds.
       </p>
 
@@ -124,7 +124,7 @@
       <p>
         No lifetimes, no borrow checker conflicts, no self-referential structures.
         Relationships are just numbers. The <code>Vec</code> can grow freely because
-        nobody holds a reference into it &mdash; they hold indices, which remain valid
+        nobody holds a reference into it - they hold indices, which remain valid
         regardless of reallocation.
       </p>
 
@@ -145,7 +145,7 @@
       <h2>Making indices type-safe</h2>
 
       <p>
-        A bare <code>usize</code> is error-prone &mdash; you could accidentally use a node
+        A bare <code>usize</code> is error-prone - you could accidentally use a node
         index as an edge index, or index into the wrong vector. The newtype pattern
         (<a href="rust-patterns-newtype.html">#1</a>) fixes this:
       </p>
@@ -218,21 +218,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><strong>#8: Index-Based Design</strong></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -242,7 +242,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

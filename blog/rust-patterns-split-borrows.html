@@ -31,7 +31,7 @@
 
       <p>
         You have a struct with two fields. A method needs to read one and write the other.
-        The compiler blocks it &mdash; it sees a borrow of the whole struct, not individual
+        The compiler blocks it - it sees a borrow of the whole struct, not individual
         fields. The fix is usually a small structural change, not a fight.
       </p>
 
@@ -91,7 +91,7 @@
       <h2>Pattern 1: Direct field access</h2>
 
       <p>
-        The simplest fix &mdash; inline the field access instead of calling a method:
+        The simplest fix - inline the field access instead of calling a method:
       </p>
 
       <pre><code><span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) {
@@ -102,7 +102,7 @@
       <p>
         The compiler knows <code>self.config</code> and <code>self.buffer</code> are
         different fields. No conflict. This works because the compiler does do field-level
-        borrow tracking for direct access &mdash; it's method calls that erase field
+        borrow tracking for direct access - it's method calls that erase field
         information.
       </p>
 
@@ -165,7 +165,7 @@
 }</code></pre>
 
       <p>
-        Wait &mdash; this is the original code that failed. Why does it work? Actually,
+        Wait - this is the original code that failed. Why does it work? Actually,
         it depends on the return type. If <code>get_width</code> returns <code>usize</code>
         (copied, no borrow), the shared borrow of <code>self</code> is released before
         <code>self.buffer</code> is mutably borrowed. If it returned <code>&amp;usize</code>,
@@ -214,21 +214,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><strong>#7: Split Borrows</strong></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -238,7 +238,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

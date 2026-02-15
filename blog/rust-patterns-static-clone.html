@@ -25,7 +25,7 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust Patterns That Matter #13: <code>'static</code> + Clone &mdash; The Escape Hatch</h1>
+      <h1>Rust Patterns That Matter #13: <code>'static</code> + Clone - The Escape Hatch</h1>
       <div class="post-meta">May 2026</div>
       <p class="series-nav">Post 13 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
@@ -48,7 +48,7 @@
               but it borrows `data`, which is owned by the current function</span></code></pre>
 
       <p>
-        <code>thread::spawn</code> requires the closure to be <code>'static</code> &mdash;
+        <code>thread::spawn</code> requires the closure to be <code>'static</code> -
         it can't borrow from the enclosing function because the thread might outlive it.
         The same applies to <code>tokio::spawn</code>, <code>rayon::spawn</code>, and any
         API that takes <code>F: FnOnce() + Send + 'static</code>.
@@ -60,13 +60,13 @@
         A spawned task or thread has no guaranteed lifetime. It might run for a microsecond
         or for the rest of the program. The runtime can't prove that borrowed data will still
         be valid when the task reads it. <code>'static</code> means "this value is
-        self-contained &mdash; it owns everything it needs." No dangling references possible.
+        self-contained - it owns everything it needs." No dangling references possible.
       </p>
       <p>
         This applies to any owned type: <code>String</code>, <code>Vec&lt;u8&gt;</code>,
         <code>i32</code>, <code>PathBuf</code>. All owned types are <code>'static</code>
         because they don't borrow from anything. The bound isn't asking for immortal data
-        &mdash; it's asking for data that doesn't depend on someone else's lifetime.
+        - it's asking for data that doesn't depend on someone else's lifetime.
       </p>
 
       <h2>The pattern: clone and move</h2>
@@ -141,7 +141,7 @@
 }</code></pre>
 
       <p>
-        <code>Arc::clone</code> is a reference count increment &mdash; a single atomic
+        <code>Arc::clone</code> is a reference count increment - a single atomic
         operation. All ten tasks share the same <code>LargeDataset</code> allocation.
         <code>Arc&lt;T&gt;</code> is <code>'static</code> + <code>Send</code> (when
         <code>T: Send + Sync</code>), so it satisfies spawn bounds.
@@ -151,7 +151,7 @@
 
       <ol>
         <li>Does the task need <code>'static</code>? If the data is already owned, you're
-          done &mdash; just <code>move</code> it in.</li>
+          done - just <code>move</code> it in.</li>
         <li>Is the data small or the clone infrequent? <strong>Clone it.</strong> This
           is the right answer 90% of the time.</li>
         <li>Is the data large and shared by many tasks? Use <code>Arc</code>.</li>
@@ -185,21 +185,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><strong>#13: &rsquo;static + Clone</strong></li>
+          <li><strong>#13: 'static + Clone</strong></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -209,7 +209,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

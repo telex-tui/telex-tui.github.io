@@ -25,7 +25,7 @@
 
   <main class="container">
     <article class="post">
-      <h1>Designing a TUI Framework in Rust &mdash; Part 1</h1>
+      <h1>Designing a TUI Framework in Rust - Part 1</h1>
       <div class="post-meta">February 2025</div>
 
       <p>
@@ -52,7 +52,7 @@
           the render call that created it. But a closure that captures <code>&amp;mut state</code>
           borrows from the enclosing scope and can't be stored beyond it.</li>
         <li><strong>Shared mutable access.</strong> Multiple handlers need to mutate the same
-          state &mdash; an increment button, a decrement button, a reset button all touching
+          state - an increment button, a decrement button, a reset button all touching
           the same counter. Rust's ownership rules forbid multiple <code>&amp;mut</code> references.</li>
         <li><strong>No garbage collector.</strong> Whatever solution we pick for the above, we
           can't rely on a runtime to clean up after us. Lifetimes and ownership must be explicit.</li>
@@ -84,9 +84,9 @@
     dirty: <span class="ty">RefCell</span>&lt;<span class="kw">bool</span>&gt;,
 }</code></pre>
       <p>
-        <code>Rc</code> provides shared ownership &mdash; multiple closures can hold handles to the
+        <code>Rc</code> provides shared ownership - multiple closures can hold handles to the
         same state, and cloning a <code>State&lt;T&gt;</code> just increments a reference count.
-        <code>RefCell</code> provides interior mutability &mdash; we can mutate through a shared
+        <code>RefCell</code> provides interior mutability - we can mutate through a shared
         reference, with borrow checking deferred to runtime. The <code>dirty</code> flag tracks
         whether the value has changed since the last render, which becomes important later for
         skipping unnecessary work.
@@ -102,14 +102,14 @@
     .<span class="fn">build</span>()</code></pre>
       <p>
         The <code>with!</code> macro clones <code>count</code> into the closure. The clone is
-        one pointer copy &mdash; an <code>Rc::clone</code>. Inside the closure, <code>update</code>
+        one pointer copy - an <code>Rc::clone</code>. Inside the closure, <code>update</code>
         borrows the <code>RefCell</code> mutably, applies the function, and sets the dirty flag.
       </p>
 
       <h3>Why <code>Rc</code>, not <code>Arc</code>?</h3>
       <p>
-        Telex is single-threaded. The entire render loop &mdash; component functions, event handlers,
-        state mutations &mdash; runs on one thread. <code>Arc</code> pays for atomic reference
+        Telex is single-threaded. The entire render loop - component functions, event handlers,
+        state mutations - runs on one thread. <code>Arc</code> pays for atomic reference
         counting on every clone and drop. <code>Rc</code> doesn't. For a framework where state
         handles are cloned into every closure, that overhead adds up for no benefit. The thread
         boundary is elsewhere (more on that in a future post).
@@ -118,8 +118,8 @@
       <h3>Why not <code>Copy</code>?</h3>
       <p>
         We considered <code>impl Copy for State&lt;T&gt;</code>, but <code>Rc</code> isn't
-        <code>Copy</code>. The cost of <code>.clone()</code> is minimal &mdash; just an
-        <code>Rc::clone</code> &mdash; and being explicit about cloning makes ownership
+        <code>Copy</code>. The cost of <code>.clone()</code> is minimal - just an
+        <code>Rc::clone</code> - and being explicit about cloning makes ownership
         visible at the call site. When three closures each need their own handle, you see
         three clones (or a <code>with!</code> macro that does it for you).
       </p>
@@ -127,7 +127,7 @@
       <h2>The widget tree: enum, not trait objects</h2>
 
       <p>
-        A component function returns a <code>View</code> &mdash; a tree describing what should be
+        A component function returns a <code>View</code> - a tree describing what should be
         on screen. The obvious Rust approach would be <code>Box&lt;dyn Widget&gt;</code>, a trait
         object. Telex uses an enum instead:
       </p>
@@ -158,7 +158,7 @@
       </ul>
       <p>
         The trade-off is that adding a new built-in widget means modifying the enum, which means
-        modifying the framework. For a framework we control, this is acceptable &mdash; the set of
+        modifying the framework. For a framework we control, this is acceptable - the set of
         built-in widgets changes slowly and deliberately. User-defined widgets use composition (nesting
         built-in widgets), not new variants.
       </p>
@@ -180,7 +180,7 @@
       <p>
         <code>Rc</code> because callbacks live inside the view tree, and the view tree gets cloned.
         <code>Box&lt;dyn Fn()&gt;</code> isn't <code>Clone</code>; <code>Rc&lt;dyn Fn()&gt;</code>
-        is &mdash; cloning shares the closure rather than copying it.
+        is - cloning shares the closure rather than copying it.
       </p>
       <p>
         <code>Fn</code>, not <code>FnMut</code>, because a callback may be called multiple times
@@ -225,7 +225,7 @@
     }
 }</code></pre>
       <p>
-        Why <code>dyn Any</code>? Each hook can store a different type &mdash;
+        Why <code>dyn Any</code>? Each hook can store a different type -
         <code>State&lt;i32&gt;</code>, <code>State&lt;String&gt;</code>,
         <code>ChannelHandle&lt;MidiMessage&gt;</code>. Type erasure via <code>Any</code> lets them
         coexist in a single map, with <code>downcast_ref</code> recovering the concrete type on
@@ -236,8 +236,8 @@
       <h2>Rendering: double buffer and diff</h2>
 
       <p>
-        Terminals are slow output devices. Writing every cell on every frame &mdash; even if most cells
-        haven't changed &mdash; causes visible flicker and measurable lag. The standard solution is
+        Terminals are slow output devices. Writing every cell on every frame - even if most cells
+        haven't changed - causes visible flicker and measurable lag. The standard solution is
         double buffering: maintain two cell grids, render the new frame into one, diff it against the
         previous frame, and only emit escape sequences for cells that changed.
       </p>
@@ -247,7 +247,7 @@
         handles wide characters (emoji, CJK ideographs) which occupy two terminal columns: the
         character is stored in the first cell, and the second cell is marked as a continuation so
         the renderer skips it. When a wide character would overflow the right edge of a line, a
-        space is written instead &mdash; you can't split an emoji across lines.
+        space is written instead - you can't split an emoji across lines.
       </p>
       <p>
         The diff pass walks both buffers in lockstep. For each cell that differs, it moves the
@@ -289,13 +289,13 @@
       <p>
         These are reasonable for a terminal application. The view tree is dozens of widgets, not
         thousands. The buffer is 80&times;24 to maybe 200&times;50 cells. Updates happen at human
-        speed &mdash; keypresses, not animation frames. Simplicity aids correctness, and correctness
+        speed - keypresses, not animation frames. Simplicity aids correctness, and correctness
         is hard enough when Unicode, terminal escape codes, and focus management are all in play.
       </p>
       <p>
         The first version of Telex shipped with these decisions and they held up well for
-        self-contained applications. But real applications need to talk to the outside world &mdash;
-        network sockets, MIDI devices, file watchers &mdash; and that's where the story gets
+        self-contained applications. But real applications need to talk to the outside world -
+        network sockets, MIDI devices, file watchers - and that's where the story gets
         more interesting.
       </p>
     </article>
@@ -303,7 +303,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

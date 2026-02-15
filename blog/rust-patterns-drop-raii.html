@@ -71,12 +71,12 @@
         <code>return</code> or a <code>?</code> and you miss it. This doesn't scale.
       </p>
 
-      <h2>RAII &mdash; the concept</h2>
+      <h2>RAII - the concept</h2>
 
       <p>
         Resource Acquisition Is Initialization. The idea: acquire the resource when you create
         the value. Release it when the value is destroyed. In Rust, destruction is deterministic
-        &mdash; a value is dropped when it goes out of scope, on every path: normal returns,
+        - a value is dropped when it goes out of scope, on every path: normal returns,
         early returns, <code>?</code> propagation, and panics (unless the process aborts).
       </p>
       <p>
@@ -117,8 +117,8 @@
 
       <p>
         The underscore prefix in <code>_guard</code> signals intent: we don't use the
-        variable, we hold it for its destructor. When the function exits &mdash; for any
-        reason &mdash; <code>_guard</code> is dropped and cleanup runs.
+        variable, we hold it for its destructor. When the function exits - for any
+        reason - <code>_guard</code> is dropped and cleanup runs.
       </p>
 
       <h2>When <code>drop</code> runs</h2>
@@ -131,7 +131,7 @@
         <li><strong>End of scope:</strong> a local variable goes out of scope at the closing
           brace</li>
         <li><strong>Explicit drop:</strong> <code>drop(value)</code> drops it immediately
-          (this is just <code>fn drop&lt;T&gt;(_: T) {}</code> &mdash; it takes ownership
+          (this is just <code>fn drop&lt;T&gt;(_: T) {}</code> - it takes ownership
           and the value is dropped when the function's parameter goes out of scope)</li>
         <li><strong>Reassignment:</strong> <code>x = new_value</code> drops the old value
           before assigning</li>
@@ -142,7 +142,7 @@
       </ul>
 
       <p>
-        Drop order within a scope is reverse declaration order &mdash; the last variable
+        Drop order within a scope is reverse declaration order - the last variable
         declared is dropped first. This is deliberate: later variables may reference earlier
         ones, so they must be cleaned up first.
       </p>
@@ -156,14 +156,14 @@
 
       <ul>
         <li><strong>No error returns.</strong> If cleanup can fail (e.g., flushing a buffer
-          to disk), you must handle the error inside <code>drop</code> &mdash; log it, ignore
+          to disk), you must handle the error inside <code>drop</code> - log it, ignore
           it, or panic. For important fallible cleanup, provide an explicit
           <code>close()</code> method and use <code>Drop</code> as a safety net.</li>
         <li><strong>No moving out of <code>self</code>.</strong> You have <code>&amp;mut
           self</code>, not <code>self</code>. You can't take ownership of fields. You can
           use <code>Option::take()</code> if you need to move a field out during drop.</li>
         <li><strong>Fields drop automatically after your <code>drop</code>.</strong> You
-          don't need to drop fields manually &mdash; the compiler does it after your
+          don't need to drop fields manually - the compiler does it after your
           <code>drop</code> implementation runs.</li>
       </ul>
 
@@ -174,11 +174,11 @@
       </p>
 
       <ul>
-        <li><code>MutexGuard</code> &mdash; holds a lock, releases it on drop</li>
-        <li><code>RefMut</code> &mdash; holds a <code>RefCell</code> borrow, releases it
+        <li><code>MutexGuard</code> - holds a lock, releases it on drop</li>
+        <li><code>RefMut</code> - holds a <code>RefCell</code> borrow, releases it
           on drop</li>
-        <li><code>File</code> &mdash; holds a file descriptor, closes it on drop</li>
-        <li><code>TcpStream</code> &mdash; holds a socket, closes it on drop</li>
+        <li><code>File</code> - holds a file descriptor, closes it on drop</li>
+        <li><code>TcpStream</code> - holds a socket, closes it on drop</li>
       </ul>
 
       <p>
@@ -187,8 +187,8 @@
         releases.
       </p>
       <p>
-        Design your own types this way. If a value represents an acquired resource &mdash;
-        a database transaction, a temporary file, a registered callback &mdash; implement
+        Design your own types this way. If a value represents an acquired resource -
+        a database transaction, a temporary file, a registered callback - implement
         <code>Drop</code> so that cleanup is automatic.
       </p>
 
@@ -198,7 +198,7 @@
         <li><strong>Good uses:</strong> connection cleanup, lock management, temporary files,
           removing entries from registries, flushing buffers, restoring previous state</li>
         <li><strong>When not to:</strong> if the only cleanup is freeing memory, you don't
-          need <code>Drop</code> &mdash; Rust handles that automatically. Implement
+          need <code>Drop</code> - Rust handles that automatically. Implement
           <code>Drop</code> for side effects beyond deallocation.</li>
       </ul>
 
@@ -207,7 +207,7 @@
       <p>
         Drop guarantees cleanup for owned values. But what about data that's borrowed? When
         a struct holds a reference, the compiler needs to know how long that reference is
-        valid. That's where lifetime annotations come in &mdash;
+        valid. That's where lifetime annotations come in -
         <a href="rust-patterns-lifetime-annotations.html">the next post</a>.
       </p>
 
@@ -223,21 +223,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><strong>#9: Drop and RAII</strong></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -247,7 +247,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

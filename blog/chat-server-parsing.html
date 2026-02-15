@@ -32,7 +32,7 @@
 
       <p>
         Our chat server <a href="chat-server-rooms-users.html">has rooms and users</a>, but
-        the wire format is ad hoc &mdash; just raw text. Now we define a proper protocol,
+        the wire format is ad hoc - just raw text. Now we define a proper protocol,
         parse it without allocating where possible, and add a custom iterator for streaming
         frame extraction. Four patterns make this work.
       </p>
@@ -77,7 +77,7 @@ QUIT:                       <span class="cm"># disconnect</span></code></pre>
         on every string field. Both exist for the same reason: zero-copy parsing.
       </p>
 
-      <h2>Pattern #10: Lifetime annotations &mdash; borrowing from the input</h2>
+      <h2>Pattern #10: Lifetime annotations - borrowing from the input</h2>
 
       <p>
         When we parse <code>"MSG:alice:hello world"</code>, the substrings
@@ -87,7 +87,7 @@ QUIT:                       <span class="cm"># disconnect</span></code></pre>
       </p>
       <p>
         But Rust needs proof that the parsed <code>Frame</code> won't outlive the buffer
-        it borrows from. That's what the lifetime annotation <code>'a</code> does &mdash;
+        it borrows from. That's what the lifetime annotation <code>'a</code> does -
         it ties the <code>Frame</code> to its input:
       </p>
 
@@ -122,7 +122,7 @@ QUIT:                       <span class="cm"># disconnect</span></code></pre>
         covers the mental model: lifetimes describe, they don't control.
       </p>
 
-      <h2>Pattern #11: Cow &mdash; borrow or own</h2>
+      <h2>Pattern #11: Cow - borrow or own</h2>
 
       <p>
         <code>Cow&lt;'a, str&gt;</code> stands for "clone on write." It holds either a
@@ -134,15 +134,16 @@ QUIT:                       <span class="cm"># disconnect</span></code></pre>
 username: <span class="ty">Cow</span>::<span class="fn">Borrowed</span>(username.<span class="fn">trim</span>()),</code></pre>
 
       <p>
-        But sometimes you need to transform the data &mdash; maybe a future version
-        normalises whitespace or escapes HTML. Then you'd use <code>Cow::Owned</code>:
+        But when the server strips control characters or trims trailing whitespace from
+        user input, the data changes and needs allocation. When it passes through unchanged,
+        the borrowed slice is free. That's <code>Cow::Owned</code>:
       </p>
 
       <pre><code><span class="cm">// Allocation — only when the data needs transformation.</span>
-body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(raw_body.<span class="fn">replace</span>(<span class="str">"&amp;"</span>, <span class="str">"&amp;amp;"</span>)),</code></pre>
+body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(raw_body.<span class="fn">trim</span>().<span class="fn">to_string</span>()),</code></pre>
 
       <p>
-        The caller doesn't care which variant it got &mdash; <code>Cow</code> derefs to
+        The caller doesn't care which variant it got - <code>Cow</code> derefs to
         <code>&amp;str</code> either way. Borrow if you can, own if you must.
       </p>
       <p>
@@ -151,12 +152,14 @@ body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(raw_body.<span 
         <code>Cow&lt;Path&gt;</code>.
       </p>
 
-      <h2>Pattern #12: Custom iterators &mdash; streaming frame extraction</h2>
+      <h2>Pattern #12: Custom iterators - streaming frame extraction</h2>
 
       <p>
-        What if you have a buffer of accumulated bytes with multiple <code>\n</code>-terminated
-        lines? You want to extract frames one at a time, leaving incomplete data for the
-        next read. That's a custom iterator:
+        Our server reads one line at a time with <code>BufReader</code>. But in production
+        protocol parsers - especially async ones - bytes accumulate in a buffer
+        from raw reads, and you extract frames as they complete. <code>FrameIter</code>
+        demonstrates this: implement <code>Iterator</code>'s one required method, and you
+        get <code>map</code>, <code>filter</code>, <code>collect</code> for free:
       </p>
 
       <pre><code><span class="kw">pub struct</span> <span class="ty">FrameIter</span>&lt;<span class="kw">'a</span>&gt; {
@@ -194,10 +197,10 @@ body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(raw_body.<span 
         covers the full <code>Iterator</code> trait and how to write your own.
       </p>
 
-      <h2>Pattern #13: 'static + Clone &mdash; the escape hatch</h2>
+      <h2>Pattern #13: 'static + Clone - the escape hatch</h2>
 
       <p>
-        Zero-copy parsing is great &mdash; until you need the parsed data to outlive the
+        Zero-copy parsing is great - until you need the parsed data to outlive the
         input buffer. In our server, we parse a <code>Frame</code> from a line, but then
         we need to broadcast the message to other users. The line is about to be freed.
         What do we do?
@@ -221,7 +224,7 @@ body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(raw_body.<span 
       <p>
         <code>into_owned()</code> converts <code>Cow::Borrowed(&amp;str)</code> to
         <code>Cow::Owned(String)</code>. The result has lifetime <code>'static</code>
-        &mdash; it owns all its data and can live forever. We use it at the boundary
+        - it owns all its data and can live forever. We use it at the boundary
         where zero-copy meets "I need to keep this":
       </p>
 
@@ -263,13 +266,13 @@ QUIT:                          <span class="cm"># → * Goodbye!</span></code></
         We now have a structured protocol with four patterns:
       </p>
       <ul>
-        <li><strong>Lifetime annotations</strong> &mdash; <code>Frame&lt;'a&gt;</code> ties
+        <li><strong>Lifetime annotations</strong> - <code>Frame&lt;'a&gt;</code> ties
           the parsed data to the input buffer's lifetime.</li>
-        <li><strong>Cow</strong> &mdash; borrow from the input buffer when clean, own when
+        <li><strong>Cow</strong> - borrow from the input buffer when clean, own when
           transformed. Zero allocations in the common path.</li>
-        <li><strong>Custom iterators</strong> &mdash; <code>FrameIter</code> yields frames
+        <li><strong>Custom iterators</strong> - <code>FrameIter</code> yields frames
           from a byte buffer, with all of Iterator's combinators for free.</li>
-        <li><strong>'static + Clone</strong> &mdash; <code>into_owned()</code> converts
+        <li><strong>'static + Clone</strong> - <code>into_owned()</code> converts
           borrowed data to owned data at scope boundaries.</li>
       </ul>
 
@@ -295,7 +298,7 @@ QUIT:                          <span class="cm"># → * Goodbye!</span></code></
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

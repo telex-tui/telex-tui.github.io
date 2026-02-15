@@ -25,7 +25,7 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust Patterns That Matter #11: Cow &mdash; Borrow or Own</h1>
+      <h1>Rust Patterns That Matter #11: Cow - Borrow or Own</h1>
       <div class="post-meta">April 2026</div>
       <p class="series-nav">Post 11 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
@@ -60,7 +60,7 @@
       </p>
       <p>
         You could return <code>&amp;str</code> instead, but then you can't return the
-        modified string &mdash; it doesn't live long enough. You need a return type that
+        modified string - it doesn't live long enough. You need a return type that
         can be either a borrowed reference or an owned value.
       </p>
 
@@ -93,7 +93,7 @@
       <p>
         When the input needs no escaping, the function returns the original reference with
         zero allocation. When it does need escaping, it returns the new <code>String</code>.
-        Callers use the result the same way regardless of which variant it is &mdash;
+        Callers use the result the same way regardless of which variant it is -
         <code>Cow&lt;str&gt;</code> implements <code>Deref&lt;Target = str&gt;</code>,
         so it behaves like a <code>&amp;str</code> in most contexts.
       </p>
@@ -124,10 +124,10 @@
         <code>Cow</code> works with any type that implements <code>ToOwned</code>:
       </p>
       <ul>
-        <li><code>Cow&lt;str&gt;</code> &mdash; <code>&amp;str</code> or <code>String</code></li>
-        <li><code>Cow&lt;[u8]&gt;</code> &mdash; <code>&amp;[u8]</code> or <code>Vec&lt;u8&gt;</code></li>
-        <li><code>Cow&lt;Path&gt;</code> &mdash; <code>&amp;Path</code> or <code>PathBuf</code></li>
-        <li><code>Cow&lt;[T]&gt;</code> &mdash; <code>&amp;[T]</code> or <code>Vec&lt;T&gt;</code></li>
+        <li><code>Cow&lt;str&gt;</code> - <code>&amp;str</code> or <code>String</code></li>
+        <li><code>Cow&lt;[u8]&gt;</code> - <code>&amp;[u8]</code> or <code>Vec&lt;u8&gt;</code></li>
+        <li><code>Cow&lt;Path&gt;</code> - <code>&amp;Path</code> or <code>PathBuf</code></li>
+        <li><code>Cow&lt;[T]&gt;</code> - <code>&amp;[T]</code> or <code>Vec&lt;T&gt;</code></li>
       </ul>
       <p>
         The pattern is the same everywhere: borrow when you can, own when you must.
@@ -139,7 +139,7 @@
         <code>Cow</code> has a <code>.to_mut()</code> method that gives you a
         <code>&amp;mut</code> reference to the owned data. If the <code>Cow</code> is
         currently <code>Borrowed</code>, it clones the data into an <code>Owned</code>
-        variant first &mdash; that's the "clone on write" behaviour:
+        variant first - that's the "clone on write" behaviour:
       </p>
 
       <pre><code><span class="kw">let</span> <span class="kw">mut</span> s: <span class="ty">Cow</span>&lt;<span class="kw">str</span>&gt; = <span class="ty">Cow</span>::<span class="ty">Borrowed</span>(<span class="str">"hello"</span>);
@@ -184,21 +184,21 @@ s.<span class="fn">to_mut</span>().<span class="fn">push_str</span>(<span class=
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><strong>#11: Cow &mdash; Borrow or Own</strong></li>
+          <li><strong>#11: Cow - Borrow or Own</strong></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -208,7 +208,7 @@ s.<span class="fn">to_mut</span>().<span class="fn">push_str</span>(<span class=
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

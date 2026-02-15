@@ -72,7 +72,7 @@
 
       <p>
         <code>child</code> moved into <code>all_nodes</code>. It's gone. You can't also
-        put it in the parent's children. <code>Box</code> enforces single ownership &mdash;
+        put it in the parent's children. <code>Box</code> enforces single ownership -
         when you move a <code>Box</code>, the original variable is invalidated.
       </p>
 
@@ -80,14 +80,14 @@
 
       <p>
         Single ownership answers a fundamental question: who frees this memory? With one
-        owner, the answer is always clear &mdash; the owner does, when it goes out of scope.
+        owner, the answer is always clear - the owner does, when it goes out of scope.
         No double frees, no use-after-free, no garbage collector needed. <code>Box&lt;T&gt;</code>
         is the direct expression of this: one pointer, one owner, one deallocation.
       </p>
       <p>
-        But when data is genuinely shared &mdash; a node referenced from both a tree and a flat
+        But when data is genuinely shared - a node referenced from both a tree and a flat
         list, a configuration struct used by multiple subsystems, a callback registered with
-        several event sources &mdash; single ownership doesn't model reality.
+        several event sources - single ownership doesn't model reality.
       </p>
 
       <h2>The pattern: <code>Rc&lt;T&gt;</code></h2>
@@ -125,7 +125,7 @@
       <p>
         <code>Rc::clone(&amp;child)</code> doesn't copy the <code>Node</code>. It increments
         the reference count and returns a new <code>Rc</code> pointing to the same allocation.
-        This is cheap &mdash; a single atomic increment and a pointer copy.
+        This is cheap - a single atomic increment and a pointer copy.
       </p>
 
       <h2>The <code>Rc::clone()</code> convention</h2>
@@ -141,7 +141,7 @@
       <h2>What you can't do</h2>
 
       <p>
-        <code>Rc</code> gives you <code>&amp;T</code> &mdash; shared, immutable access.
+        <code>Rc</code> gives you <code>&amp;T</code> - shared, immutable access.
         You can read through an <code>Rc</code>, but you can never get <code>&amp;mut T</code>
         from it. This is fundamental: multiple pointers to the same data plus mutation
         equals data races and aliasing bugs. <code>Rc</code> prevents this by making the data
@@ -159,7 +159,7 @@
 
       <p>
         If you need shared ownership <em>and</em> mutation, you need to combine
-        <code>Rc</code> with <code>RefCell</code> &mdash;
+        <code>Rc</code> with <code>RefCell</code> -
         <a href="rust-patterns-rc-refcell.html">the next post</a>.
       </p>
 
@@ -172,7 +172,7 @@
       <p>
         The bigger constraint is that <code>Rc</code> is <strong>not thread-safe</strong>.
         Its reference count is a plain integer, not an atomic. Sending an <code>Rc</code>
-        to another thread is a compile error &mdash; <code>Rc</code> is <code>!Send</code>.
+        to another thread is a compile error - <code>Rc</code> is <code>!Send</code>.
         If you need shared ownership across threads, use <code>Arc</code>
         (<a href="rust-patterns-arc-mutex.html">#19</a>), which uses atomic operations
         for the counter.
@@ -200,10 +200,10 @@
         <strong>When not to use it:</strong>
       </p>
       <ul>
-        <li>If only one thing owns the data, use <code>Box</code> or direct ownership &mdash;
+        <li>If only one thing owns the data, use <code>Box</code> or direct ownership -
           it's simpler and has no reference-counting overhead</li>
         <li>If you need thread safety, use <code>Arc</code> instead</li>
-        <li>If you need mutation, <code>Rc</code> alone isn't enough &mdash; combine it with
+        <li>If you need mutation, <code>Rc</code> alone isn't enough - combine it with
           <code>RefCell</code> (<a href="rust-patterns-rc-refcell.html">#6</a>)</li>
       </ul>
 
@@ -213,7 +213,7 @@
         <code>Rc</code> gives you shared ownership but no mutation. <code>RefCell</code>
         (<a href="rust-patterns-interior-mutability.html">#4</a>) gives you mutation but
         single ownership. The next post puts them together: <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
-        &mdash; shared ownership with interior mutability. This is the workhorse pattern for
+        - shared ownership with interior mutability. This is the workhorse pattern for
         single-threaded shared mutable state, and it's exactly what Telex uses for component
         state.
       </p>
@@ -230,21 +230,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><strong>#5: Shared Ownership</strong></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -254,7 +254,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

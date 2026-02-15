@@ -32,7 +32,10 @@
       <p>
         Everyone uses <code>.map().filter().collect()</code>. But when you need to iterate
         over your own <code>FrameParser</code> or <code>RoomList</code>, you implement
-        <code>Iterator</code> &mdash; and the whole ecosystem unlocks.
+        <code>Iterator</code> - one method, and you get <code>map</code>,
+        <code>filter</code>, <code>collect</code>, <code>enumerate</code>,
+        <code>zip</code>, <code>take</code>, <code>skip</code>, and fifty more adaptors
+        for free.
       </p>
 
       <h2>The motivation</h2>
@@ -84,7 +87,7 @@
 
       <p>
         You'd rather write <code>parser.map(...).filter(...).collect()</code>. But
-        <code>FrameParser</code> isn't an iterator &mdash; it's just a struct with a
+        <code>FrameParser</code> isn't an iterator - it's just a struct with a
         method.
       </p>
 
@@ -109,7 +112,7 @@
       <h2>Implementing it</h2>
 
       <p>
-        The <code>FrameParser</code> already has the right shape &mdash;
+        The <code>FrameParser</code> already has the right shape -
         <code>next_frame</code> takes <code>&amp;mut self</code> and returns
         <code>Option</code>. Rename it:
       </p>
@@ -152,7 +155,7 @@
       <h2><code>IntoIterator</code></h2>
 
       <p>
-        The <code>for</code> loop in Rust doesn't call <code>.next()</code> directly &mdash;
+        The <code>for</code> loop in Rust doesn't call <code>.next()</code> directly -
         it calls <code>.into_iter()</code>. That means <code>for x in collection</code>
         works for any type that implements <code>IntoIterator</code>:
       </p>
@@ -170,7 +173,7 @@
         Now users can write <code>for room in &amp;room_list</code>. The convention is
         three impls: <code>for &amp;T</code> (borrows), <code>for &amp;mut T</code>
         (mutable borrows), and <code>for T</code> (consuming). Not every type needs all
-        three &mdash; implement what makes sense.
+        three - implement what makes sense.
       </p>
 
       <h2>Lazy evaluation</h2>
@@ -188,22 +191,22 @@
       <p>
         processes one element at a time through the entire chain. No intermediate
         <code>Vec</code> is allocated between <code>filter_map</code> and
-        <code>filter</code>. And <code>.take(10)</code> stops after 10 items &mdash; it
+        <code>filter</code>. And <code>.take(10)</code> stops after 10 items - it
         doesn't process the remaining buffer. This is zero-overhead by design.
       </p>
 
       <h2>Useful adaptors for custom iterators</h2>
 
       <ul>
-        <li><code>.peekable()</code> &mdash; look at the next item without consuming it.
+        <li><code>.peekable()</code> - look at the next item without consuming it.
           Essential for parsers that need one-token lookahead.</li>
-        <li><code>.chain(other)</code> &mdash; concatenate two iterators. Useful for
+        <li><code>.chain(other)</code> - concatenate two iterators. Useful for
           prepending a header frame or appending a trailer.</li>
-        <li><code>.zip(other)</code> &mdash; pair items from two iterators. Good for
+        <li><code>.zip(other)</code> - pair items from two iterators. Good for
           correlating parallel data.</li>
-        <li><code>.enumerate()</code> &mdash; attach an index to each item. Cheap way to
+        <li><code>.enumerate()</code> - attach an index to each item. Cheap way to
           get position information.</li>
-        <li><code>.by_ref()</code> &mdash; borrow the iterator so you can use adaptors
+        <li><code>.by_ref()</code> - borrow the iterator so you can use adaptors
           and then continue using the original iterator.</li>
       </ul>
 
@@ -214,7 +217,7 @@
           traversals, any sequential data source where you want to compose
           operations</li>
         <li><strong>When not to:</strong> if you just need to expose a slice, return
-          <code>&amp;[T]</code> &mdash; don't wrap it in a custom iterator. Iterators
+          <code>&amp;[T]</code> - don't wrap it in a custom iterator. Iterators
           add value when the data is computed lazily or the traversal is non-trivial.</li>
       </ul>
 
@@ -222,8 +225,8 @@
 
       <p>
         Iterators let you process data lazily without allocating. But sometimes you do need
-        to own the data &mdash; especially when crossing scope boundaries into threads or
-        async tasks. That's where <code>'static</code> + <code>Clone</code> comes in &mdash;
+        to own the data - especially when crossing scope boundaries into threads or
+        async tasks. That's where <code>'static</code> + <code>Clone</code> comes in -
         <a href="rust-patterns-static-clone.html">the next post</a>.
       </p>
 
@@ -239,21 +242,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><a href="rust-patterns-interior-mutability.html">#4: Interior Mutability</a></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><strong>#12: Custom Iterators</strong></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -263,7 +266,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

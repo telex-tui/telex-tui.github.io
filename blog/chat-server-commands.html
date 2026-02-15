@@ -43,7 +43,7 @@
         branch.
       </p>
 
-      <h2>Pattern #14: Enum dispatch &mdash; the command system</h2>
+      <h2>Pattern #14: Enum dispatch - the command system</h2>
 
       <p>
         Commands are a closed set: <code>/join</code>, <code>/nick</code>,
@@ -75,9 +75,9 @@
 
       <p>
         Enum dispatch is faster than trait objects (no vtable, no indirection) and
-        exhaustive &mdash; if you add a variant and forget a match arm, it won't compile.
+        exhaustive - if you add a variant and forget a match arm, it won't compile.
         Use enums when the set of variants is closed. Use trait objects
-        (<code>dyn Trait</code>) when the set is open &mdash; when users or plugins can
+        (<code>dyn Trait</code>) when the set is open - when users or plugins can
         add new types at runtime.
       </p>
       <p>
@@ -87,17 +87,18 @@
       <h2>Patterns #15 &amp; #16: Closures and the plugin system</h2>
 
       <p>
-        Commands are a closed set, but message filters are an open set &mdash; anyone
-        should be able to register a filter. Closures are perfect: they're inline functions
-        that capture their environment.
+        Commands are a closed set, but message filters are an open set - the server
+        needs profanity filtering, rate limiting, logging. Each filter is different logic,
+        but all share the same shape: take a username and message body, return
+        allow/modify/block. Closures capture the state each filter needs.
       </p>
       <p>
         The question is which closure trait to use. Rust has three:
       </p>
       <ul>
-        <li><code>Fn</code> &mdash; can be called multiple times, only reads captures</li>
-        <li><code>FnMut</code> &mdash; can be called multiple times, can mutate captures</li>
-        <li><code>FnOnce</code> &mdash; can only be called once, consumes captures</li>
+        <li><code>Fn</code> - can be called multiple times, only reads captures</li>
+        <li><code>FnMut</code> - can be called multiple times, can mutate captures</li>
+        <li><code>FnOnce</code> - can only be called once, consumes captures</li>
       </ul>
       <p>
         Our filters need to be called on every message (not once), and they may track
@@ -119,7 +120,7 @@
 
       <p>
         <code>Box&lt;dyn FnMut(...)&gt;</code> is the key. Closures have anonymous types
-        &mdash; each closure is a unique, unnameable type. <code>Box&lt;dyn&gt;</code>
+        - each closure is a unique, unnameable type. <code>Box&lt;dyn&gt;</code>
         erases the type so different closures can live in the same <code>Vec</code>.
       </p>
       <p>
@@ -138,12 +139,23 @@ server.filters.<span class="fn">add</span>(<span class="kw">move</span> |_userna
         and <a href="rust-patterns-storing-closures.html">Rust Patterns #16: Storing Closures</a>.
       </p>
 
-      <h2>Pattern #17: Builder &mdash; server configuration</h2>
+      <p>
+        Commands and filters handle messages. But configuring the server itself -
+        ports, limits, MOTD - needs its own pattern.
+      </p>
+
+      <h2>Pattern #17: Builder - server configuration</h2>
 
       <p>
         Our server has grown: address, port, max users, max rooms, message of the day.
-        A constructor with five positional arguments is error-prone. A builder gives
-        named, optional, chainable configuration:
+        Without a builder, construction looks like this:
+      </p>
+
+      <pre><code><span class="ty">ServerConfig</span>::<span class="fn">new</span>(<span class="str">"127.0.0.1"</span>, <span class="num">8080</span>, <span class="num">100</span>, <span class="num">50</span>, <span class="ty">Some</span>(<span class="str">"Welcome!"</span>))</code></pre>
+
+      <p>
+        Which number is the port? Which is max_users? A builder gives named, optional,
+        chainable configuration:
       </p>
 
       <pre><code><span class="kw">let</span> config = <span class="ty">ServerConfig</span>::<span class="fn">builder</span>()
@@ -185,12 +197,25 @@ server.filters.<span class="fn">add</span>(<span class="kw">move</span> |_userna
         <em>Deep dive:</em> <a href="rust-patterns-builder.html">Rust Patterns #17: Builder Pattern</a>.
       </p>
 
-      <h2>Pattern #18: Typestate &mdash; connections that can't be misused</h2>
+      <p>
+        Configuration builds the server. But what about the connections themselves? Each
+        client goes through a lifecycle, and we can enforce it at compile time.
+      </p>
+
+      <h2>Pattern #18: Typestate - connections that can't be misused</h2>
 
       <p>
-        A connection goes through stages: accepted &rarr; authenticated &rarr; in a room.
-        Sending a message before authentication shouldn't be possible. We encode this
-        in the type system:
+        A connection goes through stages: accepted -> authenticated -> in a room.
+        Without typestate, every method that depends on state needs a runtime check:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">send</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, text: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">ChatError</span>&gt; {
+    <span class="kw">if</span> !<span class="kw">self</span>.authenticated { <span class="kw">return</span> <span class="ty">Err</span>(<span class="ty">ChatError</span>::<span class="fn">NotAuthenticated</span>); }
+    <span class="cm">// ...</span>
+}</code></pre>
+
+      <p>
+        Forget a check and you have a bug. We can encode the stages in the type system instead:
       </p>
 
       <pre><code><span class="kw">pub struct</span> <span class="ty">Unauthenticated</span>;
@@ -225,7 +250,7 @@ server.filters.<span class="fn">add</span>(<span class="kw">move</span> |_userna
       <p>
         <code>authenticate()</code> consumes <code>Connection&lt;Unauthenticated&gt;</code>
         and returns <code>Connection&lt;Authenticated&gt;</code>. You can't call
-        <code>send()</code> on an unauthenticated connection &mdash; it doesn't exist on
+        <code>send()</code> on an unauthenticated connection - it doesn't exist on
         that type. Invalid transitions are compile errors, not runtime checks.
       </p>
       <p>
@@ -253,12 +278,12 @@ hello everyone                 <span class="cm"># plain text chat</span>
         Five more patterns are working:
       </p>
       <ul>
-        <li><strong>Enum dispatch</strong> &mdash; commands as a closed enum, exhaustive matching.</li>
-        <li><strong>Fn/FnMut/FnOnce</strong> &mdash; filters use <code>FnMut</code> because they mutate state.</li>
-        <li><strong>Storing closures</strong> &mdash; <code>Box&lt;dyn FnMut(...)&gt;</code> in a <code>Vec</code>.</li>
-        <li><strong>Builder</strong> &mdash; <code>ServerConfig::builder().port(8080).build()</code>.</li>
-        <li><strong>Typestate</strong> &mdash; <code>Connection&lt;Unauthenticated&gt;</code> &rarr;
-          <code>Connection&lt;Authenticated&gt;</code> &rarr; <code>Connection&lt;InRoom&gt;</code>.</li>
+        <li><strong>Enum dispatch</strong> - commands as a closed enum, exhaustive matching.</li>
+        <li><strong>Fn/FnMut/FnOnce</strong> - filters use <code>FnMut</code> because they mutate state.</li>
+        <li><strong>Storing closures</strong> - <code>Box&lt;dyn FnMut(...)&gt;</code> in a <code>Vec</code>.</li>
+        <li><strong>Builder</strong> - <code>ServerConfig::builder().port(8080).build()</code>.</li>
+        <li><strong>Typestate</strong> - <code>Connection&lt;Unauthenticated&gt;</code> ->
+          <code>Connection&lt;Authenticated&gt;</code> -> <code>Connection&lt;InRoom&gt;</code>.</li>
       </ul>
 
       <p>
@@ -283,7 +308,7 @@ hello everyone                 <span class="cm"># plain text chat</span>
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>

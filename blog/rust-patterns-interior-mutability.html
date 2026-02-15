@@ -39,7 +39,7 @@
 
       <p>
         Imagine a configuration loader that parses expensive files on demand and caches the
-        results. Callers only need a shared reference &mdash; they're reading configuration,
+        results. Callers only need a shared reference - they're reading configuration,
         not modifying the loader itself. But the loader needs to write to its internal cache.
       </p>
 
@@ -67,7 +67,7 @@
               as it is behind a `&` reference</span></code></pre>
 
       <p>
-        The method takes <code>&amp;self</code> &mdash; a shared, immutable reference. Shared
+        The method takes <code>&amp;self</code> - a shared, immutable reference. Shared
         references are read-only. That's not a suggestion; it's a guarantee the entire borrow
         system depends on. You cannot mutate through <code>&amp;self</code>.
       </p>
@@ -78,12 +78,12 @@
         Rust's core safety guarantee: if you have a <code>&amp;T</code>, nobody is mutating
         <code>T</code> right now. If you have a <code>&amp;mut T</code>, nobody else is
         looking at <code>T</code> right now. These two rules eliminate data races, iterator
-        invalidation, and use-after-free &mdash; at compile time. No runtime cost.
+        invalidation, and use-after-free - at compile time. No runtime cost.
       </p>
       <p>
         The problem is that the cache is a legitimate mutation behind a logically immutable
         interface. From the caller's perspective, <code>get()</code> is a read operation. The
-        cache is an implementation detail. But the type system doesn't know that &mdash; it
+        cache is an implementation detail. But the type system doesn't know that - it
         sees a write through a shared reference and says no.
       </p>
 
@@ -93,7 +93,7 @@
         <code>RefCell&lt;T&gt;</code> moves borrow checking from compile time to runtime.
         It wraps a value and tracks borrows dynamically: you call <code>.borrow()</code> for
         shared access and <code>.borrow_mut()</code> for exclusive access. The rules are
-        identical &mdash; many readers or one writer, never both &mdash; but they're enforced
+        identical - many readers or one writer, never both - but they're enforced
         when the code runs instead of when it compiles.
       </p>
 
@@ -126,8 +126,8 @@
         <code>RefCell</code> maintains a counter. Each <code>.borrow()</code> increments
         it; each dropped borrow decrements it. <code>.borrow_mut()</code> checks that the
         counter is zero (no outstanding borrows) and sets a flag. If you violate the rules
-        &mdash; say, calling <code>.borrow_mut()</code> while a <code>.borrow()</code> is
-        still alive &mdash; it panics.
+        - say, calling <code>.borrow_mut()</code> while a <code>.borrow()</code> is
+        still alive - it panics.
       </p>
 
       <pre><code><span class="kw">let</span> cell = <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="num">42</span>);
@@ -146,13 +146,13 @@
 
       <p>
         With <code>RefCell</code>, you trade a compile-time guarantee for a runtime check.
-        The compiler no longer catches double-mutable-borrows &mdash; you'll find out at
+        The compiler no longer catches double-mutable-borrows - you'll find out at
         runtime via a panic. This is a conscious, local relaxation of Rust's rules, not
         a hole in the safety model. The borrow rules are still enforced; the enforcement
         just moved.
       </p>
       <p>
-        The runtime cost is small &mdash; an integer check on each borrow. In practice, the
+        The runtime cost is small - an integer check on each borrow. In practice, the
         real cost is the possibility of panics. If you can structure your code so the compiler
         checks borrows statically (by taking <code>&amp;mut self</code> instead), do that.
         Reach for <code>RefCell</code> when the API genuinely requires shared access with
@@ -174,9 +174,9 @@
         <strong>When not to use it:</strong>
       </p>
       <ul>
-        <li>If you can restructure to take <code>&amp;mut self</code>, do that &mdash; it's
+        <li>If you can restructure to take <code>&amp;mut self</code>, do that - it's
           strictly better (compile-time checked, no overhead)</li>
-        <li>If you need thread safety, <code>RefCell</code> won't work &mdash; it's
+        <li>If you need thread safety, <code>RefCell</code> won't work - it's
           <code>!Sync</code>. Use <code>Mutex</code> or <code>RwLock</code> instead
           (<a href="rust-patterns-arc-mutex.html">#19</a>)</li>
       </ul>
@@ -186,7 +186,7 @@
       <p>
         <code>RefCell</code> solves the mutation problem, but only for a single owner.
         When multiple parts of your program need to share the same data,
-        you need <code>Rc</code> &mdash; which is <a href="rust-patterns-shared-ownership.html">the
+        you need <code>Rc</code> - which is <a href="rust-patterns-shared-ownership.html">the
         next post</a>. And when you need shared ownership <em>and</em> mutation,
         <a href="rust-patterns-rc-refcell.html">#6</a> puts the two together.
       </p>
@@ -203,21 +203,21 @@
           <li><a href="rust-patterns-error-handling.html">#3: Error Handling</a></li>
           <li><strong>#4: Interior Mutability</strong></li>
           <li><a href="rust-patterns-shared-ownership.html">#5: Shared Ownership</a></li>
-          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo &mdash; Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
+          <li><a href="rust-patterns-rc-refcell.html">#6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</a></li>
           <li><a href="rust-patterns-split-borrows.html">#7: Split Borrows</a></li>
           <li><a href="rust-patterns-index-based-design.html">#8: Index-Based Design</a></li>
           <li><a href="rust-patterns-drop-raii.html">#9: Drop and RAII</a></li>
           <li><a href="rust-patterns-lifetime-annotations.html">#10: Lifetime Annotations</a></li>
-          <li><a href="rust-patterns-cow.html">#11: Cow &mdash; Borrow or Own</a></li>
+          <li><a href="rust-patterns-cow.html">#11: Cow - Borrow or Own</a></li>
           <li><a href="rust-patterns-iterators.html">#12: Custom Iterators</a></li>
-          <li><a href="rust-patterns-static-clone.html">#13: &rsquo;static + Clone</a></li>
+          <li><a href="rust-patterns-static-clone.html">#13: 'static + Clone</a></li>
           <li><a href="rust-patterns-enum-dispatch.html">#14: Enum Dispatch vs Trait Objects</a></li>
           <li><a href="rust-patterns-closure-traits.html">#15: Fn, FnMut, FnOnce</a></li>
           <li><a href="rust-patterns-storing-closures.html">#16: Storing and Returning Closures</a></li>
           <li><a href="rust-patterns-builder.html">#17: Builder Pattern</a></li>
           <li><a href="rust-patterns-typestate.html">#18: Typestate</a></li>
           <li><a href="rust-patterns-arc-mutex.html">#19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</a></li>
-          <li><a href="rust-patterns-channels.html">#20: Channels &mdash; Message Passing</a></li>
+          <li><a href="rust-patterns-channels.html">#20: Channels - Message Passing</a></li>
           <li><a href="rust-patterns-pin-futures.html">#21: Pin and Boxing Futures</a></li>
           <li><a href="rust-patterns-send-sync-async.html">#22: Send / Sync in Async</a></li>
         </ol>
@@ -227,7 +227,7 @@
 
   <footer>
     <div class="container">
-      MIT &mdash; Copyright &copy; 2025 Mark Branion
+      MIT - Copyright &copy; 2025 Mark Branion
     </div>
   </footer>
 </body>
