@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Server #6: Going Async - Telex</title>
+  <meta name="description" content="Replace threads with tokio in the Rust chat server. Two patterns: Pin and boxing futures for async trait methods, and Send/Sync bounds in async code.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Building a Chat Server in Rust #6: Going Async</h1>
+      <div class="post-meta">February 2026</div>
+      <p class="series-nav">Post 6 of 6 in <a href="#series-index">Building a Chat Server in Rust</a>.
+        Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        <a href="chat-server-threaded.html">Last time</a> we went multi-threaded &mdash;
+        one OS thread per client. It works, but threads are expensive: each one costs
+        ~8KB of stack, and context switching adds up. For thousands of concurrent
+        connections, we want async: lightweight tasks on a small thread pool.
+      </p>
+      <p>
+        This post replaces <code>std::thread</code> with <code>tokio</code> and runs into
+        two final patterns. The code is on the
+        <a href="https://github.com/telex-tui/rust-chat-server/tree/06-async"><code>06-async</code></a>
+        branch.
+      </p>
+
+      <h2>The migration</h2>
+
+      <p>
+        Most of the changes are mechanical: <code>std::net::TcpListener</code> becomes
+        <code>tokio::net::TcpListener</code>, <code>std::sync::Mutex</code> becomes
+        <code>tokio::sync::Mutex</code>, <code>thread::spawn</code> becomes
+        <code>tokio::spawn</code>, and methods gain <code>async</code> and <code>.await</code>.
+        But two things require real understanding.
+      </p>
+
+      <h2>Pattern #21: Pin + Boxing Futures</h2>
+
+      <p>
+        In Stage 4, our filter system used <code>Box&lt;dyn FnMut(...)&gt;</code>. In
+        async, we want filters that can do async work (maybe query a database, call an
+        API). But async methods return futures, and futures have anonymous types &mdash;
+        you can't name them.
+      </p>
+      <p>
+        The solution: return a <code>Pin&lt;Box&lt;dyn Future&gt;&gt;</code>:
+      </p>
+
+      <pre><code><span class="kw">pub trait</span> <span class="ty">AsyncFilter</span>: <span class="ty">Send</span> + <span class="ty">Sync</span> {
+    <span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="kw">'a</span>&gt;(
+        &amp;<span class="kw">'a</span> <span class="kw">self</span>,
+        username: &amp;<span class="kw">'a</span> <span class="kw">str</span>,
+        body: &amp;<span class="kw">'a</span> <span class="kw">str</span>,
+    ) -&gt; <span class="ty">Pin</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Future</span>&lt;<span class="ty">Output</span> = <span class="ty">FilterAction</span>&gt; + <span class="ty">Send</span> + <span class="kw">'a</span>&gt;&gt;;
+}</code></pre>
+
+      <p>
+        Three layers, each solving a specific problem:
+      </p>
+      <ul>
+        <li><strong>Future</strong> &mdash; the async computation. Every <code>async fn</code>
+          returns one, but its concrete type is unnameable.</li>
+        <li><strong>Box</strong> &mdash; heap-allocate to erase the concrete type. Different
+          implementations can return different future types, but they all look like
+          <code>Box&lt;dyn Future&gt;</code>.</li>
+        <li><strong>Pin</strong> &mdash; guarantee the future won't move in memory. Async
+          state machines can contain self-references (a reference to a local variable
+          that's part of the state machine). Moving would invalidate those references.
+          <code>Pin</code> prevents that.</li>
+      </ul>
+
+      <p>
+        Implementing the trait uses <code>Box::pin(async move { ... })</code>:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">AsyncFilter</span> <span class="kw">for</span> <span class="ty">CountingFilter</span> {
+    <span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="kw">'a</span>&gt;(
+        &amp;<span class="kw">'a</span> <span class="kw">self</span>,
+        _username: &amp;<span class="kw">'a</span> <span class="kw">str</span>,
+        _body: &amp;<span class="kw">'a</span> <span class="kw">str</span>,
+    ) -&gt; <span class="ty">Pin</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Future</span>&lt;<span class="ty">Output</span> = <span class="ty">FilterAction</span>&gt; + <span class="ty">Send</span> + <span class="kw">'a</span>&gt;&gt; {
+        <span class="ty">Box</span>::<span class="fn">pin</span>(<span class="kw">async move</span> {
+            <span class="kw">let</span> <span class="kw">mut</span> count = <span class="kw">self</span>.count.<span class="fn">lock</span>().<span class="kw">await</span>;
+            *count += <span class="num">1</span>;
+            <span class="mac">println!</span>(<span class="str">"[filter] message #{} processed"</span>, *count);
+            <span class="ty">FilterAction</span>::<span class="ty">Allow</span>
+        })
+    }
+}</code></pre>
+
+      <p>
+        <code>Box::pin()</code> is the incantation: box the future (erase its type),
+        pin it (prevent moves). The caller can <code>.await</code> it like any other future.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-pin-futures.html">Rust Patterns #21: Pin and Boxing Futures</a>
+        covers why Pin exists and when you need it.
+      </p>
+
+      <h2>Pattern #22: Send / Sync in Async</h2>
+
+      <p>
+        <code>tokio::spawn</code> requires the future to be <code>Send</code>. That means
+        everything the future holds across an <code>.await</code> point must be
+        <code>Send</code>. If it isn't, you get:
+      </p>
+
+      <pre><code><span class="cm">// error: future cannot be sent between threads safely</span>
+<span class="cm">// the trait `Send` is not implemented for `Rc&lt;...&gt;`</span></code></pre>
+
+      <p>
+        This is why every step of our evolution mattered: <code>Rc</code> &rarr;
+        <code>Arc</code> (Arc is Send + Sync), <code>RefCell</code> &rarr;
+        <code>Mutex</code> (Mutex is Send + Sync), <code>Box&lt;dyn FnMut&gt;</code>
+        &rarr; <code>Box&lt;dyn FnMut + Send&gt;</code>.
+      </p>
+      <p>
+        The <code>AsyncFilter</code> trait requires <code>Send + Sync</code>:
+      </p>
+
+      <pre><code><span class="kw">pub trait</span> <span class="ty">AsyncFilter</span>: <span class="ty">Send</span> + <span class="ty">Sync</span> { <span class="cm">/* ... */</span> }</code></pre>
+
+      <p>
+        <code>Send</code>: the filter can be moved to another thread (needed because tokio
+        may run tasks on any thread). <code>Sync</code>: the filter can be shared between
+        threads via <code>&amp;</code> reference (needed because multiple tasks may exist
+        concurrently).
+      </p>
+      <p>
+        The returned future also needs <code>+ Send</code>:
+      </p>
+
+      <pre><code><span class="cm">// The future must be Send so it can be .awaited inside tokio::spawn.</span>
+-&gt; <span class="ty">Pin</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Future</span>&lt;<span class="ty">Output</span> = <span class="ty">FilterAction</span>&gt; + <span class="ty">Send</span> + <span class="kw">'a</span>&gt;&gt;</code></pre>
+
+      <p>
+        The pattern: in async Rust, everything that crosses an <code>.await</code> boundary
+        inside <code>tokio::spawn</code> must be <code>Send</code>. If the compiler
+        complains, the fix is usually one of: add <code>+ Send</code> to trait bounds,
+        drop non-Send values before the <code>.await</code>, or restructure to avoid
+        holding them across the yield point.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-send-sync-async.html">Rust Patterns #22: Send / Sync in Async</a>
+        covers the full story including <code>spawn_local</code> as an escape hatch.
+      </p>
+
+      <h2>The main loop</h2>
+
+      <pre><code><span class="attr">#[tokio::main]</span>
+<span class="kw">async fn</span> <span class="fn">main</span>() -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">ChatError</span>&gt; {
+    <span class="kw">let</span> server = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">Mutex</span>::<span class="fn">new</span>(server));
+    <span class="kw">let</span> listener = <span class="ty">TcpListener</span>::<span class="fn">bind</span>(&amp;addr).<span class="kw">await</span>?;
+
+    <span class="kw">loop</span> {
+        <span class="kw">let</span> (stream, _) = listener.<span class="fn">accept</span>().<span class="kw">await</span>?;
+        <span class="kw">let</span> server = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;server);
+
+        tokio::<span class="fn">spawn</span>(<span class="kw">async move</span> {
+            <span class="kw">if let</span> <span class="ty">Err</span>(e) = <span class="fn">handle_client</span>(server, stream).<span class="kw">await</span> {
+                <span class="mac">println!</span>(<span class="str">"Client error: {e}"</span>);
+            }
+        });
+    }
+}</code></pre>
+
+      <p>
+        The structure is almost identical to the threaded version. The difference is
+        invisible: each <code>tokio::spawn</code> creates a lightweight task (&lt;1KB)
+        instead of an OS thread (~8KB). Thousands of concurrent connections, a handful
+        of threads.
+      </p>
+
+      <h2>Try it</h2>
+
+      <pre><code><span class="cm"># Terminal 1</span>
+git checkout 06-async
+cargo run
+
+<span class="cm"># Terminal 2 and 3 (simultaneously)</span>
+nc 127.0.0.1 8080
+alice
+hello!                         <span class="cm"># → bob sees: &lt;alice&gt; hello!</span></code></pre>
+
+      <h2>The full journey</h2>
+
+      <p>
+        Six posts, six branches, 22 patterns:
+      </p>
+      <ol>
+        <li><strong><a href="chat-server-hello-tcp.html">Hello, TCP</a></strong> &mdash;
+          Newtype, From/Into, Error Handling</li>
+        <li><strong><a href="chat-server-rooms-users.html">Rooms and Users</a></strong> &mdash;
+          RefCell, Rc, Rc&lt;RefCell&gt;, Split Borrows, Index-Based Design, Drop/RAII</li>
+        <li><strong><a href="chat-server-parsing.html">Parsing and Performance</a></strong> &mdash;
+          Lifetime Annotations, Cow, Custom Iterators, &rsquo;static+Clone</li>
+        <li><strong><a href="chat-server-commands.html">Commands and Plugins</a></strong> &mdash;
+          Enum Dispatch, Fn/FnMut/FnOnce, Storing Closures, Builder, Typestate</li>
+        <li><strong><a href="chat-server-threaded.html">Going Multi-threaded</a></strong> &mdash;
+          Arc&lt;Mutex&gt;, Channels</li>
+        <li><strong>Going Async</strong> &mdash;
+          Pin+Boxing Futures, Send/Sync in Async</li>
+      </ol>
+
+      <p>
+        Every pattern was motivated by a real problem in a real project. The companion
+        series &mdash; <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>
+        &mdash; covers each pattern in depth.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="chat-server-hello-tcp.html">#1: Hello, TCP</a></li>
+          <li><a href="chat-server-rooms-users.html">#2: Rooms and Users</a></li>
+          <li><a href="chat-server-parsing.html">#3: Parsing and Performance</a></li>
+          <li><a href="chat-server-commands.html">#4: Commands and Plugins</a></li>
+          <li><a href="chat-server-threaded.html">#5: Going Multi-threaded</a></li>
+          <li><strong>#6: Going Async</strong></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
