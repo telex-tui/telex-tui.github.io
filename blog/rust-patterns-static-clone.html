@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #13: <code>'static</code> + Clone &mdash; The Escape Hatch</h1>
       <div class="post-meta">May 2026</div>
-      <p class="series-nav">Post 13 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 13 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You're spawning a thread or an async task. The API requires <code>'static</code>.
@@ -171,6 +171,10 @@
         The instinct to avoid cloning comes from languages where copies are expensive by
         default. In Rust, cloning is explicit, visible, and usually cheap. When it's not,
         the profiler will tell you.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-parsing.html">Building a Chat Server #3: Parsing and Performance</a> uses this pattern for moving parsed data across scope boundaries.
       </p>
 
       <nav class="series-index" id="series-index">

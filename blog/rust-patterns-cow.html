@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #11: Cow &mdash; Borrow or Own</h1>
       <div class="post-meta">April 2026</div>
-      <p class="series-nav">Post 11 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 11 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         Should your function take <code>&amp;str</code> or <code>String</code>? If it takes
@@ -171,6 +171,10 @@ s.<span class="fn">to_mut</span>().<span class="fn">push_str</span>(<span class=
         <li>If the allocation cost doesn't matter in your context, a simple
           <code>String</code> return is clearer</li>
       </ul>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-parsing.html">Building a Chat Server #3: Parsing and Performance</a> uses this pattern for borrow-or-own message fields.
+      </p>
 
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>

@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #7: Split Borrows</h1>
       <div class="post-meta">March 2026</div>
-      <p class="series-nav">Post 7 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 7 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You have a struct with two fields. A method needs to read one and write the other.
@@ -200,6 +200,10 @@
         If none of these work and you genuinely have aliased mutable access, the borrow
         checker is right to reject it. But most "split borrow" situations are false positives
         that one of these patterns resolves.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-rooms-users.html">Building a Chat Server #2: Rooms and Users</a> uses this pattern for reading rooms while writing to users.
       </p>
 
       <nav class="series-index" id="series-index">

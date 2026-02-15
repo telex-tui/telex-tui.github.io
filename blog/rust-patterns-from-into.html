@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #2: From / Into Conversions</h1>
       <div class="post-meta">July 2026</div>
-      <p class="series-nav">Post 2 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 2 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You're writing an API that accepts different input types. Some callers have a
@@ -182,6 +182,11 @@
         an explicit named method. <code>From</code> / <code>Into</code> imply a natural,
         lossless conversion. If <code>.into()</code> would silently truncate data or change
         semantics, use a named method instead so the caller knows what's happening.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-hello-tcp.html">Building a Chat Server #1: Hello, TCP</a>
+        uses this pattern for message parsing and error conversion.
       </p>
 
       <nav class="series-index" id="series-index">

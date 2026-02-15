@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #17: Builder Pattern</h1>
       <div class="post-meta">June 2026</div>
-      <p class="series-nav">Post 17 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 17 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         A struct has twelve fields. Three are required. Nine have sensible defaults. The
@@ -202,6 +202,10 @@
         When not to: structs with two or three fields, or purely internal types where a
         simple <code>new()</code> is clear enough. A builder for a struct with two fields
         is overhead without benefit.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-commands.html">Building a Chat Server #4: Commands and Plugins</a> uses this pattern for server configuration.
       </p>
 
       <nav class="series-index" id="series-index">

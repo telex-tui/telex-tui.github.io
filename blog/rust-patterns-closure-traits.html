@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #15: Fn, FnMut, FnOnce</h1>
       <div class="post-meta">May 2026</div>
-      <p class="series-nav">Post 15 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 15 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You pass a closure to a function and get a trait mismatch. You didn't ask for any
@@ -190,6 +190,10 @@
         only call the closure once, use <code>FnOnce</code> &mdash; it accepts all closures.
         Only require <code>Fn</code> if you genuinely need to call it multiple times
         without exclusive access.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-commands.html">Building a Chat Server #4: Commands and Plugins</a> uses this pattern for the message filter plugin system.
       </p>
 
       <nav class="series-index" id="series-index">

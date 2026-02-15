@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #3: Error Handling with <code>?</code> + <code>thiserror</code> + <code>anyhow</code></h1>
       <div class="post-meta">July 2026</div>
-      <p class="series-nav">Post 3 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 3 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         Your application reads a config file, parses JSON, queries a database, and serves
@@ -207,6 +207,11 @@ Caused by:
         <li><strong>Manual enums</strong>: when you want full control and don't want the
           dependency &mdash; the pattern is the same, just more verbose</li>
       </ul>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-hello-tcp.html">Building a Chat Server #1: Hello, TCP</a>
+        uses this pattern for handling network and parse errors with <code>?</code>.
+      </p>
 
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>

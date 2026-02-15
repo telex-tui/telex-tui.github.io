@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #19: <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> vs <code>Arc&lt;RwLock&lt;T&gt;&gt;</code></h1>
       <div class="post-meta">August 2026</div>
-      <p class="series-nav">Post 19 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 19 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You have shared state and multiple threads. You reach for
@@ -177,6 +177,10 @@ w.<span class="fn">push</span>(<span class="num">4</span>); <span class="cm">// 
         is harder to reason about than message passing, even with Rust's safety guarantees.
         <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> is safe, but it's still a lock, and locks can
         contend and deadlock if multiple are held simultaneously.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-threaded.html">Building a Chat Server #5: Going Multi-threaded</a> uses this pattern for thread-safe shared server state.
       </p>
 
       <nav class="series-index" id="series-index">

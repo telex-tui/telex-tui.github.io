@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #18: Typestate</h1>
       <div class="post-meta">June 2026</div>
-      <p class="series-nav">Post 18 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 18 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You have a connection that goes through states: disconnected, connecting, connected.
@@ -176,6 +176,10 @@ conn.<span class="fn">send</span>(b<span class="str">"hello"</span>);           
         When not to: dynamic state machines, state determined by runtime data, or when
         the number of states is large and the combinatorics of state-specific methods
         become unwieldy. Use an enum with runtime checks in those cases.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-commands.html">Building a Chat Server #4: Commands and Plugins</a> uses this pattern for connection lifecycle safety.
       </p>
 
       <nav class="series-index" id="series-index">

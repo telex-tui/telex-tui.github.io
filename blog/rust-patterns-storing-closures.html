@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #16: Storing and Returning Closures</h1>
       <div class="post-meta">May 2026</div>
-      <p class="series-nav">Post 16 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 16 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You want a struct with a callback field. What type do you give it? You want a
@@ -217,6 +217,10 @@
         <li><strong><code>fn()</code> pointer</strong> &mdash; when the closure captures
           nothing (function pointers are simpler and have no allocation)</li>
       </ul>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-commands.html">Building a Chat Server #4: Commands and Plugins</a> uses this pattern for the filter registry.
+      </p>
 
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>

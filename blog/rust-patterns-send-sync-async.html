@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #22: Send / Sync Bounds in Async</h1>
       <div class="post-meta">September 2026</div>
-      <p class="series-nav">Post 22 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 22 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You call <code>tokio::spawn(my_async_fn())</code> and the compiler says: "future
@@ -216,6 +216,10 @@ local.<span class="fn">run_until</span>(<span class="kw">async</span> {
         exists because Rust's ownership model forces you to express things that other
         languages leave implicit. The patterns aren't workarounds &mdash; they're the
         vocabulary of productive Rust.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-async.html">Building a Chat Server #6: Going Async</a> uses this pattern for tokio::spawn compatibility.
       </p>
 
       <nav class="series-index" id="series-index">

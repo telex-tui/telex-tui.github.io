@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #4: Interior Mutability</h1>
       <div class="post-meta">March 2026</div>
-      <p class="series-nav">Post 4 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 4 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You have a struct with a cache. The struct is passed around by shared reference. You
@@ -189,6 +189,10 @@
         you need <code>Rc</code> &mdash; which is <a href="rust-patterns-shared-ownership.html">the
         next post</a>. And when you need shared ownership <em>and</em> mutation,
         <a href="rust-patterns-rc-refcell.html">#6</a> puts the two together.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-rooms-users.html">Building a Chat Server #2: Rooms and Users</a> uses this pattern for runtime-checked mutable room membership.
       </p>
 
       <nav class="series-index" id="series-index">

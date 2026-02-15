@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #12: Custom Iterators</h1>
       <div class="post-meta">March 2026</div>
-      <p class="series-nav">Post 12 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 12 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         Everyone uses <code>.map().filter().collect()</code>. But when you need to iterate
@@ -225,6 +225,10 @@
         to own the data &mdash; especially when crossing scope boundaries into threads or
         async tasks. That's where <code>'static</code> + <code>Clone</code> comes in &mdash;
         <a href="rust-patterns-static-clone.html">the next post</a>.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-parsing.html">Building a Chat Server #3: Parsing and Performance</a> uses this pattern for streaming frame extraction from a byte buffer.
       </p>
 
       <nav class="series-index" id="series-index">

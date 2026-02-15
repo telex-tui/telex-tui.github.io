@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #14: Enum Dispatch vs Trait Objects</h1>
       <div class="post-meta">July 2026</div>
-      <p class="series-nav">Post 14 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 14 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         You have different types that share common behaviour. Classic polymorphism. In most
@@ -183,6 +183,10 @@
       <p>
         The decisive question: <em>who defines the concrete types?</em> If it's you, use an
         enum. If it's your users, use a trait.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-commands.html">Building a Chat Server #4: Commands and Plugins</a> uses this pattern for the /join, /nick, /kick command system.
       </p>
 
       <nav class="series-index" id="series-index">

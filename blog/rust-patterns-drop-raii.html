@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #9: Drop and RAII</h1>
       <div class="post-meta">March 2026</div>
-      <p class="series-nav">Post 9 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 9 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         A client disconnects mid-session. They hold a slot in a room's member list, a TCP
@@ -209,6 +209,10 @@
         a struct holds a reference, the compiler needs to know how long that reference is
         valid. That's where lifetime annotations come in &mdash;
         <a href="rust-patterns-lifetime-annotations.html">the next post</a>.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-rooms-users.html">Building a Chat Server #2: Rooms and Users</a> uses this pattern for automatic connection cleanup.
       </p>
 
       <nav class="series-index" id="series-index">

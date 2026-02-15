@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #20: Channels &mdash; Message Passing</h1>
       <div class="post-meta">August 2026</div>
-      <p class="series-nav">Post 20 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 20 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         The previous post covered <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> for shared state
@@ -197,6 +197,10 @@ std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         When in doubt, start with channels. They're easier to reason about, can't deadlock
         (no locks to hold), and naturally decouple components. Move to shared state only
         when channels introduce unacceptable latency or awkward serialization of access.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-threaded.html">Building a Chat Server #5: Going Multi-threaded</a> uses this pattern for delivering messages to client writer threads.
       </p>
 
       <nav class="series-index" id="series-index">

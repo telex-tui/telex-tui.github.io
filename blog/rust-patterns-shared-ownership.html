@@ -27,7 +27,7 @@
     <article class="post">
       <h1>Rust Patterns That Matter #5: Shared Ownership</h1>
       <div class="post-meta">March 2026</div>
-      <p class="series-nav">Post 5 of 22 in <a href="#series-index">Rust Patterns That Matter</a>.</p>
+      <p class="series-nav">Post 5 of 22 in <a href="#series-index">Rust Patterns That Matter</a>. Companion series: <a href="chat-server-hello-tcp.html">Building a Chat Server in Rust</a>.</p>
 
       <p>
         Rust enforces single ownership: one variable owns each value, and when that variable
@@ -216,6 +216,10 @@
         &mdash; shared ownership with interior mutability. This is the workhorse pattern for
         single-threaded shared mutable state, and it's exactly what Telex uses for component
         state.
+      </p>
+
+      <p>
+        <em>See it in practice:</em> <a href="chat-server-rooms-users.html">Building a Chat Server #2: Rooms and Users</a> uses this pattern for shared ownership of room data.
       </p>
 
       <nav class="series-index" id="series-index">
