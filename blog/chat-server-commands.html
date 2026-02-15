@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Server #4: Commands and Plugins - Telex</title>
+  <meta name="description" content="Add a command system and plugin filters to the Rust chat server. Five patterns: enum dispatch, Fn/FnMut/FnOnce, storing closures, builder, and typestate.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Building a Chat Server in Rust #4: Commands and Plugins</h1>
+      <div class="post-meta">February 2026</div>
+      <p class="series-nav">Post 4 of 6 in <a href="#series-index">Building a Chat Server in Rust</a>.
+        Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        Our server <a href="chat-server-parsing.html">parses a wire protocol</a>, but all
+        the "commands" are baked into the frame parser. Now we build a real command system
+        (<code>/join</code>, <code>/nick</code>, <code>/kick</code>), a plugin system
+        for message filters, a builder for server configuration, and typestate connections.
+        Five patterns in one post.
+      </p>
+      <p>
+        The code is on the
+        <a href="https://github.com/telex-tui/rust-chat-server/tree/04-commands"><code>04-commands</code></a>
+        branch.
+      </p>
+
+      <h2>Pattern #14: Enum dispatch &mdash; the command system</h2>
+
+      <p>
+        Commands are a closed set: <code>/join</code>, <code>/nick</code>,
+        <code>/kick</code>, <code>/quit</code>, <code>/help</code>, <code>/list</code>.
+        We know every variant at compile time. That makes them a perfect fit for an enum:
+      </p>
+
+      <pre><code><span class="kw">pub enum</span> <span class="ty">Command</span> {
+    <span class="ty">Join</span> { room: <span class="ty">String</span> },
+    <span class="ty">Nick</span> { name: <span class="ty">String</span> },
+    <span class="ty">Kick</span> { target: <span class="ty">String</span> },
+    <span class="ty">Quit</span>,
+    <span class="ty">Help</span>,
+    <span class="ty">List</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Command</span> {
+    <span class="kw">pub fn</span> <span class="fn">execute</span>(<span class="kw">self</span>, current_room: <span class="ty">RoomId</span>) -&gt; <span class="ty">CommandResult</span> {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">Command</span>::<span class="ty">Join</span> { room } =&gt; <span class="ty">CommandResult</span>::<span class="ty">JoinRoom</span> { room },
+            <span class="ty">Command</span>::<span class="ty">Nick</span> { name } =&gt; <span class="ty">CommandResult</span>::<span class="ty">ChangeNick</span> { new_name: name },
+            <span class="ty">Command</span>::<span class="ty">Kick</span> { target } =&gt; <span class="ty">CommandResult</span>::<span class="ty">KickUser</span> { target, room_id: current_room },
+            <span class="ty">Command</span>::<span class="ty">Quit</span> =&gt; <span class="ty">CommandResult</span>::<span class="ty">Quit</span>,
+            <span class="ty">Command</span>::<span class="ty">Help</span> =&gt; <span class="ty">CommandResult</span>::<span class="ty">Reply</span>(<span class="str">"Commands: /join, /nick, /kick, /list, /quit"</span>.<span class="fn">into</span>()),
+            <span class="ty">Command</span>::<span class="ty">List</span> =&gt; <span class="ty">CommandResult</span>::<span class="ty">Reply</span>(<span class="str">"(room listing)"</span>.<span class="fn">into</span>()),
+        }
+    }
+}</code></pre>
+
+      <p>
+        Enum dispatch is faster than trait objects (no vtable, no indirection) and
+        exhaustive &mdash; if you add a variant and forget a match arm, it won't compile.
+        Use enums when the set of variants is closed. Use trait objects
+        (<code>dyn Trait</code>) when the set is open &mdash; when users or plugins can
+        add new types at runtime.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-enum-dispatch.html">Rust Patterns #14: Enum Dispatch vs Trait Objects</a>.
+      </p>
+
+      <h2>Patterns #15 &amp; #16: Closures and the plugin system</h2>
+
+      <p>
+        Commands are a closed set, but message filters are an open set &mdash; anyone
+        should be able to register a filter. Closures are perfect: they're inline functions
+        that capture their environment.
+      </p>
+      <p>
+        The question is which closure trait to use. Rust has three:
+      </p>
+      <ul>
+        <li><code>Fn</code> &mdash; can be called multiple times, only reads captures</li>
+        <li><code>FnMut</code> &mdash; can be called multiple times, can mutate captures</li>
+        <li><code>FnOnce</code> &mdash; can only be called once, consumes captures</li>
+      </ul>
+      <p>
+        Our filters need to be called on every message (not once), and they may track
+        state (like a message counter). That means <code>FnMut</code>:
+      </p>
+
+      <pre><code><span class="kw">pub struct</span> <span class="ty">FilterRegistry</span> {
+    filters: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">FnMut</span>(&amp;<span class="kw">str</span>, &amp;<span class="kw">str</span>) -&gt; <span class="ty">FilterAction</span>&gt;&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">FilterRegistry</span> {
+    <span class="kw">pub fn</span> <span class="fn">add</span>&lt;<span class="ty">F</span>&gt;(&amp;<span class="kw">mut</span> <span class="kw">self</span>, filter: <span class="ty">F</span>)
+    <span class="kw">where</span>
+        <span class="ty">F</span>: <span class="ty">FnMut</span>(&amp;<span class="kw">str</span>, &amp;<span class="kw">str</span>) -&gt; <span class="ty">FilterAction</span> + <span class="kw">'static</span>,
+    {
+        <span class="kw">self</span>.filters.<span class="fn">push</span>(<span class="ty">Box</span>::<span class="fn">new</span>(filter));
+    }
+}</code></pre>
+
+      <p>
+        <code>Box&lt;dyn FnMut(...)&gt;</code> is the key. Closures have anonymous types
+        &mdash; each closure is a unique, unnameable type. <code>Box&lt;dyn&gt;</code>
+        erases the type so different closures can live in the same <code>Vec</code>.
+      </p>
+      <p>
+        Registration looks like this:
+      </p>
+
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> count = <span class="num">0</span><span class="ty">u64</span>;
+server.filters.<span class="fn">add</span>(<span class="kw">move</span> |_username: &amp;<span class="kw">str</span>, _body: &amp;<span class="kw">str</span>| {
+    count += <span class="num">1</span>;  <span class="cm">// mutates captured variable — needs FnMut</span>
+    <span class="mac">println!</span>(<span class="str">"[filter] message #{count} processed"</span>);
+    <span class="ty">FilterAction</span>::<span class="ty">Allow</span>
+});</code></pre>
+
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-closure-traits.html">Rust Patterns #15: Fn, FnMut, FnOnce</a>
+        and <a href="rust-patterns-storing-closures.html">Rust Patterns #16: Storing Closures</a>.
+      </p>
+
+      <h2>Pattern #17: Builder &mdash; server configuration</h2>
+
+      <p>
+        Our server has grown: address, port, max users, max rooms, message of the day.
+        A constructor with five positional arguments is error-prone. A builder gives
+        named, optional, chainable configuration:
+      </p>
+
+      <pre><code><span class="kw">let</span> config = <span class="ty">ServerConfig</span>::<span class="fn">builder</span>()
+    .<span class="fn">addr</span>(<span class="str">"127.0.0.1"</span>)
+    .<span class="fn">port</span>(<span class="num">8080</span>)
+    .<span class="fn">max_users</span>(<span class="num">100</span>)
+    .<span class="fn">motd</span>(<span class="str">"Welcome to the Rust chat server!"</span>)
+    .<span class="fn">build</span>();</code></pre>
+
+      <p>
+        The builder is a separate struct that accumulates optional values and produces
+        the final config. Defaults are set in <code>builder()</code>, overrides are
+        chained, and <code>build()</code> validates and returns the config:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">ServerConfig</span> {
+    <span class="kw">pub fn</span> <span class="fn">builder</span>() -&gt; <span class="ty">ServerConfigBuilder</span> {
+        <span class="ty">ServerConfigBuilder</span> {
+            addr: <span class="str">"127.0.0.1"</span>.<span class="fn">to_string</span>(),
+            port: <span class="num">8080</span>,
+            max_users: <span class="num">100</span>,
+            max_rooms: <span class="num">50</span>,
+            motd: <span class="ty">None</span>,
+        }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">ServerConfigBuilder</span> {
+    <span class="kw">pub fn</span> <span class="fn">port</span>(<span class="kw">mut</span> <span class="kw">self</span>, port: <span class="ty">u16</span>) -&gt; <span class="kw">Self</span> {
+        <span class="kw">self</span>.port = port;
+        <span class="kw">self</span>
+    }
+    <span class="cm">// ... other fields follow the same pattern</span>
+
+    <span class="kw">pub fn</span> <span class="fn">build</span>(<span class="kw">self</span>) -&gt; <span class="ty">ServerConfig</span> { <span class="cm">/* ... */</span> }
+}</code></pre>
+
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-builder.html">Rust Patterns #17: Builder Pattern</a>.
+      </p>
+
+      <h2>Pattern #18: Typestate &mdash; connections that can't be misused</h2>
+
+      <p>
+        A connection goes through stages: accepted &rarr; authenticated &rarr; in a room.
+        Sending a message before authentication shouldn't be possible. We encode this
+        in the type system:
+      </p>
+
+      <pre><code><span class="kw">pub struct</span> <span class="ty">Unauthenticated</span>;
+<span class="kw">pub struct</span> <span class="ty">Authenticated</span>;
+<span class="kw">pub struct</span> <span class="ty">InRoom</span>;
+
+<span class="kw">pub struct</span> <span class="ty">Connection</span>&lt;<span class="ty">S</span>&gt; {
+    <span class="kw">pub</span> stream: <span class="ty">TcpStream</span>,
+    <span class="kw">pub</span> reader: <span class="ty">BufReader</span>&lt;<span class="ty">TcpStream</span>&gt;,
+    <span class="cm">// ...</span>
+    _state: <span class="ty">PhantomData</span>&lt;<span class="ty">S</span>&gt;,
+}</code></pre>
+
+      <p>
+        Each state only exposes the methods that make sense:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">Connection</span>&lt;<span class="ty">Unauthenticated</span>&gt; {
+    <span class="cm">// Consumes self, returns Connection&lt;Authenticated&gt;.</span>
+    <span class="kw">pub fn</span> <span class="fn">authenticate</span>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Connection</span>&lt;<span class="ty">Authenticated</span>&gt;, <span class="ty">ChatError</span>&gt; {
+        <span class="mac">writeln!</span>(<span class="kw">self</span>.stream, <span class="str">"Enter your username:"</span>)?;
+        <span class="cm">// ... read username, transition state</span>
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Connection</span>&lt;<span class="ty">InRoom</span>&gt; {
+    <span class="cm">// Only available after joining a room.</span>
+    <span class="kw">pub fn</span> <span class="fn">send</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, text: &amp;<span class="kw">str</span>) { <span class="cm">/* ... */</span> }
+    <span class="kw">pub fn</span> <span class="fn">read_line</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;, <span class="ty">ChatError</span>&gt; { <span class="cm">/* ... */</span> }
+}</code></pre>
+
+      <p>
+        <code>authenticate()</code> consumes <code>Connection&lt;Unauthenticated&gt;</code>
+        and returns <code>Connection&lt;Authenticated&gt;</code>. You can't call
+        <code>send()</code> on an unauthenticated connection &mdash; it doesn't exist on
+        that type. Invalid transitions are compile errors, not runtime checks.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-typestate.html">Rust Patterns #18: Typestate</a>.
+      </p>
+
+      <h2>Try it</h2>
+
+      <pre><code><span class="cm"># Terminal 1</span>
+git checkout 04-commands
+cargo run
+
+<span class="cm"># Terminal 2</span>
+nc 127.0.0.1 8080
+alice
+hello everyone                 <span class="cm"># plain text chat</span>
+/join general                  <span class="cm"># → * You joined #general</span>
+/nick alicia                   <span class="cm"># → * You are now alicia (was alice)</span>
+/help                          <span class="cm"># → Commands: /join, /nick, /kick, /list, /quit</span>
+/quit                          <span class="cm"># → * Goodbye!</span></code></pre>
+
+      <h2>What we have, what's missing</h2>
+
+      <p>
+        Five more patterns are working:
+      </p>
+      <ul>
+        <li><strong>Enum dispatch</strong> &mdash; commands as a closed enum, exhaustive matching.</li>
+        <li><strong>Fn/FnMut/FnOnce</strong> &mdash; filters use <code>FnMut</code> because they mutate state.</li>
+        <li><strong>Storing closures</strong> &mdash; <code>Box&lt;dyn FnMut(...)&gt;</code> in a <code>Vec</code>.</li>
+        <li><strong>Builder</strong> &mdash; <code>ServerConfig::builder().port(8080).build()</code>.</li>
+        <li><strong>Typestate</strong> &mdash; <code>Connection&lt;Unauthenticated&gt;</code> &rarr;
+          <code>Connection&lt;Authenticated&gt;</code> &rarr; <code>Connection&lt;InRoom&gt;</code>.</li>
+      </ul>
+
+      <p>
+        What's missing: the server still handles one client at a time.
+        <a href="chat-server-threaded.html">Next time</a> we go multi-threaded with
+        <code>Arc&lt;Mutex&gt;</code> and channels.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="chat-server-hello-tcp.html">#1: Hello, TCP</a></li>
+          <li><a href="chat-server-rooms-users.html">#2: Rooms and Users</a></li>
+          <li><a href="chat-server-parsing.html">#3: Parsing and Performance</a></li>
+          <li><strong>#4: Commands and Plugins</strong></li>
+          <li><a href="chat-server-threaded.html">#5: Going Multi-threaded</a></li>
+          <li><a href="chat-server-async.html">#6: Going Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
