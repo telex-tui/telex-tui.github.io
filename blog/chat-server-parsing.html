@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Server #3: Parsing and Performance - Telex</title>
+  <meta name="description" content="Add a wire protocol to the Rust chat server with zero-copy parsing. Four patterns: lifetime annotations, Cow, custom iterators, and 'static + Clone.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Building a Chat Server in Rust #3: Parsing and Performance</h1>
+      <div class="post-meta">February 2026</div>
+      <p class="series-nav">Post 3 of 6 in <a href="#series-index">Building a Chat Server in Rust</a>.
+        Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        Our chat server <a href="chat-server-rooms-users.html">has rooms and users</a>, but
+        the wire format is ad hoc &mdash; just raw text. Now we define a proper protocol,
+        parse it without allocating where possible, and add a custom iterator for streaming
+        frame extraction. Four patterns make this work.
+      </p>
+      <p>
+        The code is on the
+        <a href="https://github.com/telex-tui/rust-chat-server/tree/03-parsing"><code>03-parsing</code></a>
+        branch.
+      </p>
+
+      <h2>The protocol</h2>
+
+      <p>
+        Every line follows the format <code>TYPE:PAYLOAD\n</code>:
+      </p>
+
+      <pre><code>MSG:alice:hello world       <span class="cm"># chat message</span>
+JOIN:general                <span class="cm"># join a room</span>
+NICK:bob                    <span class="cm"># change username</span>
+QUIT:                       <span class="cm"># disconnect</span></code></pre>
+
+      <p>
+        Simple, line-delimited, human-readable. We parse each line into a <code>Frame</code>
+        enum:
+      </p>
+
+      <pre><code><span class="kw">pub enum</span> <span class="ty">Frame</span>&lt;<span class="kw">'a</span>&gt; {
+    <span class="ty">Msg</span> {
+        username: <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="kw">str</span>&gt;,
+        body: <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="kw">str</span>&gt;,
+    },
+    <span class="ty">Join</span> {
+        room: <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="kw">str</span>&gt;,
+    },
+    <span class="ty">Nick</span> {
+        name: <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="kw">str</span>&gt;,
+    },
+    <span class="ty">Quit</span>,
+}</code></pre>
+
+      <p>
+        Two things to notice: the lifetime <code>'a</code> on the enum, and <code>Cow</code>
+        on every string field. Both exist for the same reason: zero-copy parsing.
+      </p>
+
+      <h2>Pattern #10: Lifetime annotations &mdash; borrowing from the input</h2>
+
+      <p>
+        When we parse <code>"MSG:alice:hello world"</code>, the substrings
+        <code>"alice"</code> and <code>"hello world"</code> already exist in the input
+        buffer. Why allocate new <code>String</code>s? We can just point into the
+        original buffer.
+      </p>
+      <p>
+        But Rust needs proof that the parsed <code>Frame</code> won't outlive the buffer
+        it borrows from. That's what the lifetime annotation <code>'a</code> does &mdash;
+        it ties the <code>Frame</code> to its input:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">parse_frame</span>&lt;<span class="kw">'a</span>&gt;(line: &amp;<span class="kw">'a</span> <span class="kw">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Frame</span>&lt;<span class="kw">'a</span>&gt;, <span class="ty">ChatError</span>&gt; {
+    <span class="kw">let</span> (cmd, payload) = line
+        .<span class="fn">split_once</span>(<span class="str">':'</span>)
+        .<span class="fn">ok_or_else</span>(|| <span class="ty">ChatError</span>::<span class="fn">Parse</span>(<span class="str">"missing ':' delimiter"</span>.<span class="fn">into</span>()))?;
+
+    <span class="kw">match</span> cmd {
+        <span class="str">"MSG"</span> =&gt; {
+            <span class="kw">let</span> (username, body) = payload
+                .<span class="fn">split_once</span>(<span class="str">':'</span>)
+                .<span class="fn">ok_or_else</span>(|| <span class="ty">ChatError</span>::<span class="fn">Parse</span>(<span class="str">"MSG requires username:body"</span>.<span class="fn">into</span>()))?;
+
+            <span class="ty">Ok</span>(<span class="ty">Frame</span>::<span class="ty">Msg</span> {
+                username: <span class="ty">Cow</span>::<span class="fn">Borrowed</span>(username.<span class="fn">trim</span>()),
+                body: <span class="ty">Cow</span>::<span class="fn">Borrowed</span>(body),
+            })
+        }
+        <span class="cm">// ... other variants</span>
+    }
+}</code></pre>
+
+      <p>
+        Read the signature: the input <code>line</code> lives for <code>'a</code>, and the
+        returned <code>Frame</code> also lives for <code>'a</code>. The compiler enforces
+        that you can't use the <code>Frame</code> after the input buffer is freed. No
+        dangling pointers, no use-after-free, no runtime cost.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-lifetime-annotations.html">Rust Patterns #10: Lifetime Annotations</a>
+        covers the mental model: lifetimes describe, they don't control.
+      </p>
+
+      <h2>Pattern #11: Cow &mdash; borrow or own</h2>
+
+      <p>
+        <code>Cow&lt;'a, str&gt;</code> stands for "clone on write." It holds either a
+        borrowed <code>&amp;'a str</code> or an owned <code>String</code>. The parser
+        creates <code>Cow::Borrowed</code> when it can point into the input:
+      </p>
+
+      <pre><code><span class="cm">// No allocation — just a pointer into the input buffer.</span>
+username: <span class="ty">Cow</span>::<span class="fn">Borrowed</span>(username.<span class="fn">trim</span>()),</code></pre>
+
+      <p>
+        But sometimes you need to transform the data &mdash; maybe a future version
+        normalises whitespace or escapes HTML. Then you'd use <code>Cow::Owned</code>:
+      </p>
+
+      <pre><code><span class="cm">// Allocation — only when the data needs transformation.</span>
+body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(raw_body.<span class="fn">replace</span>(<span class="str">"&amp;"</span>, <span class="str">"&amp;amp;"</span>)),</code></pre>
+
+      <p>
+        The caller doesn't care which variant it got &mdash; <code>Cow</code> derefs to
+        <code>&amp;str</code> either way. Borrow if you can, own if you must.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-cow.html">Rust Patterns #11: Cow</a>
+        covers the full pattern including <code>Cow&lt;[u8]&gt;</code> and
+        <code>Cow&lt;Path&gt;</code>.
+      </p>
+
+      <h2>Pattern #12: Custom iterators &mdash; streaming frame extraction</h2>
+
+      <p>
+        What if you have a buffer of accumulated bytes with multiple <code>\n</code>-terminated
+        lines? You want to extract frames one at a time, leaving incomplete data for the
+        next read. That's a custom iterator:
+      </p>
+
+      <pre><code><span class="kw">pub struct</span> <span class="ty">FrameIter</span>&lt;<span class="kw">'a</span>&gt; {
+    buf: &amp;<span class="kw">'a</span> <span class="kw">str</span>,
+    pos: <span class="ty">usize</span>,
+}
+
+<span class="kw">impl</span>&lt;<span class="kw">'a</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">FrameIter</span>&lt;<span class="kw">'a</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">Result</span>&lt;<span class="ty">Frame</span>&lt;<span class="kw">'a</span>&gt;, <span class="ty">ChatError</span>&gt;;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt; {
+        <span class="kw">let</span> remaining = &amp;<span class="kw">self</span>.buf[<span class="kw">self</span>.pos..];
+        <span class="kw">let</span> newline = remaining.<span class="fn">find</span>(<span class="str">'\n'</span>)?;
+
+        <span class="kw">let</span> line = &amp;remaining[..newline];
+        <span class="kw">self</span>.pos += newline + <span class="num">1</span>;
+
+        <span class="kw">if</span> line.<span class="fn">trim</span>().<span class="fn">is_empty</span>() {
+            <span class="kw">return</span> <span class="kw">self</span>.<span class="fn">next</span>();
+        }
+
+        <span class="ty">Some</span>(<span class="fn">parse_frame</span>(line))
+    }
+}</code></pre>
+
+      <p>
+        Implement <code>Iterator</code> for your type and you get <code>map</code>,
+        <code>filter</code>, <code>collect</code>, and lazy evaluation for free.
+        The iterator yields one <code>Frame</code> per complete line and stops at
+        incomplete data. The <code>consumed()</code> method tells the caller how many
+        bytes to drain from the buffer.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-iterators.html">Rust Patterns #12: Custom Iterators</a>
+        covers the full <code>Iterator</code> trait and how to write your own.
+      </p>
+
+      <h2>Pattern #13: 'static + Clone &mdash; the escape hatch</h2>
+
+      <p>
+        Zero-copy parsing is great &mdash; until you need the parsed data to outlive the
+        input buffer. In our server, we parse a <code>Frame</code> from a line, but then
+        we need to broadcast the message to other users. The line is about to be freed.
+        What do we do?
+      </p>
+      <p>
+        Clone it. Convert the borrowed data to owned data:
+      </p>
+
+      <pre><code><span class="kw">impl</span>&lt;<span class="kw">'a</span>&gt; <span class="ty">Frame</span>&lt;<span class="kw">'a</span>&gt; {
+    <span class="kw">pub fn</span> <span class="fn">into_owned</span>(<span class="kw">self</span>) -&gt; <span class="ty">Frame</span>&lt;<span class="kw">'static</span>&gt; {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">Frame</span>::<span class="ty">Msg</span> { username, body } =&gt; <span class="ty">Frame</span>::<span class="ty">Msg</span> {
+                username: <span class="ty">Cow</span>::<span class="fn">Owned</span>(username.<span class="fn">into_owned</span>()),
+                body: <span class="ty">Cow</span>::<span class="fn">Owned</span>(body.<span class="fn">into_owned</span>()),
+            },
+            <span class="cm">// ... other variants</span>
+        }
+    }
+}</code></pre>
+
+      <p>
+        <code>into_owned()</code> converts <code>Cow::Borrowed(&amp;str)</code> to
+        <code>Cow::Owned(String)</code>. The result has lifetime <code>'static</code>
+        &mdash; it owns all its data and can live forever. We use it at the boundary
+        where zero-copy meets "I need to keep this":
+      </p>
+
+      <pre><code><span class="cm">// Parse — zero-copy, borrows from `line`.</span>
+<span class="kw">let</span> frame = <span class="fn">parse_frame</span>(&amp;line)?;
+
+<span class="cm">// Clone at the boundary — only when we need to keep it.</span>
+<span class="kw">let</span> owned_msg = msg.<span class="fn">into_owned</span>();
+
+<span class="cm">// Broadcast — owned_msg can outlive `line`.</span>
+<span class="kw">self</span>.<span class="fn">broadcast</span>(room_id, user_id, &amp;owned_msg)?;</code></pre>
+
+      <p>
+        This is the pragmatic approach: borrow by default, clone at boundaries. Don't
+        optimise until you profile.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-static-clone.html">Rust Patterns #13: 'static + Clone</a>
+        covers the escape hatch and when it's the right call.
+      </p>
+
+      <h2>Try it</h2>
+
+      <pre><code><span class="cm"># Terminal 1</span>
+git checkout 03-parsing
+cargo run
+
+<span class="cm"># Terminal 2</span>
+nc 127.0.0.1 8080
+alice                          <span class="cm"># → Welcome, alice!</span>
+MSG:alice:hello world          <span class="cm"># → &lt;alice&gt; hello world</span>
+JOIN:general                   <span class="cm"># → * You joined #general</span>
+NICK:alicia                    <span class="cm"># → * You are now alicia (was alice)</span>
+QUIT:                          <span class="cm"># → * Goodbye!</span></code></pre>
+
+      <h2>What we have, what's missing</h2>
+
+      <p>
+        We now have a structured protocol with four patterns:
+      </p>
+      <ul>
+        <li><strong>Lifetime annotations</strong> &mdash; <code>Frame&lt;'a&gt;</code> ties
+          the parsed data to the input buffer's lifetime.</li>
+        <li><strong>Cow</strong> &mdash; borrow from the input buffer when clean, own when
+          transformed. Zero allocations in the common path.</li>
+        <li><strong>Custom iterators</strong> &mdash; <code>FrameIter</code> yields frames
+          from a byte buffer, with all of Iterator's combinators for free.</li>
+        <li><strong>'static + Clone</strong> &mdash; <code>into_owned()</code> converts
+          borrowed data to owned data at scope boundaries.</li>
+      </ul>
+
+      <p>
+        What's missing: the protocol works, but the only "commands" are baked into the
+        frame parser. <a href="chat-server-commands.html">Next time</a> we build a proper
+        command system with enum dispatch, closures, a builder, and typestate connections.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="chat-server-hello-tcp.html">#1: Hello, TCP</a></li>
+          <li><a href="chat-server-rooms-users.html">#2: Rooms and Users</a></li>
+          <li><strong>#3: Parsing and Performance</strong></li>
+          <li><a href="chat-server-commands.html">#4: Commands and Plugins</a></li>
+          <li><a href="chat-server-threaded.html">#5: Going Multi-threaded</a></li>
+          <li><a href="chat-server-async.html">#6: Going Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
