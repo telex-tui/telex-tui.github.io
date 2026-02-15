@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Server #1: Hello, TCP - Telex</title>
+  <meta name="description" content="Build a TCP chat server from scratch in Rust. Stage 1: accept connections, parse messages, handle errors — three patterns in your first hour.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Building a Chat Server in Rust #1: Hello, TCP</h1>
+      <div class="post-meta">February 2026</div>
+      <p class="series-nav">Post 1 of 6 in <a href="#series-index">Building a Chat Server in Rust</a>.
+        Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        We're building a chat server. Not a toy &mdash; a real TCP server that accepts
+        connections, parses messages, handles errors, and will eventually support rooms,
+        commands, threads, and async. But we start simple: accept a connection, read lines,
+        parse them, echo them back.
+      </p>
+      <p>
+        By the end of this post, you'll have a working server and three Rust patterns
+        under your belt. The code is on the
+        <a href="https://github.com/telex-tui/rust-chat-server/tree/01-hello-tcp"><code>01-hello-tcp</code></a>
+        branch.
+      </p>
+
+      <h2>The bare minimum</h2>
+
+      <p>
+        A TCP server in Rust fits in 20 lines. Bind a socket, accept connections, read
+        lines, write them back:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::io::{<span class="ty">BufRead</span>, <span class="ty">BufReader</span>, <span class="ty">Write</span>};
+<span class="kw">use</span> std::net::<span class="ty">TcpListener</span>;
+
+<span class="kw">fn</span> <span class="fn">main</span>() -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">Box</span>&lt;<span class="kw">dyn</span> std::error::<span class="ty">Error</span>&gt;&gt; {
+    <span class="kw">let</span> listener = <span class="ty">TcpListener</span>::<span class="fn">bind</span>(<span class="str">"127.0.0.1:8080"</span>)?;
+
+    <span class="kw">for</span> stream <span class="kw">in</span> listener.<span class="fn">incoming</span>() {
+        <span class="kw">let</span> <span class="kw">mut</span> stream = stream?;
+        <span class="kw">let</span> reader = <span class="ty">BufReader</span>::<span class="fn">new</span>(stream.<span class="fn">try_clone</span>()?);
+        <span class="kw">for</span> line <span class="kw">in</span> reader.<span class="fn">lines</span>() {
+            <span class="kw">let</span> line = line?;
+            <span class="mac">writeln!</span>(stream, <span class="str">"echo: {line}"</span>)?;
+        }
+    }
+
+    <span class="ty">Ok</span>(())
+}</code></pre>
+
+      <p>
+        This works. Connect with <code>nc 127.0.0.1 8080</code>, type a line, see it echoed
+        back. But it's fragile: errors crash the server, there's no structure to messages,
+        and every integer is just an integer. Let's fix all three.
+      </p>
+
+      <h2>Pattern #1: Newtypes &mdash; making the compiler your ally</h2>
+
+      <p>
+        Our server will have users and rooms. Both will have integer IDs. Without newtypes,
+        both are <code>u64</code>, and the compiler can't tell them apart:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">kick_user</span>(user: <span class="ty">u64</span>, room: <span class="ty">u64</span>) { <span class="cm">/* ... */</span> }
+
+<span class="cm">// Oops: arguments swapped. Compiles fine.</span>
+<span class="fn">kick_user</span>(room_id, user_id);</code></pre>
+
+      <p>
+        Wrap each in a single-field tuple struct and the bug becomes a compile error:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::fmt;
+
+<span class="cm">/// A unique identifier for a connected user.</span>
+<span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]</span>
+<span class="kw">pub struct</span> <span class="ty">UserId</span>(<span class="ty">u64</span>);
+
+<span class="kw">impl</span> <span class="ty">UserId</span> {
+    <span class="kw">pub fn</span> <span class="fn">next</span>(counter: &amp;<span class="kw">mut</span> <span class="ty">u64</span>) -&gt; <span class="kw">Self</span> {
+        <span class="kw">let</span> id = *counter;
+        *counter += <span class="num">1</span>;
+        <span class="kw">Self</span>(id)
+    }
+}
+
+<span class="kw">impl</span> fmt::<span class="ty">Display</span> <span class="kw">for</span> <span class="ty">UserId</span> {
+    <span class="kw">fn</span> <span class="fn">fmt</span>(&amp;<span class="kw">self</span>, f: &amp;<span class="kw">mut</span> fmt::<span class="ty">Formatter</span>&lt;<span class="kw">'_</span>&gt;) -&gt; fmt::<span class="ty">Result</span> {
+        <span class="mac">write!</span>(f, <span class="str">"user#{}"</span>, <span class="kw">self</span>.<span class="num">0</span>)
+    }
+}</code></pre>
+
+      <p>
+        <code>UserId</code> and <code>RoomId</code> are different types now. Same
+        representation at runtime (<code>u64</code>), zero overhead, but the compiler
+        rejects mix-ups. We define <code>RoomId</code> the same way &mdash; it'll be used
+        from <a href="chat-server-rooms-users.html">Stage 2</a> onward.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-newtype.html">Rust Patterns #1: Newtype</a>
+        covers the full pattern including the orphan rule workaround.
+      </p>
+
+      <h2>Pattern #2: From / Into &mdash; a message wire format</h2>
+
+      <p>
+        Our server needs a message format. Something simple: <code>username:message body\n</code>.
+        A client sends <code>alice:hello world\n</code> and the server parses it into a
+        structured <code>Message</code>.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::fmt;
+<span class="kw">use</span> std::str::<span class="ty">FromStr</span>;
+
+<span class="attr">#[derive(Debug, Clone)]</span>
+<span class="kw">pub struct</span> <span class="ty">Message</span> {
+    <span class="kw">pub</span> username: <span class="ty">String</span>,
+    <span class="kw">pub</span> body: <span class="ty">String</span>,
+}</code></pre>
+
+      <p>
+        Parsing can fail &mdash; the line might not have a <code>:</code> delimiter, or the
+        username might be empty. So we implement <code>FromStr</code>, which lets us write
+        <code>line.parse::&lt;Message&gt;()</code> and get a <code>Result</code> back:
+      </p>
+
+      <pre><code><span class="kw">impl</span> <span class="ty">FromStr</span> <span class="kw">for</span> <span class="ty">Message</span> {
+    <span class="kw">type</span> <span class="ty">Err</span> = <span class="ty">ChatError</span>;
+
+    <span class="kw">fn</span> <span class="fn">from_str</span>(line: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="kw">Self</span>, <span class="kw">Self</span>::<span class="ty">Err</span>&gt; {
+        <span class="kw">let</span> (username, body) = line
+            .<span class="fn">split_once</span>(<span class="str">':'</span>)
+            .<span class="fn">ok_or_else</span>(|| <span class="ty">ChatError</span>::<span class="fn">Parse</span>(<span class="str">"missing ':' delimiter"</span>.<span class="fn">into</span>()))?;
+
+        <span class="kw">let</span> username = username.<span class="fn">trim</span>();
+        <span class="kw">if</span> username.<span class="fn">is_empty</span>() {
+            <span class="kw">return</span> <span class="ty">Err</span>(<span class="ty">ChatError</span>::<span class="fn">Parse</span>(<span class="str">"empty username"</span>.<span class="fn">into</span>()));
+        }
+
+        <span class="ty">Ok</span>(<span class="ty">Message</span> {
+            username: username.<span class="fn">to_string</span>(),
+            body: body.<span class="fn">to_string</span>(),
+        })
+    }
+}</code></pre>
+
+      <p>
+        For the other direction &mdash; turning a <code>Message</code> into a string for
+        display &mdash; we implement <code>Display</code>:
+      </p>
+
+      <pre><code><span class="kw">impl</span> fmt::<span class="ty">Display</span> <span class="kw">for</span> <span class="ty">Message</span> {
+    <span class="kw">fn</span> <span class="fn">fmt</span>(&amp;<span class="kw">self</span>, f: &amp;<span class="kw">mut</span> fmt::<span class="ty">Formatter</span>&lt;<span class="kw">'_</span>&gt;) -&gt; fmt::<span class="ty">Result</span> {
+        <span class="mac">write!</span>(f, <span class="str">"&lt;{}&gt; {}"</span>, <span class="kw">self</span>.username, <span class="kw">self</span>.body)
+    }
+}</code></pre>
+
+      <p>
+        The conversion chain: raw bytes arrive on the TCP socket, <code>BufReader</code>
+        gives us <code>String</code> lines, <code>.parse()</code> gives us a
+        <code>Message</code>, and <code>Display</code> formats it for output. Each step
+        has a clear type and a clear conversion.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-from-into.html">Rust Patterns #2: From / Into Conversions</a>
+        covers the full From/Into ecosystem, including why implementing <code>From</code>
+        gives you <code>Into</code> for free.
+      </p>
+
+      <h2>Pattern #3: Error handling &mdash; ? and thiserror</h2>
+
+      <p>
+        Our server has two kinds of errors: network failures (<code>io::Error</code>) and
+        parse failures (bad message format). We define an enum that covers both:
+      </p>
+
+      <pre><code><span class="kw">use</span> thiserror::<span class="ty">Error</span>;
+
+<span class="attr">#[derive(Debug, Error)]</span>
+<span class="kw">pub enum</span> <span class="ty">ChatError</span> {
+    <span class="attr">#[error("network error: {0}")]</span>
+    <span class="ty">Network</span>(<span class="attr">#[from]</span> std::io::<span class="ty">Error</span>),
+
+    <span class="attr">#[error("parse error: {0}")]</span>
+    <span class="ty">Parse</span>(<span class="ty">String</span>),
+}</code></pre>
+
+      <p>
+        <code>thiserror</code> generates the <code>Display</code> and <code>Error</code>
+        trait implementations from the <code>#[error(...)]</code> attributes.
+        <code>#[from]</code> generates <code>From&lt;io::Error&gt; for ChatError</code>,
+        which means the <code>?</code> operator automatically converts IO errors into
+        our error type.
+      </p>
+
+      <p>
+        This is the key insight: <code>?</code> calls <code>.into()</code> on the error.
+        With the <code>From</code> impl in place, every <code>?</code> on an IO operation
+        does the conversion for free:
+      </p>
+
+      <pre><code><span class="kw">let</span> listener = <span class="ty">TcpListener</span>::<span class="fn">bind</span>(<span class="str">"127.0.0.1:8080"</span>)?;  <span class="cm">// io::Error → ChatError::Network</span>
+<span class="kw">let</span> <span class="kw">mut</span> stream = stream?;                               <span class="cm">// io::Error → ChatError::Network</span>
+<span class="kw">let</span> line = line?;                                        <span class="cm">// io::Error → ChatError::Network</span></code></pre>
+
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-error-handling.html">Rust Patterns #3: Error Handling</a>
+        covers thiserror vs anyhow and when to use each.
+      </p>
+
+      <h2>Putting it together</h2>
+
+      <p>
+        Here's the full server. It accepts connections one at a time (single-threaded for
+        now), assigns each a <code>UserId</code>, reads lines, parses them into
+        <code>Message</code>s, and echoes them back formatted:
+      </p>
+
+      <pre><code><span class="kw">mod</span> error;
+<span class="kw">mod</span> message;
+<span class="kw">mod</span> types;
+
+<span class="kw">use</span> std::io::{<span class="ty">BufRead</span>, <span class="ty">BufReader</span>, <span class="ty">Write</span>};
+<span class="kw">use</span> std::net::<span class="ty">TcpListener</span>;
+
+<span class="kw">use</span> error::<span class="ty">ChatError</span>;
+<span class="kw">use</span> message::<span class="ty">Message</span>;
+<span class="kw">use</span> types::<span class="ty">UserId</span>;
+
+<span class="kw">fn</span> <span class="fn">main</span>() -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">ChatError</span>&gt; {
+    <span class="kw">let</span> listener = <span class="ty">TcpListener</span>::<span class="fn">bind</span>(<span class="str">"127.0.0.1:8080"</span>)?;
+    <span class="mac">println!</span>(<span class="str">"Chat server listening on 127.0.0.1:8080"</span>);
+
+    <span class="kw">let</span> <span class="kw">mut</span> next_user_id = <span class="num">0</span><span class="ty">u64</span>;
+
+    <span class="kw">for</span> stream <span class="kw">in</span> listener.<span class="fn">incoming</span>() {
+        <span class="kw">let</span> <span class="kw">mut</span> stream = stream?;
+        <span class="kw">let</span> peer = stream.<span class="fn">peer_addr</span>()?;
+        <span class="kw">let</span> user_id = <span class="ty">UserId</span>::<span class="fn">next</span>(&amp;<span class="kw">mut</span> next_user_id);
+        <span class="mac">println!</span>(<span class="str">"[{user_id}] connected from {peer}"</span>);
+
+        <span class="kw">if let</span> <span class="ty">Err</span>(e) = <span class="fn">handle_client</span>(&amp;<span class="kw">mut</span> stream, user_id) {
+            <span class="mac">println!</span>(<span class="str">"[{user_id}] error: {e}"</span>);
+        }
+
+        <span class="mac">println!</span>(<span class="str">"[{user_id}] disconnected"</span>);
+    }
+
+    <span class="ty">Ok</span>(())
+}
+
+<span class="kw">fn</span> <span class="fn">handle_client</span>(
+    stream: &amp;<span class="kw">mut</span> std::net::<span class="ty">TcpStream</span>,
+    user_id: <span class="ty">UserId</span>,
+) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">ChatError</span>&gt; {
+    <span class="mac">writeln!</span>(stream, <span class="str">"Welcome, {user_id}! Format: username:message"</span>)?;
+
+    <span class="kw">let</span> reader = <span class="ty">BufReader</span>::<span class="fn">new</span>(stream.<span class="fn">try_clone</span>()?);
+    <span class="kw">for</span> line <span class="kw">in</span> reader.<span class="fn">lines</span>() {
+        <span class="kw">let</span> line = line?;
+        <span class="kw">match</span> line.<span class="fn">parse</span>::&lt;<span class="ty">Message</span>&gt;() {
+            <span class="ty">Ok</span>(msg) =&gt; {
+                <span class="mac">println!</span>(<span class="str">"[{user_id}] {msg}"</span>);
+                <span class="mac">writeln!</span>(stream, <span class="str">"{msg}"</span>)?;
+            }
+            <span class="ty">Err</span>(e) =&gt; {
+                <span class="mac">writeln!</span>(stream, <span class="str">"ERROR: {e}"</span>)?;
+            }
+        }
+    }
+
+    <span class="ty">Ok</span>(())
+}</code></pre>
+
+      <h2>Try it</h2>
+
+      <pre><code><span class="cm"># Terminal 1</span>
+git clone https://github.com/telex-tui/rust-chat-server
+git checkout 01-hello-tcp
+cargo run
+
+<span class="cm"># Terminal 2</span>
+nc 127.0.0.1 8080
+alice:hello world          <span class="cm"># → &lt;alice&gt; hello world</span>
+bob:good morning           <span class="cm"># → &lt;bob&gt; good morning</span>
+no delimiter here          <span class="cm"># → ERROR: parse error: missing ':' delimiter</span></code></pre>
+
+      <h2>What we have, what's missing</h2>
+
+      <p>
+        We have a server that compiles, runs, and handles errors without crashing.
+        Three patterns are already working:
+      </p>
+      <ul>
+        <li><strong>Newtypes</strong> &mdash; <code>UserId</code> and <code>RoomId</code>
+          prevent ID mix-ups at zero cost</li>
+        <li><strong>From / Into</strong> &mdash; <code>FromStr</code> for parsing,
+          <code>Display</code> for output, <code>?</code> calls <code>.into()</code>
+          on errors</li>
+        <li><strong>Error handling</strong> &mdash; <code>ChatError</code> with
+          <code>thiserror</code>, <code>?</code> propagation, graceful recovery on
+          parse errors</li>
+      </ul>
+
+      <p>
+        What's missing: the server handles one connection at a time. There are no rooms,
+        no broadcasting, no shared state. That's <a href="chat-server-rooms-users.html">the next post</a>
+        &mdash; and it's where ownership gets interesting.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><strong>#1: Hello, TCP</strong></li>
+          <li><a href="chat-server-rooms-users.html">#2: Rooms and Users</a></li>
+          <li><a href="chat-server-parsing.html">#3: Parsing and Performance</a></li>
+          <li><a href="chat-server-commands.html">#4: Commands and Plugins</a></li>
+          <li><a href="chat-server-threaded.html">#5: Going Multi-threaded</a></li>
+          <li><a href="chat-server-async.html">#6: Going Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
