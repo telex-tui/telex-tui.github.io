@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Server #5: Going Multi-threaded - Telex</title>
+  <meta name="description" content="Make the Rust chat server handle multiple clients simultaneously. Two patterns: Arc&lt;Mutex&gt; for shared state and channels for message passing.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Building a Chat Server in Rust #5: Going Multi-threaded</h1>
+      <div class="post-meta">February 2026</div>
+      <p class="series-nav">Post 5 of 6 in <a href="#series-index">Building a Chat Server in Rust</a>.
+        Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
+
+      <p>
+        Until now, our server handled one client at a time. Connect a second client
+        and it blocks until the first disconnects. That's not a chat server &mdash; it's
+        a queue. Now we spawn a thread per client and make the server state thread-safe.
+        Two patterns make this work.
+      </p>
+      <p>
+        The code is on the
+        <a href="https://github.com/telex-tui/rust-chat-server/tree/05-threaded"><code>05-threaded</code></a>
+        branch.
+      </p>
+
+      <h2>What breaks</h2>
+
+      <p>
+        The first instinct is to <code>thread::spawn</code> and pass <code>&amp;mut server</code>
+        to each thread. The compiler blocks it immediately: you can't send a mutable
+        reference to a thread because the reference's lifetime isn't <code>'static</code>,
+        and you can't have multiple mutable references anyway. Two things need to change:
+      </p>
+      <ol>
+        <li><code>Rc&lt;RefCell&gt;</code> &rarr; <code>Arc&lt;Mutex&gt;</code> for shared state</li>
+        <li>Direct writes &rarr; <strong>channels</strong> for message delivery</li>
+      </ol>
+
+      <h2>Pattern #19: Arc&lt;Mutex&lt;T&gt;&gt; &mdash; shared state across threads</h2>
+
+      <p>
+        <code>Rc</code> isn't <code>Send</code> &mdash; it can't cross thread boundaries
+        because its reference count isn't atomic. <code>RefCell</code> isn't <code>Sync</code>
+        &mdash; it can't be shared between threads because its borrow flag isn't atomic.
+      </p>
+      <p>
+        The thread-safe equivalents: <code>Arc</code> (atomic reference counting) for
+        shared ownership, <code>Mutex</code> for exclusive access. Same pattern, different
+        guarantees:
+      </p>
+
+      <pre><code><span class="cm">// Stage 2 (single-threaded):</span>
+<span class="kw">pub</span> members: <span class="ty">Rc</span>&lt;<span class="ty">RefCell</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">UserId</span>&gt;&gt;&gt;
+
+<span class="cm">// Stage 5 (multi-threaded):</span>
+<span class="kw">pub</span> members: <span class="ty">Arc</span>&lt;<span class="ty">Mutex</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">UserId</span>&gt;&gt;&gt;</code></pre>
+
+      <p>
+        The server itself goes behind <code>Arc&lt;Mutex&gt;</code> too:
+      </p>
+
+      <pre><code><span class="kw">let</span> server = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">Mutex</span>::<span class="fn">new</span>(server));
+
+<span class="kw">for</span> stream <span class="kw">in</span> listener.<span class="fn">incoming</span>() {
+    <span class="kw">let</span> stream = stream?;
+    <span class="kw">let</span> server = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;server);
+
+    std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+        <span class="kw">if let</span> <span class="ty">Err</span>(e) = <span class="fn">handle_client</span>(server, stream) {
+            <span class="mac">println!</span>(<span class="str">"Client error: {e}"</span>);
+        }
+    });
+}</code></pre>
+
+      <p>
+        Each thread gets its own <code>Arc</code> handle (cheap &mdash; just an atomic
+        increment). When a thread needs server state, it calls <code>.lock().unwrap()</code>
+        to get exclusive access:
+      </p>
+
+      <pre><code><span class="cm">// Brief lock: register, get motd, join lobby.</span>
+<span class="kw">let</span> (user_id, motd) = {
+    <span class="kw">let</span> <span class="kw">mut</span> srv = server.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+    <span class="kw">let</span> uid = srv.<span class="fn">register_client</span>(username.<span class="fn">clone</span>(), tx);
+    <span class="kw">let</span> motd = srv.config.motd.<span class="fn">clone</span>();
+    srv.<span class="fn">join_room</span>(uid, <span class="ty">RoomId</span>::<span class="fn">new</span>(<span class="num">0</span>));
+    (uid, motd)
+}; <span class="cm">// lock released here</span></code></pre>
+
+      <p>
+        The critical discipline: hold the lock for the shortest possible duration. Lock,
+        do the work, drop the guard. Don't hold a lock while doing IO (reading from
+        the network, writing to a socket). That would block all other threads.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-arc-mutex.html">Rust Patterns #19: Arc&lt;Mutex&gt; vs Arc&lt;RwLock&gt;</a>
+        covers when to use Mutex vs RwLock and common deadlock patterns.
+      </p>
+
+      <h2>Pattern #20: Channels &mdash; message passing</h2>
+
+      <p>
+        The lock discipline creates a problem: how do we deliver messages to clients
+        without holding the server lock? We can't write to a socket while the lock is
+        held &mdash; that would block all other threads during a slow write.
+      </p>
+      <p>
+        The answer: channels. Each client gets an <code>mpsc::Sender</code> registered
+        with the server, and a dedicated writer thread that reads from the corresponding
+        <code>Receiver</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> (tx, rx) = mpsc::<span class="fn">channel</span>::&lt;<span class="ty">Event</span>&gt;();
+
+<span class="cm">// Writer thread: reads events, writes to the TCP stream.</span>
+<span class="kw">let</span> <span class="kw">mut</span> writer = write_stream.<span class="fn">try_clone</span>()?;
+<span class="kw">let</span> writer_handle = std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+    <span class="kw">for</span> event <span class="kw">in</span> rx {
+        <span class="kw">match</span> event {
+            <span class="ty">Event</span>::<span class="ty">Message</span> { from, body } =&gt; {
+                <span class="kw">let</span> _ = <span class="mac">writeln!</span>(writer, <span class="str">"&lt;{from}&gt; {body}"</span>);
+            }
+            <span class="ty">Event</span>::<span class="ty">System</span>(text) =&gt; {
+                <span class="kw">let</span> _ = <span class="mac">writeln!</span>(writer, <span class="str">"{text}"</span>);
+            }
+            <span class="ty">Event</span>::<span class="ty">Quit</span> =&gt; <span class="kw">break</span>,
+        }
+    }
+});</code></pre>
+
+      <p>
+        When the server broadcasts a message, it locks briefly, reads the member list,
+        and sends the event through each member's channel. The actual TCP write happens
+        in each client's writer thread &mdash; no lock held:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">broadcast_message</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, room_id: <span class="ty">RoomId</span>, sender_id: <span class="ty">UserId</span>, username: &amp;<span class="kw">str</span>, body: &amp;<span class="kw">str</span>) {
+    <span class="kw">let</span> members = room.<span class="fn">member_ids</span>();
+    <span class="kw">let</span> event = <span class="ty">Event</span>::<span class="ty">Message</span> {
+        from: username.<span class="fn">to_string</span>(),
+        body: body.<span class="fn">to_string</span>(),
+    };
+
+    <span class="kw">for</span> &amp;member_id <span class="kw">in</span> &amp;members {
+        <span class="kw">if let</span> <span class="ty">Some</span>(<span class="ty">Some</span>(client)) = <span class="kw">self</span>.clients.<span class="fn">get</span>(member_id.<span class="fn">index</span>()) {
+            <span class="kw">let</span> _ = client.tx.<span class="fn">send</span>(event.<span class="fn">clone</span>());
+        }
+    }
+}</code></pre>
+
+      <p>
+        "Don't communicate by sharing memory; share memory by communicating." The
+        channel decouples the producer (server logic) from the consumer (TCP writer).
+        No locks during IO, no contention, no blocking.
+      </p>
+      <p>
+        <em>Deep dive:</em> <a href="rust-patterns-channels.html">Rust Patterns #20: Channels</a>
+        covers mpsc, sync channels, and crossbeam channels.
+      </p>
+
+      <h2>The Send bound</h2>
+
+      <p>
+        One surprise: our <code>FilterRegistry</code> held <code>Box&lt;dyn FnMut(...)&gt;</code>.
+        When the server went behind <code>Arc&lt;Mutex&gt;</code>, the compiler complained:
+        <code>dyn FnMut</code> isn't <code>Send</code>. The fix: add <code>+ Send</code>
+        to the trait object:
+      </p>
+
+      <pre><code><span class="cm">// Before:</span>
+filters: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">FnMut</span>(&amp;<span class="kw">str</span>, &amp;<span class="kw">str</span>) -&gt; <span class="ty">FilterAction</span>&gt;&gt;
+
+<span class="cm">// After:</span>
+filters: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">FnMut</span>(&amp;<span class="kw">str</span>, &amp;<span class="kw">str</span>) -&gt; <span class="ty">FilterAction</span> + <span class="ty">Send</span>&gt;&gt;</code></pre>
+
+      <p>
+        This ensures every closure stored in the registry can safely be sent to another
+        thread. The <a href="chat-server-async.html">next post</a> runs into the same
+        pattern with <code>Send + Sync</code> in async code.
+      </p>
+
+      <h2>Try it</h2>
+
+      <pre><code><span class="cm"># Terminal 1</span>
+git checkout 05-threaded
+cargo run
+
+<span class="cm"># Terminal 2</span>
+nc 127.0.0.1 8080
+alice
+hello from alice               <span class="cm"># → &lt;alice&gt; hello from alice</span>
+
+<span class="cm"># Terminal 3 (simultaneously!)</span>
+nc 127.0.0.1 8080
+bob
+hello from bob                 <span class="cm"># → alice sees: &lt;bob&gt; hello from bob</span></code></pre>
+
+      <p>
+        Both clients work at the same time. This is a real chat server now.
+      </p>
+
+      <h2>What we have, what's missing</h2>
+
+      <ul>
+        <li><strong>Arc&lt;Mutex&gt;</strong> &mdash; shared server state across threads.
+          Brief locks, no lock during IO.</li>
+        <li><strong>Channels</strong> &mdash; mpsc for delivering events to client writer
+          threads. Decouples server logic from TCP writes.</li>
+      </ul>
+
+      <p>
+        What's missing: a thread per client works, but doesn't scale to thousands of
+        connections. <a href="chat-server-async.html">Next time</a> we replace threads
+        with tokio and async/await.
+      </p>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="chat-server-hello-tcp.html">#1: Hello, TCP</a></li>
+          <li><a href="chat-server-rooms-users.html">#2: Rooms and Users</a></li>
+          <li><a href="chat-server-parsing.html">#3: Parsing and Performance</a></li>
+          <li><a href="chat-server-commands.html">#4: Commands and Plugins</a></li>
+          <li><strong>#5: Going Multi-threaded</strong></li>
+          <li><a href="chat-server-async.html">#6: Going Async</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT &mdash; Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
