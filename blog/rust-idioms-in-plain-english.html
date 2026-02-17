@@ -33,9 +33,9 @@
         <code>unwrap_or_else</code>, <code>unwrap_or_default</code>,
         <code>as_ref</code>, <code>to_owned</code>, <code>into_inner</code>,
         <code>filter_map</code>, <code>take_while</code>, <code>min_by_key</code>,
-        <code>copied</code>, <code>cloned</code>. It looks like hundreds of
-        unrelated methods. It isn't. Six naming conventions cover roughly 80% of
-        them. Once they click, methods you've never seen before become guessable.
+        <code>copied</code>, <code>cloned</code>. It looks like a mountain of
+        unrelated methods. It isn't. Just six naming conventions cover roughly
+        80% of the standard library. Once they click, methods you've never seen before become guessable.
       </p>
 
       <h2>1. <code>_or</code> vs <code>_or_else</code> -- eager value vs lazy closure</h2>
@@ -43,7 +43,7 @@
       <p>
         This is the most pervasive. Whenever you see a pair like this, the
         <code>_or</code> version takes a value you already have. The
-        <code>_or_else</code> version takes a closure that goes and gets one.
+        <code>_or_else</code> version takes a closure that computes the value on demand.
         Same pattern in <code>unwrap_or</code> / <code>unwrap_or_else</code>,
         <code>ok_or</code> / <code>ok_or_else</code>,
         <code>or</code> / <code>or_else</code>.
@@ -116,9 +116,10 @@
 <span class="cm">// println!("{s}");                      // ERROR: s has been moved</span></code></pre>
 
       <p>
-        <code>as_</code> is O(1) and free. <code>to_</code> probably allocates.
-        <code>into_</code> might be cheaper than <code>to_</code> because it can
-        reuse the original's resources instead of copying them.
+        <code>as_</code> is O(1) and virtually free. <code>to_</code> usually
+        allocates. <code>into_</code> is often more efficient than
+        <code>to_</code> because it can reuse the existing buffer instead of
+        copying it.
       </p>
 
       <p>
@@ -136,8 +137,8 @@
       <h2>3. <code>_map</code> as a combiner -- two operations in one pass</h2>
 
       <p>
-        When you see two words joined with the second being <code>map</code>,
-        it's doing both operations in one step. The second word is always
+        When a method ends in <code>_map</code>, it performs a transformation
+        as part of another operation. The second word is always
         <code>map</code> because mapping is the universal glue operation:
       </p>
 
@@ -202,9 +203,9 @@
 
       <p>
         The pattern is consistent: the base version works with a fixed count,
-        <code>_while</code> makes it dynamic. The predicate version stops as
-        soon as the condition returns <code>false</code> -- it doesn't re-check
-        later elements.
+        <code>_while</code> makes it dynamic. Crucially, these are
+        short-circuiting: they stop as soon as the condition returns
+        <code>false</code> and will not process subsequent elements.
       </p>
 
       <h2>5. <code>_by</code> / <code>_by_key</code> -- "by what measure?"</h2>
@@ -248,9 +249,9 @@ v.<span class="fn">iter</span>().<span class="fn">max_by</span>(|a, b| ...);    
 v.<span class="fn">iter</span>().<span class="fn">max_by_key</span>(|x| ...);      <span class="cm">// compare by extracted key</span></code></pre>
 
       <p>
-        Use <code>_by_key</code> when you're comparing a single field or derived
-        value. Use <code>_by</code> when you need full control over the comparison
-        -- tie-breaking, multiple fields, reverse order.
+        Use <code>_by_key</code> for comparing a single property or derived
+        value. Use <code>_by</code> for complex logic, such as multi-field
+        tie-breaking or custom sort orders.
       </p>
 
       <h2>6. <code>copied</code> vs <code>cloned</code> -- how expensive is the copy?</h2>
