@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Idioms in Plain English - Telex</title>
+  <meta name="description" content="A cheat sheet for Rust's Option, Result, Iterator, and conversion methods — each one explained in plain English.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Idioms in Plain English</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Rust's standard library is full of small, composable methods on <code>Option</code>,
+        <code>Result</code>, and iterators. They're powerful once you know them, but the names
+        alone don't always make the intent obvious. This post translates each one into plain
+        English.
+      </p>
+
+      <h2>Option</h2>
+
+      <table>
+        <tr><th>Rust idiom</th><th>In plain English</th></tr>
+        <tr><td><code>.unwrap()</code></td><td>"Give me the value or crash"</td></tr>
+        <tr><td><code>.expect("why")</code></td><td>"Give me the value or crash with this reason"</td></tr>
+        <tr><td><code>.unwrap_or(val)</code></td><td>"Give me the value, or use this instead"</td></tr>
+        <tr><td><code>.unwrap_or_else(|| ...)</code></td><td>"Give me the value, or go figure one out"</td></tr>
+        <tr><td><code>.unwrap_or_default()</code></td><td>"Give me the value, or use the default"</td></tr>
+        <tr><td><code>.ok_or(err)</code></td><td>"If None, use this error"</td></tr>
+        <tr><td><code>.ok_or_else(|| ...)</code></td><td>"If None, go build me an error"</td></tr>
+        <tr><td><code>.map(|v| ...)</code></td><td>"If there's a value, transform it"</td></tr>
+        <tr><td><code>.and_then(|v| ...)</code></td><td>"If there's a value, try this next thing that might also produce None"</td></tr>
+        <tr><td><code>.or(other)</code></td><td>"If None, try this other Option instead"</td></tr>
+        <tr><td><code>.or_else(|| ...)</code></td><td>"If None, go find me another Option"</td></tr>
+        <tr><td><code>.filter(|v| ...)</code></td><td>"Keep the value only if it passes this test"</td></tr>
+        <tr><td><code>.is_some()</code></td><td>"Is there a value?"</td></tr>
+        <tr><td><code>.is_none()</code></td><td>"Is it empty?"</td></tr>
+        <tr><td><code>.as_ref()</code></td><td>"Let me look at the value without taking it"</td></tr>
+        <tr><td><code>.as_deref()</code></td><td>"Let me look at what the value points to"</td></tr>
+        <tr><td><code>.take()</code></td><td>"Take the value out, leave None behind"</td></tr>
+        <tr><td><code>.replace(val)</code></td><td>"Swap in this value, give me the old one"</td></tr>
+        <tr><td><code>.zip(other)</code></td><td>"Pair these two up, but only if both have values"</td></tr>
+        <tr><td><code>.flatten()</code></td><td>"Unwrap a nested Option&lt;Option&lt;T&gt;&gt; one level"</td></tr>
+        <tr><td><code>.copied()</code></td><td>"Copy the value out of an Option&lt;&amp;T&gt;"</td></tr>
+        <tr><td><code>.cloned()</code></td><td>"Clone the value out of an Option&lt;&amp;T&gt;"</td></tr>
+      </table>
+
+      <h2>Result</h2>
+
+      <table>
+        <tr><th>Rust idiom</th><th>In plain English</th></tr>
+        <tr><td><code>.unwrap()</code></td><td>"Give me the value or crash"</td></tr>
+        <tr><td><code>.expect("why")</code></td><td>"Give me the value or crash with this reason"</td></tr>
+        <tr><td><code>.unwrap_or(val)</code></td><td>"Give me the value, or use this instead"</td></tr>
+        <tr><td><code>.unwrap_or_else(|e| ...)</code></td><td>"If it failed, make a fallback from the error"</td></tr>
+        <tr><td><code>.unwrap_or_default()</code></td><td>"Give me the value, or use the default"</td></tr>
+        <tr><td><code>.map(|v| ...)</code></td><td>"If it succeeded, transform the value"</td></tr>
+        <tr><td><code>.map_err(|e| ...)</code></td><td>"If it failed, transform the error"</td></tr>
+        <tr><td><code>.and_then(|v| ...)</code></td><td>"If it succeeded, try this next thing that might also fail"</td></tr>
+        <tr><td><code>.or_else(|e| ...)</code></td><td>"If it failed, try this recovery instead"</td></tr>
+        <tr><td><code>.ok()</code></td><td>"Convert to Option, throw away the error"</td></tr>
+        <tr><td><code>.err()</code></td><td>"Give me the error as an Option, throw away the value"</td></tr>
+        <tr><td><code>.is_ok()</code></td><td>"Did it succeed?"</td></tr>
+        <tr><td><code>.is_err()</code></td><td>"Did it fail?"</td></tr>
+        <tr><td><code>?</code></td><td>"If it failed, bail out and pass the error up"</td></tr>
+        <tr><td><code>.as_ref()</code></td><td>"Let me look without taking ownership"</td></tr>
+      </table>
+
+      <h2>Iterators</h2>
+
+      <table>
+        <tr><th>Rust idiom</th><th>In plain English</th></tr>
+        <tr><td><code>.map(|x| ...)</code></td><td>"Transform each element"</td></tr>
+        <tr><td><code>.filter(|x| ...)</code></td><td>"Keep only elements that pass this test"</td></tr>
+        <tr><td><code>.filter_map(|x| ...)</code></td><td>"Transform each element, keep only the Somes"</td></tr>
+        <tr><td><code>.flat_map(|x| ...)</code></td><td>"Transform each element into many, then flatten"</td></tr>
+        <tr><td><code>.collect()</code></td><td>"Gather everything into a collection"</td></tr>
+        <tr><td><code>.collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()</code></td><td>"Gather everything, but stop at the first error"</td></tr>
+        <tr><td><code>.fold(init, |acc, x| ...)</code></td><td>"Accumulate everything into one value, starting from this"</td></tr>
+        <tr><td><code>.reduce(|acc, x| ...)</code></td><td>"Accumulate everything, using the first element as the start"</td></tr>
+        <tr><td><code>.for_each(|x| ...)</code></td><td>"Do this to each element, return nothing"</td></tr>
+        <tr><td><code>.any(|x| ...)</code></td><td>"Does any element pass this test?"</td></tr>
+        <tr><td><code>.all(|x| ...)</code></td><td>"Do all elements pass this test?"</td></tr>
+        <tr><td><code>.find(|x| ...)</code></td><td>"Give me the first element that passes"</td></tr>
+        <tr><td><code>.find_map(|x| ...)</code></td><td>"Transform elements, give me the first Some"</td></tr>
+        <tr><td><code>.position(|x| ...)</code></td><td>"What index is the first element that passes?"</td></tr>
+        <tr><td><code>.enumerate()</code></td><td>"Number each element"</td></tr>
+        <tr><td><code>.zip(other)</code></td><td>"Walk two iterators side by side"</td></tr>
+        <tr><td><code>.chain(other)</code></td><td>"Stick two iterators end to end"</td></tr>
+        <tr><td><code>.take(n)</code></td><td>"Just the first n"</td></tr>
+        <tr><td><code>.skip(n)</code></td><td>"Skip the first n"</td></tr>
+        <tr><td><code>.take_while(|x| ...)</code></td><td>"Keep taking while this is true, then stop"</td></tr>
+        <tr><td><code>.skip_while(|x| ...)</code></td><td>"Skip while this is true, then take the rest"</td></tr>
+        <tr><td><code>.peekable()</code></td><td>"Let me look at the next element without consuming it"</td></tr>
+        <tr><td><code>.cloned()</code></td><td>"Clone each borrowed element"</td></tr>
+        <tr><td><code>.copied()</code></td><td>"Copy each borrowed element"</td></tr>
+        <tr><td><code>.sum()</code></td><td>"Add them all up"</td></tr>
+        <tr><td><code>.product()</code></td><td>"Multiply them all together"</td></tr>
+        <tr><td><code>.min()</code> / <code>.max()</code></td><td>"Smallest / largest"</td></tr>
+        <tr><td><code>.min_by_key(|x| ...)</code> / <code>.max_by_key(|x| ...)</code></td><td>"Smallest / largest by this measure"</td></tr>
+        <tr><td><code>.count()</code></td><td>"How many are there?"</td></tr>
+        <tr><td><code>.last()</code></td><td>"Just the last one"</td></tr>
+        <tr><td><code>.nth(n)</code></td><td>"Jump to the nth one"</td></tr>
+        <tr><td><code>.inspect(|x| ...)</code></td><td>"Peek at each element as it passes through (for debugging)"</td></tr>
+        <tr><td><code>.partition(|x| ...)</code></td><td>"Split into two groups: passes and fails"</td></tr>
+        <tr><td><code>.unzip()</code></td><td>"Split pairs into two separate collections"</td></tr>
+        <tr><td><code>.scan(state, |st, x| ...)</code></td><td>"Transform with memory — carry state between elements"</td></tr>
+        <tr><td><code>.windows(n)</code></td><td>"Slide a window of n across the elements"</td></tr>
+        <tr><td><code>.chunks(n)</code></td><td>"Break into groups of n"</td></tr>
+      </table>
+
+      <h2>Conversions</h2>
+
+      <table>
+        <tr><th>Rust idiom</th><th>In plain English</th></tr>
+        <tr><td><code>.into()</code></td><td>"Convert this into the target type"</td></tr>
+        <tr><td><code>From::from(x)</code></td><td>"Build this type from that value"</td></tr>
+        <tr><td><code>.as_ref()</code></td><td>"Borrow this cheaply as a reference"</td></tr>
+        <tr><td><code>.as_mut()</code></td><td>"Borrow this as a mutable reference"</td></tr>
+        <tr><td><code>.to_string()</code></td><td>"Give me a String"</td></tr>
+        <tr><td><code>.to_owned()</code></td><td>"Give me an owned copy of this borrowed data"</td></tr>
+        <tr><td><code>.clone()</code></td><td>"Make a full copy"</td></tr>
+        <tr><td><code>.parse::&lt;T&gt;()</code></td><td>"Try to read this string as a T"</td></tr>
+        <tr><td><code>&amp;*x</code> or <code>.deref()</code></td><td>"Follow the pointer one level"</td></tr>
+      </table>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
