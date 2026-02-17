@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rust Idioms in Plain English - Telex</title>
-  <meta name="description" content="A cheat sheet for Rust's Option, Result, Iterator, and conversion methods — each one explained in plain English.">
+  <title>Rust's _or Methods (and Five Other Naming Patterns) in Plain English - Telex</title>
+  <meta name="description" content="Six naming conventions — _or/_or_else, as_/to_/into_, _map, _while, _by/_by_key, copied/cloned — that cover 80% of the standard library. Once they click, new methods become guessable.">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
 </head>
@@ -25,122 +25,299 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust Idioms in Plain English</h1>
+      <h1>Rust's <code>_or</code> Methods (and Five Other Naming Patterns) in Plain English</h1>
       <div class="post-meta">February 2026</div>
 
       <p>
-        Rust's standard library is full of small, composable methods on <code>Option</code>,
-        <code>Result</code>, and iterators. They're powerful once you know them, but the names
-        alone don't always make the intent obvious. This post translates each one into plain
-        English.
+        You open the standard library docs and see <code>unwrap_or</code>,
+        <code>unwrap_or_else</code>, <code>unwrap_or_default</code>,
+        <code>as_ref</code>, <code>to_owned</code>, <code>into_inner</code>,
+        <code>filter_map</code>, <code>take_while</code>, <code>min_by_key</code>,
+        <code>copied</code>, <code>cloned</code>. It looks like hundreds of
+        unrelated methods. It isn't. Six naming conventions cover roughly 80% of
+        them. Once they click, methods you've never seen before become guessable.
       </p>
 
-      <h2>Option</h2>
+      <h2>1. <code>_or</code> vs <code>_or_else</code> -- eager value vs lazy closure</h2>
 
-      <table>
-        <tr><th>Rust idiom</th><th>In plain English</th></tr>
-        <tr><td><code>.unwrap()</code></td><td>"Give me the value or crash"</td></tr>
-        <tr><td><code>.expect("why")</code></td><td>"Give me the value or crash with this reason"</td></tr>
-        <tr><td><code>.unwrap_or(val)</code></td><td>"Give me the value, or use this instead"</td></tr>
-        <tr><td><code>.unwrap_or_else(|| ...)</code></td><td>"Give me the value, or go figure one out"</td></tr>
-        <tr><td><code>.unwrap_or_default()</code></td><td>"Give me the value, or use the default"</td></tr>
-        <tr><td><code>.ok_or(err)</code></td><td>"If None, use this error"</td></tr>
-        <tr><td><code>.ok_or_else(|| ...)</code></td><td>"If None, go build me an error"</td></tr>
-        <tr><td><code>.map(|v| ...)</code></td><td>"If there's a value, transform it"</td></tr>
-        <tr><td><code>.and_then(|v| ...)</code></td><td>"If there's a value, try this next thing that might also produce None"</td></tr>
-        <tr><td><code>.or(other)</code></td><td>"If None, try this other Option instead"</td></tr>
-        <tr><td><code>.or_else(|| ...)</code></td><td>"If None, go find me another Option"</td></tr>
-        <tr><td><code>.filter(|v| ...)</code></td><td>"Keep the value only if it passes this test"</td></tr>
-        <tr><td><code>.is_some()</code></td><td>"Is there a value?"</td></tr>
-        <tr><td><code>.is_none()</code></td><td>"Is it empty?"</td></tr>
-        <tr><td><code>.as_ref()</code></td><td>"Let me look at the value without taking it"</td></tr>
-        <tr><td><code>.as_deref()</code></td><td>"Let me look at what the value points to"</td></tr>
-        <tr><td><code>.take()</code></td><td>"Take the value out, leave None behind"</td></tr>
-        <tr><td><code>.replace(val)</code></td><td>"Swap in this value, give me the old one"</td></tr>
-        <tr><td><code>.zip(other)</code></td><td>"Pair these two up, but only if both have values"</td></tr>
-        <tr><td><code>.flatten()</code></td><td>"Unwrap a nested Option&lt;Option&lt;T&gt;&gt; one level"</td></tr>
-        <tr><td><code>.copied()</code></td><td>"Copy the value out of an Option&lt;&amp;T&gt;"</td></tr>
-        <tr><td><code>.cloned()</code></td><td>"Clone the value out of an Option&lt;&amp;T&gt;"</td></tr>
-      </table>
+      <p>
+        This is the most pervasive. Whenever you see a pair like this, the
+        <code>_or</code> version takes a value you already have. The
+        <code>_or_else</code> version takes a closure that goes and gets one.
+        Same pattern in <code>unwrap_or</code> / <code>unwrap_or_else</code>,
+        <code>ok_or</code> / <code>ok_or_else</code>,
+        <code>or</code> / <code>or_else</code>.
+        Once you see it once, you see it everywhere.
+      </p>
 
-      <h2>Result</h2>
+      <pre><code><span class="kw">let</span> a: <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; = <span class="ty">None</span>;
 
-      <table>
-        <tr><th>Rust idiom</th><th>In plain English</th></tr>
-        <tr><td><code>.unwrap()</code></td><td>"Give me the value or crash"</td></tr>
-        <tr><td><code>.expect("why")</code></td><td>"Give me the value or crash with this reason"</td></tr>
-        <tr><td><code>.unwrap_or(val)</code></td><td>"Give me the value, or use this instead"</td></tr>
-        <tr><td><code>.unwrap_or_else(|e| ...)</code></td><td>"If it failed, make a fallback from the error"</td></tr>
-        <tr><td><code>.unwrap_or_default()</code></td><td>"Give me the value, or use the default"</td></tr>
-        <tr><td><code>.map(|v| ...)</code></td><td>"If it succeeded, transform the value"</td></tr>
-        <tr><td><code>.map_err(|e| ...)</code></td><td>"If it failed, transform the error"</td></tr>
-        <tr><td><code>.and_then(|v| ...)</code></td><td>"If it succeeded, try this next thing that might also fail"</td></tr>
-        <tr><td><code>.or_else(|e| ...)</code></td><td>"If it failed, try this recovery instead"</td></tr>
-        <tr><td><code>.ok()</code></td><td>"Convert to Option, throw away the error"</td></tr>
-        <tr><td><code>.err()</code></td><td>"Give me the error as an Option, throw away the value"</td></tr>
-        <tr><td><code>.is_ok()</code></td><td>"Did it succeed?"</td></tr>
-        <tr><td><code>.is_err()</code></td><td>"Did it fail?"</td></tr>
-        <tr><td><code>?</code></td><td>"If it failed, bail out and pass the error up"</td></tr>
-        <tr><td><code>.as_ref()</code></td><td>"Let me look without taking ownership"</td></tr>
-      </table>
+<span class="cm">// _or: you already have the fallback value</span>
+<span class="kw">let</span> x = a.<span class="fn">unwrap_or</span>(<span class="num">42</span>);
 
-      <h2>Iterators</h2>
+<span class="cm">// _or_else: compute the fallback only if needed</span>
+<span class="kw">let</span> y = a.<span class="fn">unwrap_or_else</span>(|| <span class="fn">expensive_default</span>());</code></pre>
 
-      <table>
-        <tr><th>Rust idiom</th><th>In plain English</th></tr>
-        <tr><td><code>.map(|x| ...)</code></td><td>"Transform each element"</td></tr>
-        <tr><td><code>.filter(|x| ...)</code></td><td>"Keep only elements that pass this test"</td></tr>
-        <tr><td><code>.filter_map(|x| ...)</code></td><td>"Transform each element, keep only the Somes"</td></tr>
-        <tr><td><code>.flat_map(|x| ...)</code></td><td>"Transform each element into many, then flatten"</td></tr>
-        <tr><td><code>.collect()</code></td><td>"Gather everything into a collection"</td></tr>
-        <tr><td><code>.collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()</code></td><td>"Gather everything, but stop at the first error"</td></tr>
-        <tr><td><code>.fold(init, |acc, x| ...)</code></td><td>"Accumulate everything into one value, starting from this"</td></tr>
-        <tr><td><code>.reduce(|acc, x| ...)</code></td><td>"Accumulate everything, using the first element as the start"</td></tr>
-        <tr><td><code>.for_each(|x| ...)</code></td><td>"Do this to each element, return nothing"</td></tr>
-        <tr><td><code>.any(|x| ...)</code></td><td>"Does any element pass this test?"</td></tr>
-        <tr><td><code>.all(|x| ...)</code></td><td>"Do all elements pass this test?"</td></tr>
-        <tr><td><code>.find(|x| ...)</code></td><td>"Give me the first element that passes"</td></tr>
-        <tr><td><code>.find_map(|x| ...)</code></td><td>"Transform elements, give me the first Some"</td></tr>
-        <tr><td><code>.position(|x| ...)</code></td><td>"What index is the first element that passes?"</td></tr>
-        <tr><td><code>.enumerate()</code></td><td>"Number each element"</td></tr>
-        <tr><td><code>.zip(other)</code></td><td>"Walk two iterators side by side"</td></tr>
-        <tr><td><code>.chain(other)</code></td><td>"Stick two iterators end to end"</td></tr>
-        <tr><td><code>.take(n)</code></td><td>"Just the first n"</td></tr>
-        <tr><td><code>.skip(n)</code></td><td>"Skip the first n"</td></tr>
-        <tr><td><code>.take_while(|x| ...)</code></td><td>"Keep taking while this is true, then stop"</td></tr>
-        <tr><td><code>.skip_while(|x| ...)</code></td><td>"Skip while this is true, then take the rest"</td></tr>
-        <tr><td><code>.peekable()</code></td><td>"Let me look at the next element without consuming it"</td></tr>
-        <tr><td><code>.cloned()</code></td><td>"Clone each borrowed element"</td></tr>
-        <tr><td><code>.copied()</code></td><td>"Copy each borrowed element"</td></tr>
-        <tr><td><code>.sum()</code></td><td>"Add them all up"</td></tr>
-        <tr><td><code>.product()</code></td><td>"Multiply them all together"</td></tr>
-        <tr><td><code>.min()</code> / <code>.max()</code></td><td>"Smallest / largest"</td></tr>
-        <tr><td><code>.min_by_key(|x| ...)</code> / <code>.max_by_key(|x| ...)</code></td><td>"Smallest / largest by this measure"</td></tr>
-        <tr><td><code>.count()</code></td><td>"How many are there?"</td></tr>
-        <tr><td><code>.last()</code></td><td>"Just the last one"</td></tr>
-        <tr><td><code>.nth(n)</code></td><td>"Jump to the nth one"</td></tr>
-        <tr><td><code>.inspect(|x| ...)</code></td><td>"Peek at each element as it passes through (for debugging)"</td></tr>
-        <tr><td><code>.partition(|x| ...)</code></td><td>"Split into two groups: passes and fails"</td></tr>
-        <tr><td><code>.unzip()</code></td><td>"Split pairs into two separate collections"</td></tr>
-        <tr><td><code>.scan(state, |st, x| ...)</code></td><td>"Transform with memory — carry state between elements"</td></tr>
-        <tr><td><code>.windows(n)</code></td><td>"Slide a window of n across the elements"</td></tr>
-        <tr><td><code>.chunks(n)</code></td><td>"Break into groups of n"</td></tr>
-      </table>
+      <p>
+        The same pairs appear across <code>Option</code> and <code>Result</code>:
+      </p>
 
-      <h2>Conversions</h2>
+      <pre><code><span class="cm">// Option</span>
+<span class="fn">unwrap_or</span>(val)       / <span class="fn">unwrap_or_else</span>(|| ...)
+<span class="fn">or</span>(other_option)     / <span class="fn">or_else</span>(|| ...)
 
-      <table>
-        <tr><th>Rust idiom</th><th>In plain English</th></tr>
-        <tr><td><code>.into()</code></td><td>"Convert this into the target type"</td></tr>
-        <tr><td><code>From::from(x)</code></td><td>"Build this type from that value"</td></tr>
-        <tr><td><code>.as_ref()</code></td><td>"Borrow this cheaply as a reference"</td></tr>
-        <tr><td><code>.as_mut()</code></td><td>"Borrow this as a mutable reference"</td></tr>
-        <tr><td><code>.to_string()</code></td><td>"Give me a String"</td></tr>
-        <tr><td><code>.to_owned()</code></td><td>"Give me an owned copy of this borrowed data"</td></tr>
-        <tr><td><code>.clone()</code></td><td>"Make a full copy"</td></tr>
-        <tr><td><code>.parse::&lt;T&gt;()</code></td><td>"Try to read this string as a T"</td></tr>
-        <tr><td><code>&amp;*x</code> or <code>.deref()</code></td><td>"Follow the pointer one level"</td></tr>
-      </table>
+<span class="cm">// Result</span>
+<span class="fn">unwrap_or</span>(val)       / <span class="fn">unwrap_or_else</span>(|err| ...)
+<span class="fn">ok_or</span>(err)           / <span class="fn">ok_or_else</span>(|| ...)
+<span class="fn">or</span>(other_result)     / <span class="fn">or_else</span>(|err| ...)</code></pre>
+
+      <p>
+        Why bother with the closure version? Because the value in <code>_or</code>
+        is always evaluated, even when it isn't needed. If creating the fallback is
+        expensive -- a heap allocation, a database lookup, a computation --
+        <code>_or_else</code> avoids the work when the <code>Option</code> is
+        <code>Some</code> or the <code>Result</code> is <code>Ok</code>.
+      </p>
+
+      <pre><code><span class="cm">// This allocates a String every time, even when config has a value:</span>
+<span class="kw">let</span> name = config.<span class="fn">unwrap_or</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"default"</span>));
+
+<span class="cm">// This only allocates when config is None:</span>
+<span class="kw">let</span> name = config.<span class="fn">unwrap_or_else</span>(|| <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"default"</span>));</code></pre>
+
+      <h2>2. <code>as_</code> vs <code>to_</code> vs <code>into_</code> -- how much work is being done</h2>
+
+      <p>
+        This tells you the cost and the ownership story at a glance:
+      </p>
+
+      <ul>
+        <li><code>as_</code> -- a cheap borrow. Just a different view of the same
+          thing. No allocation, no cloning. Think: <em>peeking</em>.</li>
+        <li><code>to_</code> -- creates something new but leaves the original
+          alone. Usually involves allocation or conversion. Think:
+          <em>photocopying</em>.</li>
+        <li><code>into_</code> -- consumes the original and transforms it. The
+          original is gone. Think: <em>metamorphosing</em>.</li>
+      </ul>
+
+      <pre><code><span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>);
+
+<span class="cm">// as_ -- borrows, cheap, returns a reference</span>
+<span class="kw">let</span> bytes: &amp;[<span class="ty">u8</span>] = s.<span class="fn">as_bytes</span>();   <span class="cm">// &amp;String -&gt; &amp;[u8], no copy</span>
+<span class="kw">let</span> slice: &amp;<span class="ty">str</span> = s.<span class="fn">as_str</span>();     <span class="cm">// &amp;String -&gt; &amp;str, no copy</span>
+
+<span class="cm">// to_ -- copies/converts, original untouched</span>
+<span class="kw">let</span> upper: <span class="ty">String</span> = s.<span class="fn">to_uppercase</span>();  <span class="cm">// creates a new String</span>
+<span class="kw">let</span> owned: <span class="ty">String</span> = <span class="str">"hi"</span>.<span class="fn">to_owned</span>();   <span class="cm">// &amp;str -&gt; String, allocates</span>
+
+<span class="cm">// into_ -- consumes, original is gone</span>
+<span class="kw">let</span> bytes: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; = s.<span class="fn">into_bytes</span>(); <span class="cm">// String consumed, Vec reuses its buffer</span>
+<span class="cm">// println!("{s}");                      // ERROR: s has been moved</span></code></pre>
+
+      <p>
+        <code>as_</code> is O(1) and free. <code>to_</code> probably allocates.
+        <code>into_</code> might be cheaper than <code>to_</code> because it can
+        reuse the original's resources instead of copying them.
+      </p>
+
+      <p>
+        The pattern repeats across the standard library:
+      </p>
+
+      <pre><code><span class="ty">Path</span>::<span class="fn">as_os_str</span>()        <span class="cm">// borrow: &amp;Path -&gt; &amp;OsStr</span>
+<span class="ty">Path</span>::<span class="fn">to_path_buf</span>()      <span class="cm">// copy:   &amp;Path -&gt; PathBuf</span>
+<span class="ty">PathBuf</span>::<span class="fn">into_os_string</span>() <span class="cm">// move:   PathBuf -&gt; OsString</span>
+
+<span class="ty">OsStr</span>::<span class="fn">as_encoded_bytes</span>() <span class="cm">// borrow</span>
+<span class="ty">OsStr</span>::<span class="fn">to_os_string</span>()     <span class="cm">// copy</span>
+<span class="ty">OsString</span>::<span class="fn">into_string</span>()   <span class="cm">// move</span></code></pre>
+
+      <h2>3. <code>_map</code> as a combiner -- two operations in one pass</h2>
+
+      <p>
+        When you see two words joined with the second being <code>map</code>,
+        it's doing both operations in one step. The second word is always
+        <code>map</code> because mapping is the universal glue operation:
+      </p>
+
+      <pre><code><span class="kw">let</span> v = <span class="kw">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
+
+<span class="cm">// filter_map = filter + map in one step</span>
+<span class="cm">// Return Some(value) to keep, None to discard</span>
+<span class="kw">let</span> evens_doubled: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>()
+    .<span class="fn">filter_map</span>(|&amp;x| <span class="kw">if</span> x % <span class="num">2</span> == <span class="num">0</span> { <span class="ty">Some</span>(x * <span class="num">2</span>) } <span class="kw">else</span> { <span class="ty">None</span> })
+    .<span class="fn">collect</span>();
+<span class="cm">// [4, 8]</span>
+
+<span class="cm">// find_map = find + map -- find the first match and transform it</span>
+<span class="kw">let</span> first_even_squared: <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>()
+    .<span class="fn">find_map</span>(|&amp;x| <span class="kw">if</span> x % <span class="num">2</span> == <span class="num">0</span> { <span class="ty">Some</span>(x * x) } <span class="kw">else</span> { <span class="ty">None</span> });
+<span class="cm">// Some(4)</span>
+
+<span class="cm">// flat_map = map + flatten -- map each element to an iterator, then flatten</span>
+<span class="kw">let</span> words = <span class="kw">vec!</span>[<span class="str">"hello world"</span>, <span class="str">"foo bar"</span>];
+<span class="kw">let</span> all: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = words.<span class="fn">iter</span>()
+    .<span class="fn">flat_map</span>(|s| s.<span class="fn">split_whitespace</span>())
+    .<span class="fn">collect</span>();
+<span class="cm">// ["hello", "world", "foo", "bar"]</span></code></pre>
+
+      <p>
+        The pattern works on <code>Option</code> and <code>Result</code> too,
+        not just iterators:
+      </p>
+
+      <pre><code><span class="kw">let</span> maybe_str: <span class="ty">Option</span>&lt;&amp;<span class="ty">str</span>&gt; = <span class="ty">Some</span>(<span class="str">"42"</span>);
+
+<span class="cm">// and_then is Option's version of flat_map:</span>
+<span class="cm">// map would give Option&lt;Result&gt;, and_then flattens to Option</span>
+<span class="kw">let</span> parsed: <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; = maybe_str.<span class="fn">and_then</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>());</code></pre>
+
+      <h2>4. <code>_while</code> adds a predicate</h2>
+
+      <p>
+        The base method takes a count. The <code>_while</code> variant takes a
+        condition instead. <code>take</code> takes a count,
+        <code>take_while</code> takes a condition. Same for <code>skip</code>
+        vs <code>skip_while</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> v = <span class="kw">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
+
+<span class="cm">// take(n) -- take exactly n elements</span>
+<span class="kw">let</span> first_three: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">take</span>(<span class="num">3</span>).<span class="fn">collect</span>();
+<span class="cm">// [1, 2, 3]</span>
+
+<span class="cm">// take_while(predicate) -- take while condition holds</span>
+<span class="kw">let</span> small: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">take_while</span>(|&amp;&amp;x| x &lt; <span class="num">4</span>).<span class="fn">collect</span>();
+<span class="cm">// [1, 2, 3]</span>
+
+<span class="cm">// skip(n) -- skip exactly n elements</span>
+<span class="kw">let</span> after_two: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">skip</span>(<span class="num">2</span>).<span class="fn">collect</span>();
+<span class="cm">// [3, 4, 5]</span>
+
+<span class="cm">// skip_while(predicate) -- skip while condition holds</span>
+<span class="kw">let</span> from_three: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">skip_while</span>(|&amp;&amp;x| x &lt; <span class="num">3</span>).<span class="fn">collect</span>();
+<span class="cm">// [3, 4, 5]</span></code></pre>
+
+      <p>
+        The pattern is consistent: the base version works with a fixed count,
+        <code>_while</code> makes it dynamic. The predicate version stops as
+        soon as the condition returns <code>false</code> -- it doesn't re-check
+        later elements.
+      </p>
+
+      <h2>5. <code>_by</code> / <code>_by_key</code> -- "by what measure?"</h2>
+
+      <p>
+        The base method uses natural ordering (<code>Ord</code>). The
+        <code>_by</code> variant lets you supply a custom comparator. The
+        <code>_by_key</code> variant lets you say "compare by this extracted
+        value":
+      </p>
+
+      <pre><code><span class="kw">let</span> words = <span class="kw">vec!</span>[<span class="str">"cherry"</span>, <span class="str">"fig"</span>, <span class="str">"apple"</span>, <span class="str">"date"</span>];
+
+<span class="cm">// min() -- natural ordering (alphabetical for strings)</span>
+<span class="kw">let</span> first = words.<span class="fn">iter</span>().<span class="fn">min</span>();
+<span class="cm">// Some("apple")</span>
+
+<span class="cm">// min_by -- custom comparator</span>
+<span class="kw">let</span> shortest = words.<span class="fn">iter</span>()
+    .<span class="fn">min_by</span>(|a, b| a.<span class="fn">len</span>().<span class="fn">cmp</span>(&amp;b.<span class="fn">len</span>()));
+<span class="cm">// Some("fig")</span>
+
+<span class="cm">// min_by_key -- compare by extracted key (simpler when you can)</span>
+<span class="kw">let</span> shortest = words.<span class="fn">iter</span>()
+    .<span class="fn">min_by_key</span>(|w| w.<span class="fn">len</span>());
+<span class="cm">// Some("fig")</span></code></pre>
+
+      <p>
+        The same trio appears for <code>max</code>, <code>sort</code>, and
+        others:
+      </p>
+
+      <pre><code><span class="cm">// Sorting</span>
+v.<span class="fn">sort</span>();                          <span class="cm">// natural order</span>
+v.<span class="fn">sort_by</span>(|a, b| b.<span class="fn">cmp</span>(a));        <span class="cm">// custom comparator (here: reverse)</span>
+v.<span class="fn">sort_by_key</span>(|item| item.score);   <span class="cm">// compare by extracted field</span>
+
+<span class="cm">// Max</span>
+v.<span class="fn">iter</span>().<span class="fn">max</span>();                     <span class="cm">// natural order</span>
+v.<span class="fn">iter</span>().<span class="fn">max_by</span>(|a, b| ...);       <span class="cm">// custom comparator</span>
+v.<span class="fn">iter</span>().<span class="fn">max_by_key</span>(|x| ...);      <span class="cm">// compare by extracted key</span></code></pre>
+
+      <p>
+        Use <code>_by_key</code> when you're comparing a single field or derived
+        value. Use <code>_by</code> when you need full control over the comparison
+        -- tie-breaking, multiple fields, reverse order.
+      </p>
+
+      <h2>6. <code>copied</code> vs <code>cloned</code> -- how expensive is the copy?</h2>
+
+      <p>
+        Both do the same thing: turn an iterator of references into an iterator
+        of owned values. Same idea (get an owned value from a reference), but
+        <code>copied</code> is for small cheap types and <code>cloned</code> is
+        for anything:
+      </p>
+
+      <pre><code><span class="kw">let</span> v = <span class="kw">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+
+<span class="cm">// copied -- requires T: Copy (small, cheap types: integers, bools, floats)</span>
+<span class="kw">let</span> owned: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">collect</span>();
+
+<span class="cm">// cloned -- requires T: Clone (anything, but might be expensive)</span>
+<span class="kw">let</span> owned: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>();</code></pre>
+
+      <p>
+        Both work here because integers implement both <code>Copy</code> and
+        <code>Clone</code>. The difference matters for intent and guarantees:
+      </p>
+
+      <pre><code><span class="kw">let</span> strings = <span class="kw">vec!</span>[<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"a"</span>), <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"b"</span>)];
+
+<span class="cm">// strings.iter().copied()  -- WON'T COMPILE: String isn't Copy</span>
+<span class="kw">let</span> owned: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = strings.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>(); <span class="cm">// works</span></code></pre>
+
+      <p>
+        If it compiles with <code>copied</code>, prefer it. It signals to the
+        reader that the copy is trivial -- a memcpy of a few bytes, not a heap
+        allocation. When you see <code>cloned</code>, you know something more
+        expensive might be happening.
+      </p>
+
+      <h2>Putting it all together</h2>
+
+      <p>
+        These six conventions are composable. You can predict method names you've
+        never seen:
+      </p>
+
+      <ul>
+        <li><code>ok_or_else</code> -- converts <code>Option</code> to
+          <code>Result</code>, computing the error lazily
+          (<code>_or_else</code> = closure)</li>
+        <li><code>into_keys</code> -- consumes a <code>HashMap</code> and gives
+          you owned keys (<code>into_</code> = consuming)</li>
+        <li><code>max_by_key</code> -- finds the maximum by an extracted value
+          (<code>_by_key</code> = extracted comparison)</li>
+        <li><code>to_ascii_uppercase</code> -- creates a new value, leaves the
+          original (<code>to_</code> = new allocation)</li>
+      </ul>
+
+      <p>
+        When you encounter a new type in the standard library, you can often guess
+        what methods it has. Does it have <code>as_ref</code>? Probably. Does it
+        have <code>into_inner</code>? If it wraps something, yes. Does the
+        iterator adapter have a <code>_by_key</code> variant? Check, but likely.
+      </p>
+
+      <p>
+        The naming isn't arbitrary. It's a system. Learn these six meta-patterns
+        and the standard library stops feeling like a phone book and starts
+        feeling like a language you can read.
+      </p>
 
     </article>
   </main>
