@@ -975,41 +975,347 @@ words.<span class="fn">dedup_by_key</span>(|s| s.<span class="fn">to_lowercase</
       <h2>Putting It All Together</h2>
 
       <p>
-        These patterns combine. Here's a real-world example that uses several at once:
+        Knowing forty patterns individually is like knowing forty words in a foreign
+        language. You can point at things. You can't hold a conversation. The real
+        skill is seeing how they combine -- recognizing that the problem in front of
+        you is a three-pattern problem, and knowing which three.
       </p>
 
-      <pre><code><span class="kw">fn</span> <span class="fn">load_user_configs</span>(paths: &amp;[<span class="ty">PathBuf</span>]) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">Config</span>&gt;, <span class="ty">AppError</span>&gt; {
-    paths.<span class="fn">iter</span>()
-        .<span class="fn">enumerate</span>()                                          <span class="cm">// #23: know the index</span>
-        .<span class="fn">map</span>(|(i, path)| {
-            std::fs::<span class="fn">read_to_string</span>(path)                     <span class="cm">// fallible</span>
-                .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::FileRead {             <span class="cm">// #4: specific context</span>
-                    index: i,
-                    path: path.<span class="fn">clone</span>(),
-                    source: e,
-                })
-                .<span class="fn">and_then</span>(|text| {                            <span class="cm">// #33: chain fallible ops</span>
-                    <span class="fn">parse_config</span>(&amp;text)
-                        .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::Parse {        <span class="cm">// #4 again</span>
-                            index: i,
-                            path: path.<span class="fn">clone</span>(),
-                            source: e,
-                        })
+      <p>
+        Let's work through this in layers, from small combinations to real-world
+        functions, and then look at how you'd arrive at these combinations yourself.
+      </p>
+
+      <h3>Small Combinations: Two or Three Patterns</h3>
+
+      <p>
+        <strong>Validate and collect.</strong> You have raw string inputs. You want the valid
+        ones parsed, the garbage silently dropped, and a count of how many you
+        kept.
+      </p>
+
+      <pre><code><span class="kw">let</span> valid: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = raw_inputs.<span class="fn">iter</span>()
+    .<span class="fn">filter_map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>())  <span class="cm">// #3: Silent Discard</span>
+    .<span class="fn">collect</span>();
+
+<span class="kw">let</span> kept = valid.<span class="fn">len</span>();</code></pre>
+
+      <p>
+        Two patterns. The Silent Discard (#3) does the filtering and parsing in one
+        step. <code>collect</code> gathers the survivors. If you'd written this as a loop,
+        you'd have a mutable vec, a match statement, and a counter. Here, the intent
+        is one line.
+      </p>
+
+      <p>
+        <strong>Lookup with a computed fallback.</strong> You're checking a cache. If the key
+        isn't there, you compute the value (which involves I/O), store it, and
+        return it.
+      </p>
+
+      <pre><code><span class="kw">let</span> entry = cache.<span class="fn">entry</span>(key.<span class="fn">clone</span>())       <span class="cm">// #38: Slot Machine</span>
+    .<span class="fn">or_insert_with</span>(|| <span class="fn">fetch_from_db</span>(&amp;key)); <span class="cm">// #37: Lazy Default</span></code></pre>
+
+      <p>
+        The Slot Machine (#38) gives you a handle to the map slot. The Lazy Default
+        (#37) ensures you only hit the database on a cache miss. One hash lookup,
+        zero redundant I/O. The <code>_with</code> suffix is doing real work here -- without
+        it, you'd call <code>fetch_from_db</code> on every access regardless.
+      </p>
+
+      <p>
+        <strong>Find the best match and borrow its data.</strong> You want the user with the
+        highest score, and you want their name -- but you don't want to take
+        ownership of anything.
+      </p>
+
+      <pre><code><span class="kw">let</span> top_name = users.<span class="fn">iter</span>()
+    .<span class="fn">max_by_key</span>(|u| u.score)    <span class="cm">// #21: Custom Rank</span>
+    .<span class="fn">map</span>(|u| u.name.<span class="fn">as_str</span>());  <span class="cm">// #10: Map the Wrapper + borrowing</span></code></pre>
+
+      <p>
+        Custom Rank (#21) finds the winner. Map the Wrapper (#10) reaches inside
+        the <code>Option</code> to extract what you actually care about. The result is
+        <code>Option&lt;&amp;str&gt;</code> -- no cloning, no ownership transfer.
+      </p>
+
+      <h3>Medium Scale: The Daily Function</h3>
+
+      <p>
+        Here's a function you'd actually write. You're loading plugin configs from
+        a directory. Some files might not exist (that's fine -- they're optional).
+        Some might exist but contain garbage (that's an error). You want the valid
+        configs, with the bad files reported.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">load_plugins</span>(dir: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">PluginConfig</span>&gt;, <span class="ty">AppError</span>&gt; {
+    <span class="kw">let</span> entries: <span class="ty">Vec</span>&lt;_&gt; = std::fs::<span class="fn">read_dir</span>(dir)
+        .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::DirRead { path: dir.<span class="fn">into</span>(), source: e })?  <span class="cm">// #4: Specific Failure Context</span>
+        .<span class="fn">filter_map</span>(|entry| entry.<span class="fn">ok</span>())  <span class="cm">// #3: Silent Discard (bad dir entries)</span>
+        .<span class="fn">filter</span>(|entry| {
+            entry.<span class="fn">path</span>()
+                .<span class="fn">extension</span>()
+                .<span class="fn">and_then</span>(|ext| ext.<span class="fn">to_str</span>())          <span class="cm">// #33: Fallible Map</span>
+                .<span class="fn">is_some_and</span>(|ext| ext == <span class="str">"toml"</span>)      <span class="cm">// #8: Conditional Keep (conceptually)</span>
+        })
+        .<span class="fn">collect</span>();
+
+    entries.<span class="fn">iter</span>()
+        .<span class="fn">map</span>(|entry| {
+            <span class="kw">let</span> path = entry.<span class="fn">path</span>();
+            <span class="kw">let</span> text = std::fs::<span class="fn">read_to_string</span>(&amp;path)
+                .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::FileRead {     <span class="cm">// #4: Specific Failure Context</span>
+                    path: path.<span class="fn">clone</span>(), source: e
+                })?;
+            toml::<span class="fn">from_str</span>(&amp;text)
+                .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::ParseConfig {  <span class="cm">// #4 again</span>
+                    path: path.<span class="fn">clone</span>(), source: e
                 })
         })
-        .<span class="fn">collect</span>()                                            <span class="cm">// #1: success or bail</span>
+        .<span class="fn">collect</span>()  <span class="cm">// #1: Success or Bail</span>
 }</code></pre>
 
       <p>
-        Six patterns, one function, zero unwraps. The error handling is precise:
-        every failure says exactly which file and which stage. The success path
-        reads top-to-bottom without nesting.
+        Count the patterns: Silent Discard for filesystem noise, Specific Failure
+        Context twice (once for I/O, once for parsing), Fallible Map to chain the
+        extension check, and Success or Bail at the end to turn the iterator of
+        Results into a single Result.
       </p>
 
       <p>
-        That's what "thinking in Rust" looks like. It's not about memorizing forty
-        methods. It's about recognizing that each one is a small, named decision --
-        and that the right combination of small decisions makes the big picture clean.
+        Now look at what you <em>didn't</em> write. No nested match statements. No
+        mutable error vec. No boolean flag tracking whether something went wrong.
+        The control flow is declared, not managed.
+      </p>
+
+      <h3>Across Pattern Groups: Ownership Meets Iteration Meets Error Handling</h3>
+
+      <p>
+        The interesting functions are the ones where patterns from different sections
+        collide. Here's a config merger: you have a <code>HashMap</code> of default settings
+        and a <code>HashMap</code> of user overrides. If the user's value requires
+        normalization (which can fail), you want to normalize it. Otherwise, fall
+        back to the default. Bad user values should report errors, not silently
+        corrupt the config.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">merge_config</span>(
+    defaults: &amp;<span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt;,
+    overrides: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt;,  <span class="cm">// owned -- we're consuming this</span>
+) -&gt; <span class="ty">Result</span>&lt;<span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt;, <span class="ty">ConfigError</span>&gt; {
+    <span class="kw">let</span> <span class="kw">mut</span> merged = defaults.<span class="fn">clone</span>();
+
+    <span class="kw">for</span> (key, raw_value) <span class="kw">in</span> overrides.<span class="fn">into_iter</span>() {  <span class="cm">// #13: Resource Recycle</span>
+        <span class="kw">let</span> normalized = <span class="fn">normalize</span>(&amp;raw_value)
+            .<span class="fn">map_err</span>(|e| <span class="ty">ConfigError</span>::BadOverride {  <span class="cm">// #4: Specific Failure Context</span>
+                key: key.<span class="fn">clone</span>(),
+                source: e,
+            })?;
+
+        merged.<span class="fn">entry</span>(key)            <span class="cm">// #38: Slot Machine</span>
+            .<span class="fn">and_modify</span>(|v| *v = normalized.<span class="fn">clone</span>())
+            .<span class="fn">or_insert</span>(normalized);
+    }
+
+    <span class="ty">Ok</span>(merged)
+}</code></pre>
+
+      <p>
+        Resource Recycle (#13) consumes the overrides map so we get owned keys and
+        values -- no unnecessary cloning of strings we already own. Specific
+        Failure Context (#4) attaches the offending key to any normalization
+        error. The Slot Machine (#38) handles both "key exists, update it" and
+        "key is new, insert it" without a double lookup.
+      </p>
+
+      <h3>The Conditional Processing Pipeline</h3>
+
+      <p>
+        Here's a pattern that shows up in anything that processes heterogeneous
+        data: events, log lines, HTTP requests. You have a stream of items, some
+        need transformation, some pass through unchanged, and you want to avoid
+        allocating when you don't have to.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Cow</span>;
+
+<span class="kw">fn</span> <span class="fn">process_log_lines</span>&lt;<span class="ty">'a</span>&gt;(lines: &amp;<span class="ty">'a</span> [<span class="ty">String</span>]) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">Cow</span>&lt;<span class="ty">'a</span>, <span class="ty">str</span>&gt;&gt; {
+    lines.<span class="fn">iter</span>()
+        .<span class="fn">filter</span>(|line| !line.<span class="fn">is_empty</span>())                      <span class="cm">// skip blanks</span>
+        .<span class="fn">enumerate</span>()                                          <span class="cm">// #23: Index-Aware</span>
+        .<span class="fn">map</span>(|(i, line)| {
+            <span class="kw">if</span> line.<span class="fn">contains</span>(<span class="str">'\t'</span>) {
+                <span class="ty">Cow</span>::Owned(<span class="fn">format!</span>(<span class="str">"[{}] {}"</span>, i, line.<span class="fn">replace</span>(<span class="str">'\t'</span>, <span class="str">"  "</span>)))  <span class="cm">// #18: Cow Dance</span>
+            } <span class="kw">else</span> {
+                <span class="ty">Cow</span>::Borrowed(line.<span class="fn">as_str</span>())                  <span class="cm">// #18: no allocation</span>
+            }
+        })
+        .<span class="fn">collect</span>()
+}</code></pre>
+
+      <p>
+        The Cow Dance (#18) means that clean lines -- which are most of them --
+        involve zero heap allocation. Only the lines that need modification pay
+        for it. The Index-Aware pattern (#23) gives us line numbers for the
+        reformatted output. If this were processing a million log lines, the
+        difference between "clone everything" and "clone only what changes" is
+        measured in milliseconds and megabytes.
+      </p>
+
+      <h3>The Before and After</h3>
+
+      <p>
+        Patterns matter most when you see what code looks like without them. Here's
+        a function written by someone who knows Rust syntax but hasn't internalized
+        the patterns:
+      </p>
+
+      <pre><code><span class="cm">// Before: manual, verbose, fragile</span>
+<span class="kw">fn</span> <span class="fn">find_best_valid_score</span>(entries: &amp;[<span class="ty">Entry</span>]) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">i64</span>&gt;, <span class="ty">ScoreError</span>&gt; {
+    <span class="kw">let</span> <span class="kw">mut</span> best: <span class="ty">Option</span>&lt;<span class="ty">i64</span>&gt; = <span class="ty">None</span>;
+    <span class="kw">for</span> entry <span class="kw">in</span> entries {
+        <span class="kw">match</span> entry.raw_score {
+            <span class="ty">Some</span>(raw) =&gt; {
+                <span class="kw">match</span> <span class="fn">validate_score</span>(raw) {
+                    <span class="ty">Ok</span>(valid) =&gt; {
+                        <span class="kw">match</span> best {
+                            <span class="ty">Some</span>(current) <span class="kw">if</span> valid &gt; current =&gt; best = <span class="ty">Some</span>(valid),
+                            <span class="ty">None</span> =&gt; best = <span class="ty">Some</span>(valid),
+                            _ =&gt; {}
+                        }
+                    }
+                    <span class="ty">Err</span>(e) =&gt; <span class="kw">return</span> <span class="ty">Err</span>(<span class="ty">ScoreError</span>::Validation {
+                        id: entry.id, source: e
+                    }),
+                }
+            }
+            <span class="ty">None</span> =&gt; {} <span class="cm">// skip entries without scores</span>
+        }
+    }
+    <span class="ty">Ok</span>(best)
+}</code></pre>
+
+      <p>
+        Three levels of nesting. A mutable accumulator. An empty match arm that
+        exists only because <code>match</code> is exhaustive. It works, but it makes you
+        trace every branch to understand what it does.
+      </p>
+
+      <p>
+        Now the same function with patterns:
+      </p>
+
+      <pre><code><span class="cm">// After: declarative, flat, same behavior</span>
+<span class="kw">fn</span> <span class="fn">find_best_valid_score</span>(entries: &amp;[<span class="ty">Entry</span>]) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">i64</span>&gt;, <span class="ty">ScoreError</span>&gt; {
+    entries.<span class="fn">iter</span>()
+        .<span class="fn">filter_map</span>(|e| {                                    <span class="cm">// #3: Silent Discard (None scores)</span>
+            e.raw_score.<span class="fn">map</span>(|raw| (e.id, raw))               <span class="cm">// #10: Map the Wrapper</span>
+        })
+        .<span class="fn">map</span>(|(id, raw)| {
+            <span class="fn">validate_score</span>(raw)
+                .<span class="fn">map_err</span>(|e| <span class="ty">ScoreError</span>::Validation {        <span class="cm">// #4: Specific Failure Context</span>
+                    id, source: e
+                })
+        })
+        .<span class="fn">collect</span>::&lt;<span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;_&gt;, _&gt;&gt;()?                     <span class="cm">// #1: Success or Bail</span>
+        .<span class="fn">into_iter</span>()                                         <span class="cm">// #13: Resource Recycle</span>
+        .<span class="fn">max</span>()                                               <span class="cm">// largest valid score</span>
+        .<span class="fn">pipe</span>(<span class="ty">Ok</span>)                                            <span class="cm">// wrap in Ok -- or just:</span>
+        <span class="cm">// Ok(scores.into_iter().max())                      // if you collected first</span>
+}</code></pre>
+
+      <p>
+        Or, more practically:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">find_best_valid_score</span>(entries: &amp;[<span class="ty">Entry</span>]) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">i64</span>&gt;, <span class="ty">ScoreError</span>&gt; {
+    <span class="kw">let</span> valid_scores: <span class="ty">Vec</span>&lt;<span class="ty">i64</span>&gt; = entries.<span class="fn">iter</span>()
+        .<span class="fn">filter_map</span>(|e| e.raw_score.<span class="fn">map</span>(|raw| (e.id, raw))) <span class="cm">// #3 + #10</span>
+        .<span class="fn">map</span>(|(id, raw)| {
+            <span class="fn">validate_score</span>(raw)
+                .<span class="fn">map_err</span>(|e| <span class="ty">ScoreError</span>::Validation { id, source: e }) <span class="cm">// #4</span>
+        })
+        .<span class="fn">collect</span>::&lt;<span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;_&gt;, _&gt;&gt;()?;                    <span class="cm">// #1</span>
+
+    <span class="ty">Ok</span>(valid_scores.<span class="fn">into_iter</span>().<span class="fn">max</span>())
+}</code></pre>
+
+      <p>
+        Same logic. Zero nesting. No mutable state. The error handling is precise
+        (which entry failed, and why) without being verbose. And every step in the
+        chain has a name you can point at: "that's a Silent Discard, that's a
+        Specific Failure Context, that's a Success or Bail."
+      </p>
+
+      <h3>How You Get There: The Decision Process</h3>
+
+      <p>
+        When you're staring at a function and wondering which patterns apply, there
+        are three questions worth asking:
+      </p>
+
+      <p>
+        <strong>1. What shape is my data, and what shape do I need?</strong>
+      </p>
+
+      <p>
+        If you have a collection and want a single value, you're in fold/reduce
+        territory (#29). If you have a collection and want a filtered or
+        transformed collection, you're in the iterator section. If you have a
+        single wrapped value and want to transform what's inside, that's <code>map</code>
+        (#10) or <code>and_then</code> (#33).
+      </p>
+
+      <p>
+        <strong>2. What can go wrong, and who needs to know?</strong>
+      </p>
+
+      <p>
+        If failure means "skip this item," that's Silent Discard (#3). If failure
+        means "abort everything," that's Success or Bail (#1). If failure means
+        "add context and propagate," that's Specific Failure Context (#4). If you
+        have an <code>Option</code> but the caller expects a <code>Result</code>, that's Error Pivot
+        (#2). These decisions compose: within a single chain, different steps can
+        handle failure differently.
+      </p>
+
+      <p>
+        <strong>3. Who owns what?</strong>
+      </p>
+
+      <p>
+        If you're done with a collection and need its contents, consume it with
+        <code>into_iter</code> (#13). If you're peeking at data inside an <code>Option</code> or smart
+        pointer, use <code>as_deref</code> (#14). If most inputs won't need modification,
+        consider <code>Cow</code> (#18). If you need to take a value out of a mutable struct,
+        that's <code>take</code> (#15). Ownership questions determine whether you're
+        cloning, borrowing, or moving -- and the wrong choice shows up as either a
+        compiler error or a performance problem.
+      </p>
+
+      <p>
+        These three questions usually narrow you down to five or six candidate
+        patterns. From there, it's a matter of which ones compose cleanly for
+        your specific case. And that part gets fast with practice -- once you've
+        seen the Slot Machine solve the "insert or update" problem three times,
+        you stop even thinking about it. Your fingers type <code>entry().or_insert</code>
+        the way a C programmer types <code>if (ptr == NULL)</code>.
+      </p>
+
+      <h3>The Bigger Point</h3>
+
+      <p>
+        None of these patterns are clever. That's the whole point. Each one is a
+        small, obvious decision made explicit. The compound effect of making forty
+        small obvious decisions instead of one large clever one is code that reads
+        like a description of what it does rather than a set of instructions for
+        how to do it.
+      </p>
+
+      <p>
+        That's what it means to think in Rust. Not "memorize the Iterator trait."
+        Not "fight the borrow checker." Just: know the forty small decisions, and
+        recognize which ones your function is making.
       </p>
 
     </article>
