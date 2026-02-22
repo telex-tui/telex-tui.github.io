@@ -84,16 +84,16 @@
 
       <li class="post-item">
 
-        <a href="rust-smart-pointer-patterns-part2.html">
-          <h2>Rust's Smart Pointer Patterns — Part 2: The Specialists</h2>
-          <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">Cow, OnceCell, OnceLock, LazyLock, Pin, and PhantomData — the specialist wrapper types that solve specific problems the core ownership system doesn't address.</p>
-      </a>
-       
         <a href="rust-smart-pointer-patterns-part1.html">
           <h2>Rust's Smart Pointer Patterns -- Part 1: The Ownership and Sharing System</h2>
           <div class="post-meta">February 2026</div>
           <p class="post-excerpt">A practical guide to Box, Rc, Arc, Weak, Cell, RefCell, Mutex, and RwLock -- when you'd actually reach for each one, how they compose, and the six method pairs that make the system livable.</p>
+        </a>
+
+        <a href="rust-smart-pointer-patterns-part2.html">
+          <h2>Rust's Smart Pointer Patterns — Part 2: The Specialists</h2>
+          <div class="post-meta">February 2026</div>
+          <p class="post-excerpt">Cow, OnceCell, OnceLock, LazyLock, Pin, and PhantomData — the specialist wrapper types that solve specific problems the core ownership system doesn't address.</p>
         </a>
       </li>
 
@@ -115,28 +115,10 @@
 
       <li class="post-item">
 
-        <a href="chat-server-async.html">
-          <h2>Building a Chat Server in Rust #6: Going Async</h2>
+        <a href="chat-server-hello-tcp.html">
+          <h2>Building a Chat Server in Rust #1: Hello, TCP</h2>
           <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">Replace threads with tokio. Async filters with Pin&lt;Box&lt;dyn Future + Send&gt;&gt;. Send/Sync bounds everywhere. The final stage.</p>
-        </a>
-
-        <a href="chat-server-threaded.html">
-          <h2>Building a Chat Server in Rust #5: Going Multi-threaded</h2>
-          <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">Real concurrent connections. Thread per client, Arc&lt;Mutex&gt; for shared state, mpsc channels for message delivery. The server handles multiple users at once.</p>
-        </a>
-
-        <a href="chat-server-commands.html">
-          <h2>Building a Chat Server in Rust #4: Commands and Plugins</h2>
-          <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">/join, /nick, /kick as a command system. Plugin filters with closures. Builder configuration. Typestate connections.</p>
-        </a>
-
-        <a href="chat-server-parsing.html">
-          <h2>Building a Chat Server in Rust #3: Parsing and Performance</h2>
-          <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">A proper wire protocol with zero-copy parsing. Four patterns: lifetime annotations, Cow, custom iterators, and 'static + Clone.</p>
+          <p class="post-excerpt">Accept connections, parse messages, handle errors - three Rust patterns in your first hour. Stage 1 of a 6-part series building a real TCP chat server.</p>
         </a>
 
         <a href="chat-server-rooms-users.html">
@@ -145,133 +127,37 @@
           <p class="post-excerpt">Users join rooms, messages broadcast to everyone. Six patterns: RefCell, Rc, Rc&lt;RefCell&gt;, split borrows, index-based design, and Drop/RAII.</p>
         </a>
 
-        <a href="chat-server-hello-tcp.html">
-          <h2>Building a Chat Server in Rust #1: Hello, TCP</h2>
+        <a href="chat-server-parsing.html">
+          <h2>Building a Chat Server in Rust #3: Parsing and Performance</h2>
           <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">Accept connections, parse messages, handle errors - three Rust patterns in your first hour. Stage 1 of a 6-part series building a real TCP chat server.</p>
+          <p class="post-excerpt">A proper wire protocol with zero-copy parsing. Four patterns: lifetime annotations, Cow, custom iterators, and 'static + Clone.</p>
+        </a>
+
+        <a href="chat-server-commands.html">
+          <h2>Building a Chat Server in Rust #4: Commands and Plugins</h2>
+          <div class="post-meta">February 2026</div>
+          <p class="post-excerpt">/join, /nick, /kick as a command system. Plugin filters with closures. Builder configuration. Typestate connections.</p>
+        </a>
+
+        <a href="chat-server-threaded.html">
+          <h2>Building a Chat Server in Rust #5: Going Multi-threaded</h2>
+          <div class="post-meta">February 2026</div>
+          <p class="post-excerpt">Real concurrent connections. Thread per client, Arc&lt;Mutex&gt; for shared state, mpsc channels for message delivery. The server handles multiple users at once.</p>
+        </a>
+
+        <a href="chat-server-async.html">
+          <h2>Building a Chat Server in Rust #6: Going Async</h2>
+          <div class="post-meta">February 2026</div>
+          <p class="post-excerpt">Replace threads with tokio. Async filters with Pin&lt;Box&lt;dyn Future + Send&gt;&gt;. Send/Sync bounds everywhere. The final stage.</p>
         </a>
       </li>
 
       <li class="post-item">
 
-        <a href="rust-patterns-send-sync-async.html">
-          <h2>Rust Patterns That Matter #22: Send / Sync Bounds in Async</h2>
-          <div class="post-meta">September 2026</div>
-          <p class="post-excerpt">tokio::spawn requires Send. Your future holds a non-Send type across .await. The fix is scoping, restructuring, or spawn_local.</p>
-        </a>
-
-        <a href="rust-patterns-pin-futures.html">
-          <h2>Rust Patterns That Matter #21: Pin and Boxing Futures</h2>
-          <div class="post-meta">September 2026</div>
-          <p class="post-excerpt">"The trait Unpin is not implemented" - Pin means "won't move in memory." Async needs that. Here's why, and how Box::pin solves it.</p>
-        </a>
-
-        <a href="rust-patterns-channels.html">
-          <h2>Rust Patterns That Matter #20: Channels - Message Passing</h2>
-          <div class="post-meta">August 2026</div>
-          <p class="post-excerpt">"Don't communicate by sharing memory; share memory by communicating." Channels decouple producers and consumers - no locks, no deadlocks.</p>
-        </a>
-
-        <a href="rust-patterns-arc-mutex.html">
-          <h2>Rust Patterns That Matter #19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</h2>
-          <div class="post-meta">August 2026</div>
-          <p class="post-excerpt">Rc isn't Send. RefCell isn't Sync. For threads, use Arc for sharing and Mutex (or RwLock) for mutation. Default to Mutex.</p>
-        </a>
-
-        <a href="rust-patterns-typestate.html">
-          <h2>Rust Patterns That Matter #18: Typestate</h2>
+        <a href="rust-patterns-newtype.html">
+          <h2>Rust Patterns That Matter #1: Newtype</h2>
           <div class="post-meta">June 2026</div>
-          <p class="post-excerpt">Connection: Disconnected -> Connecting -> Connected. Encode the states as types. Invalid transitions don't compile.</p>
-        </a>
-
-        <a href="rust-patterns-builder.html">
-          <h2>Rust Patterns That Matter #17: Builder Pattern</h2>
-          <div class="post-meta">June 2026</div>
-          <p class="post-excerpt">Fifteen optional fields and three required ones. Telescoping constructors don't scale. A builder struct with chained methods does.</p>
-        </a>
-
-        <a href="rust-patterns-storing-closures.html">
-          <h2>Rust Patterns That Matter #16: Storing and Returning Closures</h2>
-          <div class="post-meta">May 2026</div>
-          <p class="post-excerpt">Closures have anonymous types - you can't name them. Box&lt;dyn Fn()&gt; for storage, impl Fn() for returns. The pragmatic guide.</p>
-        </a>
-
-        <a href="rust-patterns-closure-traits.html">
-          <h2>Rust Patterns That Matter #15: Fn, FnMut, FnOnce</h2>
-          <div class="post-meta">May 2026</div>
-          <p class="post-excerpt">"Expected Fn, found closure that implements FnMut." The three closure traits explained by what they capture and how.</p>
-        </a>
-
-        <a href="rust-patterns-enum-dispatch.html">
-          <h2>Rust Patterns That Matter #14: Enum Dispatch vs Trait Objects</h2>
-          <div class="post-meta">July 2026</div>
-          <p class="post-excerpt">Enums are faster (no vtable), trait objects are extensible. Pick based on whether your set of variants is closed or open.</p>
-        </a>
-
-        <a href="rust-patterns-static-clone.html">
-          <h2>Rust Patterns That Matter #13: 'static + Clone - The Escape Hatch</h2>
-          <div class="post-meta">May 2026</div>
-          <p class="post-excerpt">Everything wants 'static. Your data has a lifetime. The answer: clone it, own it, move on. Profile before you optimise.</p>
-        </a>
-
-        <a href="rust-patterns-iterators.html">
-          <h2>Rust Patterns That Matter #12: Custom Iterators</h2>
-          <div class="post-meta">March 2026</div>
-          <p class="post-excerpt">Implement Iterator for your type and get map, filter, collect, and lazy evaluation for free. The trait that makes Rust's for loops work.</p>
-        </a>
-
-        <a href="rust-patterns-cow.html">
-          <h2>Rust Patterns That Matter #11: Cow - Borrow or Own</h2>
-          <div class="post-meta">April 2026</div>
-          <p class="post-excerpt">Should your function take &amp;str or String? With Cow, the answer is "whichever is cheaper at runtime." Borrow if you can, own if you must.</p>
-        </a>
-
-        <a href="rust-patterns-lifetime-annotations.html">
-          <h2>Rust Patterns That Matter #10: Lifetime Annotations</h2>
-          <div class="post-meta">April 2026</div>
-          <p class="post-excerpt">The compiler demands lifetime annotations and elision rules don't cover your case. Here's the mental model: lifetimes describe, they don't control.</p>
-        </a>
-
-        <a href="rust-patterns-drop-raii.html">
-          <h2>Rust Patterns That Matter #9: Drop and RAII</h2>
-          <div class="post-meta">March 2026</div>
-          <p class="post-excerpt">When a value goes out of scope, Rust runs its Drop implementation. This is RAII - cleanup happens automatically, even when errors occur.</p>
-        </a>
-
-        <a href="rust-patterns-index-based-design.html">
-          <h2>Rust Patterns That Matter #8: Index-Based Design</h2>
-          <div class="post-meta">April 2026</div>
-          <p class="post-excerpt">Self-referential structures and lifetime hell? Store indices into a Vec instead of references. Arenas, ECS, and graphs all use this pattern.</p>
-        </a>
-
-        <a href="rust-patterns-split-borrows.html">
-          <h2>Rust Patterns That Matter #7: Split Borrows</h2>
-          <div class="post-meta">March 2026</div>
-          <p class="post-excerpt">A method reads one field and writes another. The compiler blocks it - it sees a borrow of the whole struct. Here's how to help it.</p>
-        </a>
-
-        <a href="rust-patterns-rc-refcell.html">
-          <h2>Rust Patterns That Matter #6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</h2>
-          <div class="post-meta">March 2026</div>
-          <p class="post-excerpt">Shared AND mutable? Rc gives you sharing, RefCell gives you mutation. Together they're the workhorse pattern for single-threaded shared mutable state.</p>
-        </a>
-
-        <a href="rust-patterns-shared-ownership.html">
-          <h2>Rust Patterns That Matter #5: Shared Ownership</h2>
-          <div class="post-meta">March 2026</div>
-          <p class="post-excerpt">Rust enforces single ownership. But trees, graphs, and UI frameworks need multiple owners. Rc solves this with reference counting.</p>
-        </a>
-
-        <a href="rust-patterns-interior-mutability.html">
-          <h2>Rust Patterns That Matter #4: Interior Mutability</h2>
-          <div class="post-meta">March 2026</div>
-          <p class="post-excerpt">You have an immutable reference but need to mutate behind it. The compiler says no. RefCell says yes - at a cost.</p>
-        </a>
-
-        <a href="rust-patterns-error-handling.html">
-          <h2>Rust Patterns That Matter #3: Error Handling with ? + thiserror + anyhow</h2>
-          <div class="post-meta">July 2026</div>
-          <p class="post-excerpt">thiserror for libraries: structured errors callers can match on. anyhow for applications: convenient errors with context. Know which you're writing.</p>
+          <p class="post-excerpt">UserId(u64) and OrderId(u64) are different types. The compiler catches the mix-up. It compiles to the same code as raw u64. Zero cost.</p>
         </a>
 
         <a href="rust-patterns-from-into.html">
@@ -280,10 +166,124 @@
           <p class="post-excerpt">Implement From&lt;T&gt; and get Into&lt;T&gt; for free. This is the pattern behind effortless Rust APIs and seamless error conversion.</p>
         </a>
 
-        <a href="rust-patterns-newtype.html">
-          <h2>Rust Patterns That Matter #1: Newtype</h2>
+        <a href="rust-patterns-error-handling.html">
+          <h2>Rust Patterns That Matter #3: Error Handling with ? + thiserror + anyhow</h2>
+          <div class="post-meta">July 2026</div>
+          <p class="post-excerpt">thiserror for libraries: structured errors callers can match on. anyhow for applications: convenient errors with context. Know which you're writing.</p>
+        </a>
+
+        <a href="rust-patterns-interior-mutability.html">
+          <h2>Rust Patterns That Matter #4: Interior Mutability</h2>
+          <div class="post-meta">March 2026</div>
+          <p class="post-excerpt">You have an immutable reference but need to mutate behind it. The compiler says no. RefCell says yes - at a cost.</p>
+        </a>
+
+        <a href="rust-patterns-shared-ownership.html">
+          <h2>Rust Patterns That Matter #5: Shared Ownership</h2>
+          <div class="post-meta">March 2026</div>
+          <p class="post-excerpt">Rust enforces single ownership. But trees, graphs, and UI frameworks need multiple owners. Rc solves this with reference counting.</p>
+        </a>
+
+        <a href="rust-patterns-rc-refcell.html">
+          <h2>Rust Patterns That Matter #6: The Combo - Rc&lt;RefCell&lt;T&gt;&gt;</h2>
+          <div class="post-meta">March 2026</div>
+          <p class="post-excerpt">Shared AND mutable? Rc gives you sharing, RefCell gives you mutation. Together they're the workhorse pattern for single-threaded shared mutable state.</p>
+        </a>
+
+        <a href="rust-patterns-split-borrows.html">
+          <h2>Rust Patterns That Matter #7: Split Borrows</h2>
+          <div class="post-meta">March 2026</div>
+          <p class="post-excerpt">A method reads one field and writes another. The compiler blocks it - it sees a borrow of the whole struct. Here's how to help it.</p>
+        </a>
+
+        <a href="rust-patterns-index-based-design.html">
+          <h2>Rust Patterns That Matter #8: Index-Based Design</h2>
+          <div class="post-meta">April 2026</div>
+          <p class="post-excerpt">Self-referential structures and lifetime hell? Store indices into a Vec instead of references. Arenas, ECS, and graphs all use this pattern.</p>
+        </a>
+
+        <a href="rust-patterns-drop-raii.html">
+          <h2>Rust Patterns That Matter #9: Drop and RAII</h2>
+          <div class="post-meta">March 2026</div>
+          <p class="post-excerpt">When a value goes out of scope, Rust runs its Drop implementation. This is RAII - cleanup happens automatically, even when errors occur.</p>
+        </a>
+
+        <a href="rust-patterns-lifetime-annotations.html">
+          <h2>Rust Patterns That Matter #10: Lifetime Annotations</h2>
+          <div class="post-meta">April 2026</div>
+          <p class="post-excerpt">The compiler demands lifetime annotations and elision rules don't cover your case. Here's the mental model: lifetimes describe, they don't control.</p>
+        </a>
+
+        <a href="rust-patterns-cow.html">
+          <h2>Rust Patterns That Matter #11: Cow - Borrow or Own</h2>
+          <div class="post-meta">April 2026</div>
+          <p class="post-excerpt">Should your function take &amp;str or String? With Cow, the answer is "whichever is cheaper at runtime." Borrow if you can, own if you must.</p>
+        </a>
+
+        <a href="rust-patterns-iterators.html">
+          <h2>Rust Patterns That Matter #12: Custom Iterators</h2>
+          <div class="post-meta">March 2026</div>
+          <p class="post-excerpt">Implement Iterator for your type and get map, filter, collect, and lazy evaluation for free. The trait that makes Rust's for loops work.</p>
+        </a>
+
+        <a href="rust-patterns-static-clone.html">
+          <h2>Rust Patterns That Matter #13: 'static + Clone - The Escape Hatch</h2>
+          <div class="post-meta">May 2026</div>
+          <p class="post-excerpt">Everything wants 'static. Your data has a lifetime. The answer: clone it, own it, move on. Profile before you optimise.</p>
+        </a>
+
+        <a href="rust-patterns-enum-dispatch.html">
+          <h2>Rust Patterns That Matter #14: Enum Dispatch vs Trait Objects</h2>
+          <div class="post-meta">July 2026</div>
+          <p class="post-excerpt">Enums are faster (no vtable), trait objects are extensible. Pick based on whether your set of variants is closed or open.</p>
+        </a>
+
+        <a href="rust-patterns-closure-traits.html">
+          <h2>Rust Patterns That Matter #15: Fn, FnMut, FnOnce</h2>
+          <div class="post-meta">May 2026</div>
+          <p class="post-excerpt">"Expected Fn, found closure that implements FnMut." The three closure traits explained by what they capture and how.</p>
+        </a>
+
+        <a href="rust-patterns-storing-closures.html">
+          <h2>Rust Patterns That Matter #16: Storing and Returning Closures</h2>
+          <div class="post-meta">May 2026</div>
+          <p class="post-excerpt">Closures have anonymous types - you can't name them. Box&lt;dyn Fn()&gt; for storage, impl Fn() for returns. The pragmatic guide.</p>
+        </a>
+
+        <a href="rust-patterns-builder.html">
+          <h2>Rust Patterns That Matter #17: Builder Pattern</h2>
           <div class="post-meta">June 2026</div>
-          <p class="post-excerpt">UserId(u64) and OrderId(u64) are different types. The compiler catches the mix-up. It compiles to the same code as raw u64. Zero cost.</p>
+          <p class="post-excerpt">Fifteen optional fields and three required ones. Telescoping constructors don't scale. A builder struct with chained methods does.</p>
+        </a>
+
+        <a href="rust-patterns-typestate.html">
+          <h2>Rust Patterns That Matter #18: Typestate</h2>
+          <div class="post-meta">June 2026</div>
+          <p class="post-excerpt">Connection: Disconnected -> Connecting -> Connected. Encode the states as types. Invalid transitions don't compile.</p>
+        </a>
+
+        <a href="rust-patterns-arc-mutex.html">
+          <h2>Rust Patterns That Matter #19: Arc&lt;Mutex&lt;T&gt;&gt; vs Arc&lt;RwLock&lt;T&gt;&gt;</h2>
+          <div class="post-meta">August 2026</div>
+          <p class="post-excerpt">Rc isn't Send. RefCell isn't Sync. For threads, use Arc for sharing and Mutex (or RwLock) for mutation. Default to Mutex.</p>
+        </a>
+
+        <a href="rust-patterns-channels.html">
+          <h2>Rust Patterns That Matter #20: Channels - Message Passing</h2>
+          <div class="post-meta">August 2026</div>
+          <p class="post-excerpt">"Don't communicate by sharing memory; share memory by communicating." Channels decouple producers and consumers - no locks, no deadlocks.</p>
+        </a>
+
+        <a href="rust-patterns-pin-futures.html">
+          <h2>Rust Patterns That Matter #21: Pin and Boxing Futures</h2>
+          <div class="post-meta">September 2026</div>
+          <p class="post-excerpt">"The trait Unpin is not implemented" - Pin means "won't move in memory." Async needs that. Here's why, and how Box::pin solves it.</p>
+        </a>
+
+        <a href="rust-patterns-send-sync-async.html">
+          <h2>Rust Patterns That Matter #22: Send / Sync Bounds in Async</h2>
+          <div class="post-meta">September 2026</div>
+          <p class="post-excerpt">tokio::spawn requires Send. Your future holds a non-Send type across .await. The fix is scoping, restructuring, or spawn_local.</p>
         </a>
       </li>
 
@@ -296,16 +296,16 @@
       </li>
       <li class="post-item">
 
-        <a href="what-the-real-world-taught-us.html">
-          <h2>Designing a TUI Framework in Rust - Part 2</h2>
-          <div class="post-meta">February 2026</div>
-          <p class="post-excerpt">How Telex evolved: channels for external events, effects, error boundaries, custom widgets, and dirty render skipping.</p>
-        </a>
-
         <a href="designing-a-tui-framework-in-rust.html">
           <h2>Designing a TUI Framework in Rust - Part 1</h2>
           <div class="post-meta">February 2025</div>
           <p class="post-excerpt">The foundational design decisions behind Telex: State with Rc&lt;RefCell&lt;T&gt;&gt;, View as an enum, keyed hooks, and double-buffered rendering.</p>
+        </a>
+
+        <a href="what-the-real-world-taught-us.html">
+          <h2>Designing a TUI Framework in Rust - Part 2</h2>
+          <div class="post-meta">February 2026</div>
+          <p class="post-excerpt">How Telex evolved: channels for external events, effects, error boundaries, custom widgets, and dirty render skipping.</p>
         </a>
       </li>
     </ul>
