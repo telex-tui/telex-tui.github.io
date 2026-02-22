@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deref Coercion: The Implicit Magic That Makes Rust Ergonomic - Telex</title>
+  <meta name="description" content="Why &amp;String silently becomes &amp;str, how Deref makes smart pointers transparent, and the invisible conversion chain that runs every time you call a method.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Deref Coercion: The Implicit Magic That Makes Rust Ergonomic</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Rust is famous for being explicit. You annotate lifetimes, you choose between
+        <code>&amp;</code> and <code>&amp;mut</code>, you spell out every type conversion. Except
+        for one place where the compiler quietly does work behind your back, and it happens so
+        often that most Rust programmers never notice it. That place is deref coercion.
+      </p>
+
+      <h2>The mystery</h2>
+
+      <p>
+        Here is a function that takes a <code>&amp;str</code>:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">greet</span>(name: &amp;<span class="kw">str</span>) {
+    <span class="mac">println!</span>(<span class="str">"Hello, {name}!"</span>);
+}</code></pre>
+
+      <p>
+        And here is the call site:
+      </p>
+
+      <pre><code><span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Alice"</span>);
+<span class="fn">greet</span>(&amp;s);</code></pre>
+
+      <p>
+        Stop and think about the types. <code>s</code> is a <code>String</code>.
+        <code>&amp;s</code> is a <code>&amp;String</code>. But the function wants a
+        <code>&amp;str</code>. Those are different types. A <code>&amp;String</code> is a
+        reference to a heap-allocated, growable buffer. A <code>&amp;str</code> is a fat pointer
+        to a UTF-8 byte slice. And yet this compiles and runs without complaint.
+      </p>
+
+      <p>
+        If you've been writing Rust for a while, you probably do this a dozen times a day
+        without thinking. But the reason it works is not obvious, and understanding it
+        unlocks a lot of other behavior that would otherwise feel like magic.
+      </p>
+
+      <h2>What deref coercion is</h2>
+
+      <p>
+        The rule is straightforward. When the compiler sees a <code>&amp;T</code> in a position
+        where a <code>&amp;U</code> is expected, and <code>T</code> implements
+        <code>Deref&lt;Target = U&gt;</code>, it automatically inserts a call to
+        <code>deref()</code> to convert <code>&amp;T</code> into <code>&amp;U</code>. No syntax
+        required from you. The compiler just does it.
+      </p>
+
+      <p>
+        The <code>Deref</code> trait itself is simple:
+      </p>
+
+      <pre><code><span class="kw">pub trait</span> <span class="ty">Deref</span> {
+    <span class="kw">type</span> <span class="ty">Target</span>: ?<span class="ty">Sized</span>;
+    <span class="kw">fn</span> <span class="fn">deref</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="kw">Self</span>::<span class="ty">Target</span>;
+}</code></pre>
+
+      <p>
+        <code>String</code> implements <code>Deref&lt;Target = str&gt;</code>. So when the compiler
+        sees <code>&amp;String</code> where <code>&amp;str</code> is expected, it calls
+        <code>String::deref()</code> to get a <code>&amp;str</code>. That is the entire trick
+        behind the <code>greet(&amp;s)</code> call above.
+      </p>
+
+      <p>
+        But deref coercion does not stop at one level. The compiler will chain multiple
+        <code>deref()</code> calls if needed. Consider this:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">greet</span>(name: &amp;<span class="kw">str</span>) {
+    <span class="mac">println!</span>(<span class="str">"Hello, {name}!"</span>);
+}
+
+<span class="kw">let</span> boxed: <span class="ty">Box</span>&lt;<span class="ty">String</span>&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Bob"</span>));
+<span class="fn">greet</span>(&amp;boxed); <span class="cm">// works!</span></code></pre>
+
+      <p>
+        Here the compiler sees <code>&amp;Box&lt;String&gt;</code> where <code>&amp;str</code>
+        is expected. It walks the deref chain:
+      </p>
+
+      <pre><code><span class="cm">// The compiler does this automatically:</span>
+<span class="cm">// &amp;Box&lt;String&gt;</span>
+<span class="cm">//   -&gt; Box&lt;String&gt;::deref() returns &amp;String</span>
+<span class="cm">//   -&gt; String::deref()      returns &amp;str</span>
+<span class="cm">// Found the target type. Done.</span></code></pre>
+
+      <p>
+        Three levels deep -- <code>&amp;Box&lt;String&gt;</code> to <code>&amp;String</code> to
+        <code>&amp;str</code> -- and you didn't write a single conversion. This chaining is what
+        makes smart pointers feel invisible.
+      </p>
+
+      <h3>Key <code>Deref</code> implementations in the standard library</h3>
+
+      <p>
+        These are the ones you'll rely on every day:
+      </p>
+
+      <pre><code><span class="cm">// String -&gt; str</span>
+<span class="kw">impl</span> <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">String</span>    { <span class="kw">type</span> <span class="ty">Target</span> = <span class="kw">str</span>; }
+
+<span class="cm">// Vec&lt;T&gt; -&gt; [T]</span>
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">Vec</span>&lt;<span class="ty">T</span>&gt; { <span class="kw">type</span> <span class="ty">Target</span> = [<span class="ty">T</span>]; }
+
+<span class="cm">// Box&lt;T&gt; -&gt; T</span>
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">Box</span>&lt;<span class="ty">T</span>&gt; { <span class="kw">type</span> <span class="ty">Target</span> = <span class="ty">T</span>; }
+
+<span class="cm">// Rc&lt;T&gt; -&gt; T</span>
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">Rc</span>&lt;<span class="ty">T</span>&gt; { <span class="kw">type</span> <span class="ty">Target</span> = <span class="ty">T</span>; }
+
+<span class="cm">// Arc&lt;T&gt; -&gt; T</span>
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">Arc</span>&lt;<span class="ty">T</span>&gt; { <span class="kw">type</span> <span class="ty">Target</span> = <span class="ty">T</span>; }
+
+<span class="cm">// MutexGuard&lt;T&gt; -&gt; T</span>
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">MutexGuard</span>&lt;<span class="ty">T</span>&gt; { <span class="kw">type</span> <span class="ty">Target</span> = <span class="ty">T</span>; }
+
+<span class="cm">// RwLockReadGuard&lt;T&gt; -&gt; T</span>
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">RwLockReadGuard</span>&lt;<span class="ty">T</span>&gt; { <span class="kw">type</span> <span class="ty">Target</span> = <span class="ty">T</span>; }</code></pre>
+
+      <p>
+        Every one of these means the same thing: "a reference to me can be used as a reference
+        to my inner type." That single idea is what makes smart pointers in Rust feel nothing
+        like smart pointers in C++.
+      </p>
+
+      <h2>Why smart pointers work so cleanly</h2>
+
+      <p>
+        Look at this code:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::<span class="ty">Arc</span>;
+
+<span class="kw">let</span> data: <span class="ty">Arc</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt;&gt; = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="kw">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]);
+
+<span class="kw">let</span> length = data.<span class="fn">len</span>();           <span class="cm">// Vec::len()</span>
+<span class="kw">let</span> first = data[<span class="num">0</span>];              <span class="cm">// slice indexing</span>
+<span class="kw">let</span> slice = &amp;data[<span class="num">1</span>..<span class="num">3</span>];         <span class="cm">// slice range</span>
+<span class="kw">let</span> total: <span class="ty">i32</span> = data.<span class="fn">iter</span>().<span class="fn">sum</span>(); <span class="cm">// slice iteration</span></code></pre>
+
+      <p>
+        <code>data</code> is an <code>Arc&lt;Vec&lt;i32&gt;&gt;</code>. It is not a
+        <code>Vec</code>. It is not a slice. But you can call <code>.len()</code>,
+        index with <code>[0]</code>, take sub-slices, and iterate -- all methods that belong
+        to <code>Vec</code> or <code>[i32]</code>. The deref chain is doing all the work:
+      </p>
+
+      <pre><code><span class="cm">// data.len():</span>
+<span class="cm">// Arc&lt;Vec&lt;i32&gt;&gt;  --deref--&gt;  Vec&lt;i32&gt;  --deref--&gt;  [i32]</span>
+<span class="cm">// [i32] has .len(), so that's the one that gets called.</span></code></pre>
+
+      <p>
+        This is why you almost never need to write <code>(*arc).len()</code> or
+        <code>(**arc).len()</code>. The compiler follows the chain for you. The wrapper types
+        become transparent, and you interact with the data inside them as if the wrappers
+        weren't there.
+      </p>
+
+      <p>
+        The same applies to <code>Rc</code>, <code>Box</code>, and lock guards:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::<span class="ty">Mutex</span>;
+
+<span class="kw">let</span> mutex = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>));
+<span class="kw">let</span> guard = mutex.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+
+<span class="cm">// guard is a MutexGuard&lt;String&gt;, but you use it like a &amp;String</span>
+<span class="kw">let</span> len = guard.<span class="fn">len</span>();          <span class="cm">// String::len()</span>
+<span class="kw">let</span> upper = guard.<span class="fn">to_uppercase</span>(); <span class="cm">// str::to_uppercase()</span>
+<span class="kw">let</span> bytes = guard.<span class="fn">as_bytes</span>();   <span class="cm">// str::as_bytes()</span></code></pre>
+
+      <p>
+        You locked a mutex and got a guard. Through deref coercion, that guard behaves like
+        the <code>String</code> inside it. The lock machinery is invisible at the point
+        of use.
+      </p>
+
+      <h2>DerefMut</h2>
+
+      <p>
+        Everything above is about shared references -- <code>&amp;T</code> to <code>&amp;U</code>.
+        But there is a mutable counterpart: <code>DerefMut</code>.
+      </p>
+
+      <pre><code><span class="kw">pub trait</span> <span class="ty">DerefMut</span>: <span class="ty">Deref</span> {
+    <span class="kw">fn</span> <span class="fn">deref_mut</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; &amp;<span class="kw">mut</span> <span class="kw">Self</span>::<span class="ty">Target</span>;
+}</code></pre>
+
+      <p>
+        When the compiler sees a <code>&amp;mut T</code> where a <code>&amp;mut U</code> is
+        expected, and <code>T: DerefMut&lt;Target = U&gt;</code>, it inserts
+        <code>deref_mut()</code>. The important thing to notice is that <code>DerefMut</code>
+        requires <code>Deref</code> -- you must implement both, and the target type must be
+        the same.
+      </p>
+
+      <p>
+        Here is where this matters in practice:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::<span class="ty">Mutex</span>;
+
+<span class="kw">let</span> mutex = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="kw">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]);
+<span class="kw">let</span> <span class="kw">mut</span> guard = mutex.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+
+<span class="cm">// guard is a MutexGuard&lt;Vec&lt;i32&gt;&gt;</span>
+<span class="cm">// MutexGuard implements DerefMut, so &amp;mut guard becomes &amp;mut Vec&lt;i32&gt;</span>
+guard.<span class="fn">push</span>(<span class="num">4</span>);
+guard.<span class="fn">push</span>(<span class="num">5</span>);
+guard.<span class="fn">sort</span>();
+
+<span class="mac">println!</span>(<span class="str">"{:?}"</span>, *guard); <span class="cm">// [1, 2, 3, 4, 5]</span></code></pre>
+
+      <p>
+        <code>push</code> and <code>sort</code> take <code>&amp;mut self</code> on
+        <code>Vec</code>. You are calling them on a <code>MutexGuard</code>. The compiler
+        sees <code>&amp;mut MutexGuard&lt;Vec&lt;i32&gt;&gt;</code>, applies
+        <code>deref_mut()</code> to get <code>&amp;mut Vec&lt;i32&gt;</code>, and resolves
+        the method. This is why you can mutate data through a lock guard without any explicit
+        dereferencing.
+      </p>
+
+      <p>
+        A subtlety: <code>&amp;mut T</code> can also coerce to <code>&amp;U</code> (not just
+        <code>&amp;mut U</code>). A mutable reference can always be used where a shared
+        reference is expected. So you can mix read and write operations freely:
+      </p>
+
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> v = <span class="kw">vec!</span>[<span class="num">3</span>, <span class="num">1</span>, <span class="num">2</span>];
+<span class="kw">let</span> len = v.<span class="fn">len</span>();   <span class="cm">// &amp;self method (Deref to &amp;[i32])</span>
+v.<span class="fn">sort</span>();              <span class="cm">// &amp;mut self method (DerefMut to &amp;mut [i32])</span>
+<span class="kw">let</span> first = v[<span class="num">0</span>];    <span class="cm">// &amp;self method again</span></code></pre>
+
+      <h2>Method resolution and auto-deref</h2>
+
+      <p>
+        Deref coercion does not only happen at function call boundaries. It is also deeply
+        integrated into method resolution. When you write <code>x.method()</code>, the compiler
+        goes through a specific sequence to figure out what <code>method</code> means:
+      </p>
+
+      <p>
+        First, it tries to call <code>method</code> on the type of <code>x</code> directly.
+        If that fails, it dereferences <code>x</code> one level (using <code>Deref</code>)
+        and tries again. It keeps derefing until it either finds the method or runs out of
+        <code>Deref</code> implementations. As a final step, it also tries unsized coercions
+        (like <code>[T; N]</code> to <code>[T]</code>).
+      </p>
+
+      <p>
+        This is why <code>String</code> appears to have hundreds of methods when it really
+        doesn't. <code>String</code> itself has a handful of methods for mutation and allocation.
+        Most of what you call on a <code>String</code> actually lives on <code>str</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Hello, World"</span>);
+
+<span class="cm">// These are all str methods, called through auto-deref:</span>
+<span class="kw">let</span> lower = s.<span class="fn">to_lowercase</span>();     <span class="cm">// str::to_lowercase</span>
+<span class="kw">let</span> trimmed = s.<span class="fn">trim</span>();           <span class="cm">// str::trim</span>
+<span class="kw">let</span> starts = s.<span class="fn">starts_with</span>(<span class="str">'H'</span>); <span class="cm">// str::starts_with</span>
+<span class="kw">let</span> bytes = s.<span class="fn">as_bytes</span>();         <span class="cm">// str::as_bytes</span>
+<span class="kw">let</span> found = s.<span class="fn">contains</span>(<span class="str">"World"</span>); <span class="cm">// str::contains</span></code></pre>
+
+      <p>
+        The compiler tries <code>String::to_lowercase</code> -- doesn't exist. Then it derefs
+        to <code>str</code> and tries <code>str::to_lowercase</code> -- found it. All of this
+        happens at compile time with zero runtime cost. There is no dynamic dispatch and no
+        indirection in the generated code.
+      </p>
+
+      <p>
+        The same thing applies through multiple layers:
+      </p>
+
+      <pre><code><span class="kw">let</span> boxed_string: <span class="ty">Box</span>&lt;<span class="ty">String</span>&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>));
+
+<span class="cm">// The compiler tries:</span>
+<span class="cm">// 1. Box&lt;String&gt;::trim()     -- nope</span>
+<span class="cm">// 2. String::trim()           -- nope</span>
+<span class="cm">// 3. str::trim()              -- found it!</span>
+<span class="kw">let</span> trimmed = boxed_string.<span class="fn">trim</span>();</code></pre>
+
+      <p>
+        This layered resolution is also why <code>Vec&lt;T&gt;</code> appears to have all
+        the methods of slices. When you call <code>v.iter()</code> or <code>v.contains()</code>,
+        those are <code>[T]</code> methods found through auto-deref from <code>Vec&lt;T&gt;</code>.
+      </p>
+
+      <pre><code><span class="kw">let</span> v = <span class="kw">vec!</span>[<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>];
+
+<span class="cm">// All slice methods, resolved through Vec's Deref to [T]:</span>
+<span class="kw">let</span> has_twenty = v.<span class="fn">contains</span>(&amp;<span class="num">20</span>);    <span class="cm">// [T]::contains</span>
+<span class="kw">let</span> chunks = v.<span class="fn">chunks</span>(<span class="num">2</span>);           <span class="cm">// [T]::chunks</span>
+<span class="kw">let</span> window = v.<span class="fn">windows</span>(<span class="num">2</span>);          <span class="cm">// [T]::windows</span>
+<span class="kw">let</span> first = v.<span class="fn">first</span>();              <span class="cm">// [T]::first</span></code></pre>
+
+      <h2>When deref coercion doesn't happen</h2>
+
+      <p>
+        Deref coercion is not a universal type converter. There are specific situations where
+        people expect it to kick in and it doesn't. Knowing the limits saves you from confusing
+        compiler errors.
+      </p>
+
+      <h3>It only works on references</h3>
+
+      <p>
+        Deref coercion converts <code>&amp;T</code> to <code>&amp;U</code>. It does not convert
+        <code>T</code> to <code>U</code>. If a function wants an owned <code>String</code>, you
+        cannot pass an owned <code>Box&lt;String&gt;</code> and expect coercion to unbox it:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">takes_string</span>(s: <span class="ty">String</span>) { <span class="cm">/* ... */</span> }
+
+<span class="kw">let</span> boxed = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>));
+
+<span class="cm">// takes_string(boxed);   // ERROR: expected String, found Box&lt;String&gt;</span>
+<span class="fn">takes_string</span>(*boxed);      <span class="cm">// OK: explicit dereference with *</span></code></pre>
+
+      <p>
+        The <code>*</code> operator explicitly moves the value out of the box. Deref coercion
+        only operates at the reference level.
+      </p>
+
+      <h3>It's one direction only</h3>
+
+      <p>
+        <code>String</code> derefs to <code>str</code>, so <code>&amp;String</code> coerces to
+        <code>&amp;str</code>. But <code>str</code> does not deref to <code>String</code>. If a
+        function wants a <code>&amp;String</code>, you cannot pass a <code>&amp;str</code>:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">takes_string_ref</span>(s: &amp;<span class="ty">String</span>) { <span class="cm">/* ... */</span> }
+
+<span class="kw">let</span> slice: &amp;<span class="kw">str</span> = <span class="str">"hello"</span>;
+
+<span class="cm">// takes_string_ref(slice);  // ERROR: expected &amp;String, found &amp;str</span></code></pre>
+
+      <p>
+        This is also why the advice is to accept <code>&amp;str</code> in function parameters
+        rather than <code>&amp;String</code>. A <code>&amp;str</code> parameter works with both
+        string slices and <code>String</code> values (through deref coercion), while a
+        <code>&amp;String</code> parameter only works with <code>String</code>.
+      </p>
+
+      <h3>It doesn't work in generic contexts</h3>
+
+      <p>
+        This is the one that trips people up most. Deref coercion does not apply when the
+        compiler is resolving generic type parameters:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashSet</span>;
+
+<span class="kw">let</span> set: <span class="ty">HashSet</span>&lt;<span class="ty">String</span>&gt; = <span class="ty">HashSet</span>::<span class="fn">new</span>();
+<span class="kw">let</span> key: &amp;<span class="kw">str</span> = <span class="str">"hello"</span>;
+
+<span class="cm">// set.contains(key);  // ERROR in older editions</span>
+<span class="cm">// The contains method is generic, and type inference</span>
+<span class="cm">// doesn't automatically apply deref coercion.</span></code></pre>
+
+      <p>
+        The standard library works around this for <code>HashSet</code> and <code>HashMap</code>
+        by using the <code>Borrow</code> trait in their lookup methods. That's why
+        <code>set.contains("hello")</code> works -- it uses <code>Borrow</code>, not
+        <code>Deref</code>. But when you write your own generic code, don't assume deref
+        coercion will bridge type gaps for you.
+      </p>
+
+      <h3>It doesn't apply to trait bounds</h3>
+
+      <p>
+        If a function takes <code>impl AsRef&lt;str&gt;</code>, deref coercion won't help
+        resolve that. The compiler checks trait implementations directly, not through
+        deref chains:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">needs_display</span>(item: &amp;<span class="kw">impl</span> <span class="ty">Display</span>) {
+    <span class="mac">println!</span>(<span class="str">"{item}"</span>);
+}
+
+<span class="kw">let</span> boxed: <span class="ty">Box</span>&lt;<span class="ty">i32</span>&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="num">42</span>);
+<span class="fn">needs_display</span>(&amp;boxed); <span class="cm">// Works, but only because Box&lt;T&gt; implements Display</span>
+                       <span class="cm">// when T: Display -- not because of deref coercion.</span></code></pre>
+
+      <p>
+        The distinction matters. In this case it works, but not for the reason you might
+        think. If <code>Box&lt;T&gt;</code> didn't have its own <code>Display</code> impl,
+        deref coercion alone would not save you.
+      </p>
+
+      <h2>Implementing Deref for your own types</h2>
+
+      <p>
+        You can implement <code>Deref</code> on your own types. The classic use case is the
+        newtype pattern, where you wrap an existing type to give it a different identity:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::ops::<span class="ty">Deref</span>;
+
+<span class="kw">struct</span> <span class="ty">Username</span>(<span class="ty">String</span>);
+
+<span class="kw">impl</span> <span class="ty">Deref</span> <span class="kw">for</span> <span class="ty">Username</span> {
+    <span class="kw">type</span> <span class="ty">Target</span> = <span class="kw">str</span>;
+
+    <span class="kw">fn</span> <span class="fn">deref</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="kw">str</span> {
+        &amp;<span class="kw">self</span>.<span class="num">0</span>
+    }
+}
+
+<span class="kw">let</span> user = <span class="ty">Username</span>(<span class="str">"alice"</span>.<span class="fn">to_string</span>());
+
+<span class="cm">// Now Username gets all &amp;str methods for free:</span>
+<span class="kw">let</span> len = user.<span class="fn">len</span>();
+<span class="kw">let</span> upper = user.<span class="fn">to_uppercase</span>();
+<span class="kw">let</span> starts = user.<span class="fn">starts_with</span>(<span class="str">'a'</span>);</code></pre>
+
+      <p>
+        This looks convenient, but there is an important design guideline here.
+        <code>Deref</code> was designed for smart pointer types -- types whose whole purpose
+        is to wrap and provide access to another value. When you implement <code>Deref</code>,
+        you are telling the compiler: "treat my type as if it were the target type in most
+        contexts."
+      </p>
+
+      <p>
+        That is exactly right for <code>Box</code>, <code>Rc</code>, <code>Arc</code>, and
+        <code>MutexGuard</code>. Their job is to be transparent wrappers.
+      </p>
+
+      <p>
+        But for a newtype like <code>Username</code>, think carefully. If the whole point of
+        the newtype is to restrict the API -- to prevent callers from treating a username as
+        an arbitrary string -- then implementing <code>Deref</code> defeats the purpose. You
+        just gave back every <code>str</code> method, including ones that don't make sense for
+        a username.
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Username</span>(<span class="ty">String</span>);
+
+<span class="cm">// If Username implements Deref&lt;Target = str&gt;, then this works:</span>
+<span class="kw">let</span> user = <span class="ty">Username</span>(<span class="str">"alice"</span>.<span class="fn">to_string</span>());
+<span class="kw">let</span> weird = user.<span class="fn">replace</span>(<span class="str">"a"</span>, <span class="str">"@"</span>); <span class="cm">// probably not what you want</span>
+<span class="kw">let</span> split = user.<span class="fn">split_whitespace</span>();  <span class="cm">// why would a username have whitespace?</span></code></pre>
+
+      <p>
+        The guideline: implement <code>Deref</code> when your type is a transparent wrapper
+        and users should have full access to the inner type's methods. Don't implement it
+        when your type exists to restrict or specialize the inner type's API. In those cases,
+        expose only the methods that make sense by writing explicit delegation methods:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Username</span>(<span class="ty">String</span>);
+
+<span class="kw">impl</span> <span class="ty">Username</span> {
+    <span class="kw">fn</span> <span class="fn">as_str</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="kw">str</span> {
+        &amp;<span class="kw">self</span>.<span class="num">0</span>
+    }
+
+    <span class="kw">fn</span> <span class="fn">len</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">usize</span> {
+        <span class="kw">self</span>.<span class="num">0</span>.<span class="fn">len</span>()
+    }
+}
+
+<span class="cm">// Callers get only the methods you chose to expose.</span>
+<span class="kw">let</span> user = <span class="ty">Username</span>(<span class="str">"alice"</span>.<span class="fn">to_string</span>());
+<span class="kw">let</span> len = user.<span class="fn">len</span>();          <span class="cm">// OK</span>
+<span class="kw">let</span> s = user.<span class="fn">as_str</span>();         <span class="cm">// OK</span>
+<span class="cm">// user.split_whitespace();   // ERROR: no such method -- good!</span></code></pre>
+
+      <p>
+        A good test: would you be comfortable if every single method on the target type were
+        callable on your type? If yes, implement <code>Deref</code>. If any of those methods
+        would be surprising or wrong, keep your type opaque and delegate manually.
+      </p>
+
+      <p>
+        Deref coercion is one of the few places where Rust inserts implicit behavior, and it
+        does so for a good reason. Without it, every smart pointer would require manual
+        dereferencing, every <code>&amp;String</code> would need an explicit
+        <code>.as_str()</code>, and method calls through wrappers would be noisy and tedious.
+        The mechanism is simple -- follow the <code>Deref</code> chain until the types match --
+        but its effect on ergonomics is enormous. Once you see it, you'll notice it everywhere:
+        every <code>.len()</code> on a <code>Vec</code>, every method call through a lock guard,
+        every function that accepts <code>&amp;str</code> and gets a <code>&amp;String</code>.
+        It's the invisible machinery that makes Rust's type system strict without being
+        punishing.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

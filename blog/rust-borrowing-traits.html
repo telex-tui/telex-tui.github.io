@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AsRef, Borrow, and ToOwned: The Three Traits Nobody Explains Well - Telex</title>
+  <meta name="description" content="Three traits that all seem to do the same thing — convert between owned and borrowed. Here's what each one actually promises and when your function signature needs which one.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>AsRef, Borrow, and ToOwned: The Three Traits Nobody Explains Well</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Rust has three traits that all seem to do the same thing: convert between
+        owned and borrowed types. <code>AsRef&lt;T&gt;</code> gives you a
+        <code>&amp;T</code>. <code>Borrow&lt;T&gt;</code> gives you a
+        <code>&amp;T</code>. <code>ToOwned</code> goes the other direction,
+        giving you an owned value from a borrowed one. If you've ever stared at
+        all three and wondered why they all exist, you're not alone. The
+        difference isn't about what they do. It's about what they promise.
+      </p>
+
+      <h2>The confusion</h2>
+
+      <p>
+        Here's what makes this confusing. Look at these two trait definitions
+        side by side:
+      </p>
+
+      <pre><code><span class="cm">// AsRef</span>
+<span class="kw">pub trait</span> <span class="ty">AsRef</span>&lt;<span class="ty">T</span>: ?<span class="ty">Sized</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">as_ref</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">T</span>;
+}
+
+<span class="cm">// Borrow</span>
+<span class="kw">pub trait</span> <span class="ty">Borrow</span>&lt;<span class="ty">T</span>: ?<span class="ty">Sized</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">borrow</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">T</span>;
+}</code></pre>
+
+      <p>
+        Identical signatures. Both take <code>&amp;self</code> and return
+        <code>&amp;T</code>. The compiler doesn't enforce any difference between
+        them. The difference is a semantic contract -- a promise you make to
+        other code that uses your type. <code>AsRef</code> promises very little.
+        <code>Borrow</code> promises a lot. And <code>ToOwned</code> is the
+        inverse of <code>Borrow</code>, going from borrowed back to owned. Let's
+        take them one at a time.
+      </p>
+
+      <h2><code>AsRef&lt;T&gt;</code> -- "I can give you a <code>&amp;T</code> cheaply"</h2>
+
+      <p>
+        <code>AsRef</code> is the weakest promise of the three. It says: "I can
+        hand you a reference to a <code>T</code>, and it won't cost anything
+        significant." That's it. No guarantees about how the borrowed form
+        behaves relative to the owned form. No promises about hashing, ordering,
+        or equality. Just a cheap conversion.
+      </p>
+
+      <p>
+        Where you actually use this is in function parameters. When you write a
+        function that accepts a file path, you could write it like this:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::fs;
+<span class="kw">use</span> std::path::<span class="ty">Path</span>;
+
+<span class="kw">fn</span> <span class="fn">read_config</span>(path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">String</span> {
+    fs::<span class="fn">read_to_string</span>(path).<span class="fn">unwrap</span>()
+}</code></pre>
+
+      <p>
+        That works, but it forces callers to construct a <code>&amp;Path</code>
+        explicitly. Someone with a <code>String</code> has to write
+        <code>Path::new(&amp;my_string)</code>. Someone with a
+        <code>&amp;str</code> has to do the same. The friction is small, but it
+        adds up across an API. Here's the <code>AsRef</code> version:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">read_config</span>(path: <span class="kw">impl</span> <span class="ty">AsRef</span>&lt;<span class="ty">Path</span>&gt;) -&gt; <span class="ty">String</span> {
+    fs::<span class="fn">read_to_string</span>(path.<span class="fn">as_ref</span>()).<span class="fn">unwrap</span>()
+}
+
+<span class="cm">// All of these work now:</span>
+<span class="fn">read_config</span>(<span class="str">"config.toml"</span>);                        <span class="cm">// &amp;str</span>
+<span class="fn">read_config</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"config.toml"</span>));          <span class="cm">// String</span>
+<span class="fn">read_config</span>(<span class="ty">Path</span>::<span class="fn">new</span>(<span class="str">"config.toml"</span>));             <span class="cm">// &amp;Path</span>
+<span class="fn">read_config</span>(<span class="ty">PathBuf</span>::<span class="fn">from</span>(<span class="str">"config.toml"</span>));         <span class="cm">// PathBuf</span>
+<span class="fn">read_config</span>(<span class="ty">OsString</span>::<span class="fn">from</span>(<span class="str">"config.toml"</span>));        <span class="cm">// OsString</span></code></pre>
+
+      <p>
+        This is exactly what the standard library does. Look at the signature of
+        <code>fs::read_to_string</code> itself:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">read_to_string</span>&lt;<span class="ty">P</span>: <span class="ty">AsRef</span>&lt;<span class="ty">Path</span>&gt;&gt;(path: <span class="ty">P</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">String</span>&gt;</code></pre>
+
+      <p>
+        The same pattern works for anything that can be viewed as a byte slice.
+        If your function processes bytes, accept <code>impl AsRef&lt;[u8]&gt;</code>
+        and callers can pass <code>&amp;[u8]</code>, <code>Vec&lt;u8&gt;</code>,
+        <code>&amp;str</code>, or <code>String</code>:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">compute_hash</span>(data: <span class="kw">impl</span> <span class="ty">AsRef</span>&lt;[<span class="ty">u8</span>]&gt;) -&gt; <span class="ty">u64</span> {
+    <span class="kw">let</span> bytes = data.<span class="fn">as_ref</span>();
+    <span class="kw">let</span> <span class="kw">mut</span> hash = <span class="num">0u64</span>;
+    <span class="kw">for</span> &amp;b <span class="kw">in</span> bytes {
+        hash = hash.<span class="fn">wrapping_mul</span>(<span class="num">31</span>).<span class="fn">wrapping_add</span>(b <span class="kw">as</span> <span class="ty">u64</span>);
+    }
+    hash
+}
+
+<span class="fn">compute_hash</span>(<span class="str">"hello"</span>);                  <span class="cm">// &amp;str implements AsRef&lt;[u8]&gt;</span>
+<span class="fn">compute_hash</span>(<span class="kw">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]);           <span class="cm">// Vec&lt;u8&gt; implements AsRef&lt;[u8]&gt;</span>
+<span class="fn">compute_hash</span>(&amp;[<span class="num">0xFF</span>, <span class="num">0xFE</span>]);          <span class="cm">// &amp;[u8] implements AsRef&lt;[u8]&gt;</span></code></pre>
+
+      <p>
+        You can also implement <code>AsRef</code> on your own types to make them
+        work smoothly with these kinds of generic functions:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">ConfigPath</span> {
+    inner: <span class="ty">PathBuf</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">AsRef</span>&lt;<span class="ty">Path</span>&gt; <span class="kw">for</span> <span class="ty">ConfigPath</span> {
+    <span class="kw">fn</span> <span class="fn">as_ref</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">Path</span> {
+        &amp;<span class="kw">self</span>.inner
+    }
+}
+
+<span class="cm">// Now ConfigPath works with any function that accepts impl AsRef&lt;Path&gt;</span>
+<span class="kw">let</span> cfg = <span class="ty">ConfigPath</span> { inner: <span class="ty">PathBuf</span>::<span class="fn">from</span>(<span class="str">"/etc/app.toml"</span>) };
+<span class="kw">let</span> contents = fs::<span class="fn">read_to_string</span>(&amp;cfg).<span class="fn">unwrap</span>();</code></pre>
+
+      <p>
+        The key thing about <code>AsRef</code>: it's about API ergonomics, not
+        about behavioral contracts. You're telling the compiler "this type can
+        cheaply produce a reference to that type," and nothing more.
+      </p>
+
+      <h2><code>Borrow&lt;T&gt;</code> -- "I can give you a <code>&amp;T</code>, and it behaves the same"</h2>
+
+      <p>
+        <code>Borrow</code> looks identical to <code>AsRef</code> at the type
+        level, but it carries a much stronger promise: the borrowed form must
+        behave identically to the owned form with respect to hashing, equality,
+        and ordering. If <code>x == y</code>, then
+        <code>x.borrow() == y.borrow()</code>. If
+        <code>hash(x) == hash(y)</code>, then
+        <code>hash(x.borrow()) == hash(y.borrow())</code>. Same for
+        <code>Ord</code>.
+      </p>
+
+      <p>
+        This isn't enforced by the compiler. It's a contract. If you violate it,
+        your code compiles but breaks in subtle, maddening ways. And the place
+        where this contract matters most is <code>HashMap</code> and
+        <code>HashSet</code>.
+      </p>
+
+      <p>
+        Look at the signature of <code>HashMap::get</code>:
+      </p>
+
+      <pre><code><span class="kw">impl</span>&lt;<span class="ty">K</span>, <span class="ty">V</span>&gt; <span class="ty">HashMap</span>&lt;<span class="ty">K</span>, <span class="ty">V</span>&gt; {
+    <span class="kw">pub fn</span> <span class="fn">get</span>&lt;<span class="ty">Q</span>&gt;(&amp;<span class="kw">self</span>, k: &amp;<span class="ty">Q</span>) -&gt; <span class="ty">Option</span>&lt;&amp;<span class="ty">V</span>&gt;
+    <span class="kw">where</span>
+        <span class="ty">K</span>: <span class="ty">Borrow</span>&lt;<span class="ty">Q</span>&gt;,
+        <span class="ty">Q</span>: <span class="ty">Hash</span> + <span class="ty">Eq</span>,
+    { ... }
+}</code></pre>
+
+      <p>
+        This says: "Give me anything that the key type can borrow as." Because
+        <code>String</code> implements <code>Borrow&lt;str&gt;</code>, you can
+        look up a <code>HashMap&lt;String, V&gt;</code> with a
+        <code>&amp;str</code> -- no allocation needed:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">let</span> <span class="kw">mut</span> users: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">u32</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+users.<span class="fn">insert</span>(<span class="str">"alice"</span>.<span class="fn">to_string</span>(), <span class="num">42</span>);
+
+<span class="cm">// Look up with &amp;str, even though keys are String</span>
+<span class="kw">let</span> age = users.<span class="fn">get</span>(<span class="str">"alice"</span>); <span class="cm">// Some(&amp;42)</span></code></pre>
+
+      <p>
+        This only works because <code>String</code>'s <code>Borrow&lt;str&gt;</code>
+        implementation guarantees that hashing a <code>String</code> and hashing
+        the corresponding <code>&amp;str</code> produce the same result. If they
+        didn't, the <code>HashMap</code> would hash the key at insertion time
+        using <code>String</code>'s hash, then hash the lookup key using
+        <code>str</code>'s hash, get a different bucket, and never find the
+        entry. Everything compiles. Nothing works.
+      </p>
+
+      <p>
+        Here's why <code>AsRef</code> would be wrong for this. Suppose you have
+        a case-insensitive string wrapper:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::hash::{<span class="ty">Hash</span>, <span class="ty">Hasher</span>};
+
+<span class="kw">struct</span> <span class="ty">CiString</span>(<span class="ty">String</span>);
+
+<span class="kw">impl</span> <span class="ty">PartialEq</span> <span class="kw">for</span> <span class="ty">CiString</span> {
+    <span class="kw">fn</span> <span class="fn">eq</span>(&amp;<span class="kw">self</span>, other: &amp;<span class="kw">Self</span>) -&gt; <span class="ty">bool</span> {
+        <span class="kw">self</span>.<span class="num">0</span>.<span class="fn">to_lowercase</span>() == other.<span class="num">0</span>.<span class="fn">to_lowercase</span>()
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Hash</span> <span class="kw">for</span> <span class="ty">CiString</span> {
+    <span class="kw">fn</span> <span class="fn">hash</span>&lt;<span class="ty">H</span>: <span class="ty">Hasher</span>&gt;(&amp;<span class="kw">self</span>, state: &amp;<span class="kw">mut</span> <span class="ty">H</span>) {
+        <span class="kw">self</span>.<span class="num">0</span>.<span class="fn">to_lowercase</span>().<span class="fn">hash</span>(state);
+    }
+}</code></pre>
+
+      <p>
+        This type could safely implement <code>AsRef&lt;str&gt;</code> -- it can
+        cheaply give you a <code>&amp;str</code>. But it must not implement
+        <code>Borrow&lt;str&gt;</code>, because the borrowed <code>&amp;str</code>
+        would hash differently than the <code>CiString</code> itself. The
+        <code>CiString</code> hashes case-insensitively, but plain
+        <code>str</code> hashes case-sensitively. Implementing
+        <code>Borrow&lt;str&gt;</code> here would silently break any
+        <code>HashMap&lt;CiString, V&gt;</code>.
+      </p>
+
+      <p>
+        This is the core distinction: <code>AsRef</code> says "I can produce a
+        reference." <code>Borrow</code> says "I can produce a reference that is
+        interchangeable for comparison purposes." The second is a much stronger
+        claim.
+      </p>
+
+      <h3>When to use <code>Borrow</code> in your own functions</h3>
+
+      <p>
+        If you're writing a generic function that needs to compare or hash a
+        borrowed form against an owned form, use <code>Borrow</code>. The
+        classic case is lookup functions on collection-like types:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Borrow</span>;
+
+<span class="kw">struct</span> <span class="ty">Registry</span>&lt;<span class="ty">K</span>, <span class="ty">V</span>&gt; {
+    entries: <span class="ty">Vec</span>&lt;(<span class="ty">K</span>, <span class="ty">V</span>)&gt;,
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">K</span>: <span class="ty">Eq</span>, <span class="ty">V</span>&gt; <span class="ty">Registry</span>&lt;<span class="ty">K</span>, <span class="ty">V</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">find</span>&lt;<span class="ty">Q</span>&gt;(&amp;<span class="kw">self</span>, key: &amp;<span class="ty">Q</span>) -&gt; <span class="ty">Option</span>&lt;&amp;<span class="ty">V</span>&gt;
+    <span class="kw">where</span>
+        <span class="ty">K</span>: <span class="ty">Borrow</span>&lt;<span class="ty">Q</span>&gt;,
+        <span class="ty">Q</span>: <span class="ty">Eq</span> + ?<span class="ty">Sized</span>,
+    {
+        <span class="kw">self</span>.entries.<span class="fn">iter</span>()
+            .<span class="fn">find</span>(|(k, _)| k.<span class="fn">borrow</span>() == key)
+            .<span class="fn">map</span>(|(_, v)| v)
+    }
+}
+
+<span class="kw">let</span> <span class="kw">mut</span> reg = <span class="ty">Registry</span> { entries: <span class="kw">vec!</span>[] };
+reg.entries.<span class="fn">push</span>((<span class="str">"timeout"</span>.<span class="fn">to_string</span>(), <span class="num">30</span>));
+
+<span class="cm">// Look up with &amp;str, keys are String</span>
+<span class="kw">let</span> val = reg.<span class="fn">find</span>(<span class="str">"timeout"</span>); <span class="cm">// Some(&amp;30)</span></code></pre>
+
+      <h2><code>ToOwned</code> -- "I can make an owned version of this borrowed data"</h2>
+
+      <p>
+        <code>ToOwned</code> goes in the opposite direction: from borrowed to
+        owned. You might think <code>Clone</code> already does this, and it
+        does -- for types where the owned and borrowed forms are the same type.
+        <code>Clone</code> turns a <code>&amp;String</code> into a
+        <code>String</code>. But what about turning a <code>&amp;str</code> into
+        a <code>String</code>? Or a <code>&amp;[T]</code> into a
+        <code>Vec&lt;T&gt;</code>? The borrowed type and the owned type are
+        different types entirely. That's what <code>ToOwned</code> is for.
+      </p>
+
+      <pre><code><span class="kw">pub trait</span> <span class="ty">ToOwned</span> {
+    <span class="kw">type</span> <span class="ty">Owned</span>: <span class="ty">Borrow</span>&lt;<span class="kw">Self</span>&gt;;
+
+    <span class="kw">fn</span> <span class="fn">to_owned</span>(&amp;<span class="kw">self</span>) -&gt; <span class="kw">Self</span>::<span class="ty">Owned</span>;
+}</code></pre>
+
+      <p>
+        Notice the bound: <code>Owned: Borrow&lt;Self&gt;</code>. This ties
+        <code>ToOwned</code> and <code>Borrow</code> together. If
+        <code>str</code> says its owned form is <code>String</code>, then
+        <code>String</code> must implement <code>Borrow&lt;str&gt;</code>. The
+        two traits form a round-trip: you can go from owned to borrowed (via
+        <code>Borrow</code>) and from borrowed to owned (via
+        <code>ToOwned</code>).
+      </p>
+
+      <p>
+        The standard library implements <code>ToOwned</code> for the common
+        borrowed-to-owned pairs:
+      </p>
+
+      <pre><code><span class="cm">// str -&gt; String</span>
+<span class="kw">let</span> s: <span class="ty">String</span> = <span class="str">"hello"</span>.<span class="fn">to_owned</span>();
+
+<span class="cm">// [T] -&gt; Vec&lt;T&gt;</span>
+<span class="kw">let</span> v: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>][..].<span class="fn">to_owned</span>();
+
+<span class="cm">// Path -&gt; PathBuf</span>
+<span class="kw">use</span> std::path::<span class="ty">Path</span>;
+<span class="kw">let</span> p: <span class="ty">PathBuf</span> = <span class="ty">Path</span>::<span class="fn">new</span>(<span class="str">"/tmp"</span>).<span class="fn">to_owned</span>();
+
+<span class="cm">// OsStr -&gt; OsString</span>
+<span class="kw">use</span> std::ffi::<span class="ty">OsStr</span>;
+<span class="kw">let</span> o: <span class="ty">OsString</span> = <span class="ty">OsStr</span>::<span class="fn">new</span>(<span class="str">"foo"</span>).<span class="fn">to_owned</span>();
+
+<span class="cm">// For types where owned == borrowed, ToOwned just calls clone:</span>
+<span class="kw">let</span> n: <span class="ty">i32</span> = <span class="num">42</span>.<span class="fn">to_owned</span>(); <span class="cm">// same as 42.clone()</span></code></pre>
+
+      <h3>The <code>Cow</code> connection</h3>
+
+      <p>
+        <code>ToOwned</code> is the trait that makes <code>Cow</code> possible.
+        Look at the definition of <code>Cow</code>:
+      </p>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">Cow</span>&lt;<span class="kw">'a</span>, <span class="ty">B</span>: ?<span class="ty">Sized</span> + <span class="ty">ToOwned</span>&gt; {
+    <span class="ty">Borrowed</span>(&amp;<span class="kw">'a</span> <span class="ty">B</span>),
+    <span class="ty">Owned</span>(&lt;<span class="ty">B</span> <span class="kw">as</span> <span class="ty">ToOwned</span>&gt;::<span class="ty">Owned</span>),
+}</code></pre>
+
+      <p>
+        <code>Cow</code> needs <code>ToOwned</code> so it knows how to go from
+        the <code>Borrowed</code> variant to the <code>Owned</code> variant when
+        you call <code>.to_mut()</code> or <code>.into_owned()</code>. Without
+        <code>ToOwned</code>, <code>Cow</code> wouldn't know that the owned form
+        of <code>str</code> is <code>String</code>, or that the owned form of
+        <code>[u8]</code> is <code>Vec&lt;u8&gt;</code>.
+      </p>
+
+      <p>
+        This means if you implement <code>ToOwned</code> for your own borrowed
+        type, your type works with <code>Cow</code> automatically:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::{<span class="ty">Borrow</span>, <span class="ty">Cow</span>};
+
+<span class="cm">// A borrowed configuration key (like &amp;str for strings)</span>
+<span class="kw">struct</span> <span class="ty">ConfigKey</span>(<span class="kw">str</span>);
+
+<span class="cm">// Its owned counterpart (like String for &amp;str)</span>
+<span class="kw">struct</span> <span class="ty">OwnedConfigKey</span>(<span class="ty">String</span>);
+
+<span class="kw">impl</span> <span class="ty">Borrow</span>&lt;<span class="ty">ConfigKey</span>&gt; <span class="kw">for</span> <span class="ty">OwnedConfigKey</span> {
+    <span class="kw">fn</span> <span class="fn">borrow</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">ConfigKey</span> {
+        <span class="cm">// Safety: ConfigKey is a transparent wrapper around str</span>
+        <span class="kw">unsafe</span> { &amp;*(<span class="kw">self</span>.<span class="num">0</span>.<span class="fn">as_str</span>() <span class="kw">as</span> *<span class="kw">const</span> <span class="kw">str</span> <span class="kw">as</span> *<span class="kw">const</span> <span class="ty">ConfigKey</span>) }
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">ToOwned</span> <span class="kw">for</span> <span class="ty">ConfigKey</span> {
+    <span class="kw">type</span> <span class="ty">Owned</span> = <span class="ty">OwnedConfigKey</span>;
+
+    <span class="kw">fn</span> <span class="fn">to_owned</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">OwnedConfigKey</span> {
+        <span class="ty">OwnedConfigKey</span>(<span class="kw">self</span>.<span class="num">0</span>.<span class="fn">to_owned</span>())
+    }
+}
+
+<span class="cm">// Now Cow&lt;ConfigKey&gt; just works</span></code></pre>
+
+      <p>
+        In practice, most people don't need to implement <code>ToOwned</code>
+        themselves. The standard library covers the common cases. But
+        understanding that <code>Cow</code> depends on <code>ToOwned</code>
+        which depends on <code>Borrow</code> helps explain why all three traits
+        exist and how they fit together.
+      </p>
+
+      <h2>The decision framework</h2>
+
+      <p>
+        When you're writing a function and trying to decide which trait to use
+        in your signature, here's how to think about it.
+      </p>
+
+      <h3>Writing function parameters</h3>
+
+      <p>
+        If you want to accept many input types and you're just going to read the
+        data, use <code>AsRef</code>. This is the most common case. You have a
+        function that works with <code>&amp;str</code> or <code>&amp;Path</code>
+        or <code>&amp;[u8]</code> internally, and you want callers to pass
+        whatever they have without converting first:
+      </p>
+
+      <pre><code><span class="cm">// Good: accepts &amp;str, String, &amp;String, Cow&lt;str&gt;, etc.</span>
+<span class="kw">fn</span> <span class="fn">log_message</span>(msg: <span class="kw">impl</span> <span class="ty">AsRef</span>&lt;<span class="kw">str</span>&gt;) {
+    <span class="kw">let</span> msg = msg.<span class="fn">as_ref</span>();
+    <span class="mac">println!</span>(<span class="str">"[LOG] {msg}"</span>);
+}
+
+<span class="cm">// Good: accepts anything path-like</span>
+<span class="kw">fn</span> <span class="fn">ensure_dir</span>(path: <span class="kw">impl</span> <span class="ty">AsRef</span>&lt;<span class="ty">Path</span>&gt;) -&gt; std::io::<span class="ty">Result</span>&lt;()&gt; {
+    fs::<span class="fn">create_dir_all</span>(path.<span class="fn">as_ref</span>())
+}</code></pre>
+
+      <p>
+        If you need to compare, hash, or look up borrowed keys against owned
+        keys, use <code>Borrow</code>. This is primarily for collection-like
+        APIs:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Borrow</span>;
+<span class="kw">use</span> std::collections::<span class="ty">HashSet</span>;
+
+<span class="kw">fn</span> <span class="fn">contains_any</span>&lt;<span class="ty">T</span>, <span class="ty">Q</span>&gt;(set: &amp;<span class="ty">HashSet</span>&lt;<span class="ty">T</span>&gt;, candidates: &amp;[<span class="ty">Q</span>]) -&gt; <span class="ty">bool</span>
+<span class="kw">where</span>
+    <span class="ty">T</span>: <span class="ty">Hash</span> + <span class="ty">Eq</span> + <span class="ty">Borrow</span>&lt;<span class="ty">Q</span>&gt;,
+    <span class="ty">Q</span>: <span class="ty">Hash</span> + <span class="ty">Eq</span> + ?<span class="ty">Sized</span>,
+{
+    candidates.<span class="fn">iter</span>().<span class="fn">any</span>(|c| set.<span class="fn">contains</span>(c))
+}
+
+<span class="kw">let</span> tags: <span class="ty">HashSet</span>&lt;<span class="ty">String</span>&gt; = [<span class="str">"rust"</span>, <span class="str">"async"</span>, <span class="str">"tui"</span>]
+    .<span class="fn">iter</span>().<span class="fn">map</span>(|s| s.<span class="fn">to_string</span>()).<span class="fn">collect</span>();
+
+<span class="cm">// Pass &amp;str slices even though set contains Strings</span>
+<span class="kw">let</span> found = <span class="fn">contains_any</span>(&amp;tags, &amp;[<span class="str">"rust"</span>, <span class="str">"python"</span>]); <span class="cm">// true</span></code></pre>
+
+      <p>
+        If you need to go from borrowed to owned -- for instance, you're
+        cloning data out of a borrowed reference into a collection you own --
+        use <code>ToOwned</code>:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">ToOwned</span>;
+
+<span class="kw">fn</span> <span class="fn">collect_unique_words</span>(text: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; {
+    <span class="kw">let</span> <span class="kw">mut</span> seen = <span class="ty">HashSet</span>::<span class="fn">new</span>();
+    <span class="kw">let</span> <span class="kw">mut</span> result = <span class="ty">Vec</span>::<span class="fn">new</span>();
+
+    <span class="kw">for</span> word <span class="kw">in</span> text.<span class="fn">split_whitespace</span>() {
+        <span class="kw">if</span> seen.<span class="fn">insert</span>(word) {
+            result.<span class="fn">push</span>(word.<span class="fn">to_owned</span>()); <span class="cm">// &amp;str -&gt; String</span>
+        }
+    }
+    result
+}</code></pre>
+
+      <h3>Implementing on your own types</h3>
+
+      <p>
+        If your type wraps another type and you want it to work with generic
+        APIs that accept <code>impl AsRef&lt;T&gt;</code>, implement
+        <code>AsRef</code>. This is common for newtype wrappers:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">UserId</span>(<span class="ty">String</span>);
+
+<span class="kw">impl</span> <span class="ty">AsRef</span>&lt;<span class="kw">str</span>&gt; <span class="kw">for</span> <span class="ty">UserId</span> {
+    <span class="kw">fn</span> <span class="fn">as_ref</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="kw">str</span> {
+        &amp;<span class="kw">self</span>.<span class="num">0</span>
+    }
+}
+
+<span class="cm">// Now UserId works anywhere that accepts impl AsRef&lt;str&gt;</span>
+<span class="fn">log_message</span>(&amp;<span class="ty">UserId</span>(<span class="str">"user_42"</span>.<span class="fn">to_string</span>()));</code></pre>
+
+      <p>
+        Only implement <code>Borrow</code> if your type's borrowed form
+        preserves equality, hashing, and ordering. For a simple newtype around
+        <code>String</code> where you haven't changed any of those behaviors,
+        implementing <code>Borrow&lt;str&gt;</code> is fine. But if you've
+        overridden <code>Hash</code> or <code>PartialEq</code> to behave
+        differently from the inner type, stick with <code>AsRef</code>.
+      </p>
+
+      <h2>The complete picture</h2>
+
+      <p>
+        Let's put all three together in a realistic scenario. Imagine a simple
+        in-memory cache that maps string keys to values. We want the insert API
+        to be ergonomic (accept various string types), lookups to work with
+        <code>&amp;str</code>, and we want to be able to clone keys out of the
+        cache when needed.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Borrow</span>;
+<span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">struct</span> <span class="ty">Cache</span>&lt;<span class="ty">V</span>&gt; {
+    data: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">V</span>&gt;,
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">V</span>&gt; <span class="ty">Cache</span>&lt;<span class="ty">V</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">new</span>() -&gt; <span class="kw">Self</span> {
+        <span class="ty">Cache</span> { data: <span class="ty">HashMap</span>::<span class="fn">new</span>() }
+    }
+
+    <span class="cm">// AsRef: accept any string-like type for insertion.</span>
+    <span class="cm">// We need to own the key, so we convert to String internally.</span>
+    <span class="kw">fn</span> <span class="fn">insert</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, key: <span class="kw">impl</span> <span class="ty">AsRef</span>&lt;<span class="kw">str</span>&gt;, value: <span class="ty">V</span>) {
+        <span class="kw">self</span>.data.<span class="fn">insert</span>(key.<span class="fn">as_ref</span>().<span class="fn">to_owned</span>(), value);
+    }
+
+    <span class="cm">// Borrow: look up with &amp;str even though keys are String.</span>
+    <span class="cm">// This works because String: Borrow&lt;str&gt; guarantees</span>
+    <span class="cm">// consistent hashing between String and &amp;str.</span>
+    <span class="kw">fn</span> <span class="fn">get</span>(&amp;<span class="kw">self</span>, key: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Option</span>&lt;&amp;<span class="ty">V</span>&gt; {
+        <span class="kw">self</span>.data.<span class="fn">get</span>(key)
+    }
+
+    <span class="cm">// ToOwned: clone keys out of the cache.</span>
+    <span class="cm">// We iterate over borrowed &amp;str keys and produce owned Strings.</span>
+    <span class="kw">fn</span> <span class="fn">keys</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; {
+        <span class="kw">self</span>.data.<span class="fn">keys</span>().<span class="fn">map</span>(|k| k.<span class="fn">as_str</span>().<span class="fn">to_owned</span>()).<span class="fn">collect</span>()
+    }
+}</code></pre>
+
+      <p>
+        And here's how it looks at the call site:
+      </p>
+
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> cache = <span class="ty">Cache</span>::<span class="fn">new</span>();
+
+<span class="cm">// insert accepts &amp;str, String, Cow&lt;str&gt;, anything AsRef&lt;str&gt;</span>
+cache.<span class="fn">insert</span>(<span class="str">"timeout"</span>, <span class="num">30</span>);
+cache.<span class="fn">insert</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"retries"</span>), <span class="num">3</span>);
+cache.<span class="fn">insert</span>(<span class="mac">format!</span>(<span class="str">"port_{}"</span>, <span class="num">0</span>), <span class="num">8080</span>);
+
+<span class="cm">// get uses Borrow under the hood -- look up with &amp;str</span>
+<span class="kw">if</span> <span class="kw">let</span> <span class="ty">Some</span>(&amp;timeout) = cache.<span class="fn">get</span>(<span class="str">"timeout"</span>) {
+    <span class="mac">println!</span>(<span class="str">"Timeout is {timeout} seconds"</span>);
+}
+
+<span class="cm">// keys uses to_owned to produce owned Strings from borrowed data</span>
+<span class="kw">let</span> all_keys: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = cache.<span class="fn">keys</span>();
+<span class="mac">println!</span>(<span class="str">"Cache contains: {all_keys:?}"</span>);</code></pre>
+
+      <p>
+        Notice how each trait serves a different role. <code>AsRef</code> makes
+        the insertion API ergonomic -- callers don't have to pre-convert their
+        keys. The <code>HashMap</code> internally relies on
+        <code>Borrow</code> to let us look up <code>String</code> keys with
+        <code>&amp;str</code> values, trusting that the hashes match.
+        <code>ToOwned</code> (via <code>.to_owned()</code>) lets us clone
+        borrowed data into owned values when we need to hand them out.
+      </p>
+
+      <p>
+        The three traits aren't redundant. They form a layered system of
+        promises. <code>AsRef</code> promises a cheap reference with no
+        behavioral guarantees. <code>Borrow</code> promises a cheap reference
+        that behaves identically for hashing, equality, and ordering.
+        <code>ToOwned</code> promises the reverse direction -- turning a
+        borrowed value into an owned one -- and ties back to
+        <code>Borrow</code> through its associated type bound. Together, they
+        give Rust a way to express the full owned-borrowed relationship at the
+        type level, with exactly the right constraints for each use case.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
