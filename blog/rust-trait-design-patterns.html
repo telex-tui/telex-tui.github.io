@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust Trait Design Patterns - Telex</title>
+  <meta name="description" content="When to use impl Trait, when to use dyn Trait, when to use T: Trait — and the higher-level patterns (associated types, extension traits, supertraits, sealed traits) that make trait-based APIs clean.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust Trait Design Patterns: Generics, Trait Objects, and the Art of Abstraction</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Most Rust programmers learn traits early. You define a trait, you implement
+        it for a type, you call the methods. That part is straightforward. The hard
+        part is <em>designing</em> with traits -- knowing which of the three dispatch
+        mechanisms to use, when to reach for associated types versus generic
+        parameters, and how patterns like extension traits and sealed traits let you
+        build APIs that are both flexible and safe.
+      </p>
+
+      <p>
+        This post is about those design decisions. Not the syntax of traits -- the
+        strategy. If you've been defaulting to <code>dyn Trait</code> everywhere
+        because it feels familiar from other languages, or avoiding generics because
+        the angle brackets are intimidating, this is for you.
+      </p>
+
+      <h2>The Three Ways to Use a Trait -- and When Each One Wins</h2>
+
+      <p>
+        Rust gives you three ways to use a trait in a function signature, and each
+        one makes a fundamentally different trade-off. Let's use the same trait for
+        all three so the comparison is concrete.
+      </p>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">Compress</span> {
+    <span class="kw">fn</span> <span class="fn">compress</span>(&amp;<span class="kw">self</span>, data: &amp;[<span class="ty">u8</span>]) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;;
+    <span class="kw">fn</span> <span class="fn">name</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">str</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">Gzip</span>;
+<span class="kw">struct</span> <span class="ty">Zstd</span> { level: <span class="ty">i32</span> }
+
+<span class="kw">impl</span> <span class="ty">Compress</span> <span class="kw">for</span> <span class="ty">Gzip</span> {
+    <span class="kw">fn</span> <span class="fn">compress</span>(&amp;<span class="kw">self</span>, data: &amp;[<span class="ty">u8</span>]) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; { <span class="cm">/* gzip logic */</span> <span class="fn">todo!</span>() }
+    <span class="kw">fn</span> <span class="fn">name</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">str</span> { <span class="str">"gzip"</span> }
+}
+
+<span class="kw">impl</span> <span class="ty">Compress</span> <span class="kw">for</span> <span class="ty">Zstd</span> {
+    <span class="kw">fn</span> <span class="fn">compress</span>(&amp;<span class="kw">self</span>, data: &amp;[<span class="ty">u8</span>]) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; { <span class="cm">/* zstd logic */</span> <span class="fn">todo!</span>() }
+    <span class="kw">fn</span> <span class="fn">name</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">str</span> { <span class="str">"zstd"</span> }
+}</code></pre>
+
+      <p>
+        Now let's write a function that uses <code>Compress</code> in all three ways.
+      </p>
+
+      <h3>T: Trait -- Static Dispatch with Generics</h3>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">compress_file</span>&lt;C: <span class="ty">Compress</span>&gt;(compressor: &amp;C, path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;, <span class="ty">io::Error</span>&gt; {
+    <span class="kw">let</span> data = std::fs::<span class="fn">read</span>(path)?;
+    <span class="fn">println!</span>(<span class="str">"Compressing with {}"</span>, compressor.<span class="fn">name</span>());
+    <span class="ty">Ok</span>(compressor.<span class="fn">compress</span>(&amp;data))
+}</code></pre>
+
+      <p>
+        When you write <code>C: Compress</code>, the compiler monomorphizes the
+        function -- it generates a separate copy for each concrete type you call it
+        with. <code>compress_file::&lt;Gzip&gt;</code> and
+        <code>compress_file::&lt;Zstd&gt;</code> are two entirely different functions
+        in the compiled binary. The trait method calls are resolved at compile time
+        and can be fully inlined.
+      </p>
+
+      <p>
+        If you've used C, think of it like writing a separate function for each type
+        by hand, except the compiler does the copy-paste for you. Zero overhead at
+        runtime, but the binary grows with each concrete type, and compile times
+        increase because the compiler is doing more work.
+      </p>
+
+      <p>
+        When to use this: performance-critical paths, when you know the set of types
+        at compile time, and when you want the compiler to optimize across the trait
+        boundary. This is your default choice for library code that needs to be fast.
+      </p>
+
+      <h3>impl Trait -- Static Dispatch, Anonymous</h3>
+
+      <pre><code><span class="cm">// In argument position: syntactic sugar for the generic above</span>
+<span class="kw">fn</span> <span class="fn">compress_file</span>(compressor: &amp;<span class="kw">impl</span> <span class="ty">Compress</span>, path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;, <span class="ty">io::Error</span>&gt; {
+    <span class="kw">let</span> data = std::fs::<span class="fn">read</span>(path)?;
+    <span class="ty">Ok</span>(compressor.<span class="fn">compress</span>(&amp;data))
+}
+
+<span class="cm">// In return position: "I'm returning one specific type, but I won't say which"</span>
+<span class="kw">fn</span> <span class="fn">default_compressor</span>() -&gt; <span class="kw">impl</span> <span class="ty">Compress</span> {
+    <span class="ty">Zstd</span> { level: <span class="num">3</span> }
+}</code></pre>
+
+      <p>
+        In argument position, <code>impl Compress</code> is exactly the same as a
+        generic parameter. The compiler still monomorphizes. It's just shorter to
+        write when you don't need to name the type parameter (you'd need the name if,
+        say, two arguments had to be the <em>same</em> type, or if you needed to
+        use the type in a where clause).
+      </p>
+
+      <p>
+        In return position, it's genuinely different. The function returns one
+        concrete type, but the caller can't name it. This is how you return closures
+        and iterator chains -- types the compiler generates that have no user-visible
+        name. The caller can only use methods from the trait.
+      </p>
+
+      <pre><code><span class="cm">// You can't do this with dyn Trait without a Box:</span>
+<span class="kw">fn</span> <span class="fn">make_filter</span>(threshold: <span class="ty">f64</span>) -&gt; <span class="kw">impl</span> <span class="ty">Fn</span>(<span class="ty">f64</span>) -&gt; <span class="ty">bool</span> {
+    <span class="kw">move</span> |x| x &gt; threshold
+}
+
+<span class="cm">// Or return a complex iterator chain:</span>
+<span class="kw">fn</span> <span class="fn">valid_scores</span>(data: &amp;[<span class="ty">String</span>]) -&gt; <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;Item = <span class="ty">f64</span>&gt; + <span class="ty">'_</span> {
+    data.<span class="fn">iter</span>()
+        .<span class="fn">filter_map</span>(|s| s.<span class="fn">parse</span>::&lt;<span class="ty">f64</span>&gt;().<span class="fn">ok</span>())
+        .<span class="fn">filter</span>(|&amp;x| x &gt;= <span class="num">0.0</span> &amp;&amp; x &lt;= <span class="num">100.0</span>)
+}</code></pre>
+
+      <p>
+        When to use this: simple function signatures where a full generic parameter
+        feels heavy, and return positions where you need to hand back closures,
+        iterators, or async futures without boxing them.
+      </p>
+
+      <h3>dyn Trait -- Dynamic Dispatch</h3>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">compress_file</span>(compressor: &amp;<span class="kw">dyn</span> <span class="ty">Compress</span>, path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;, <span class="ty">io::Error</span>&gt; {
+    <span class="kw">let</span> data = std::fs::<span class="fn">read</span>(path)?;
+    <span class="ty">Ok</span>(compressor.<span class="fn">compress</span>(&amp;data))
+}</code></pre>
+
+      <p>
+        With <code>dyn Compress</code>, there's only one compiled version of the
+        function. The method calls go through a vtable -- a pointer to a table of
+        function pointers, just like virtual methods in C++. The compiler can't
+        inline across the trait boundary, so there's a small runtime cost per call.
+      </p>
+
+      <p>
+        The key thing <code>dyn Trait</code> gives you that generics can't:
+        heterogeneous collections. You can put different concrete types in the same
+        container.
+      </p>
+
+      <pre><code><span class="cm">// A vec of mixed compressor types -- impossible with generics</span>
+<span class="kw">let</span> compressors: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Compress</span>&gt;&gt; = <span class="fn">vec!</span>[
+    <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Gzip</span>),
+    <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Zstd</span> { level: <span class="num">5</span> }),
+];
+
+<span class="kw">for</span> c <span class="kw">in</span> &amp;compressors {
+    <span class="fn">println!</span>(<span class="str">"Available: {}"</span>, c.<span class="fn">name</span>());
+}</code></pre>
+
+      <p>
+        A <code>dyn Trait</code> value always lives behind a pointer --
+        <code>&amp;dyn Trait</code>, <code>Box&lt;dyn Trait&gt;</code>, or
+        <code>Arc&lt;dyn Trait&gt;</code>. That pointer is actually a "fat pointer":
+        a pointer to the data plus a pointer to the vtable. This is why
+        <code>dyn Trait</code> is unsized -- the compiler doesn't know at compile
+        time how big the concrete type behind it is.
+      </p>
+
+      <p>
+        Not every trait can be used as <code>dyn Trait</code>. The trait must be
+        "object safe," which means its methods can't use <code>Self</code> as a
+        return type, can't have generic type parameters, and a few other
+        restrictions. If you try to use a non-object-safe trait as <code>dyn</code>,
+        the compiler will tell you exactly which method violates the rules.
+      </p>
+
+      <p>
+        When to use this: plugin systems, heterogeneous collections, callback
+        registries, and anywhere the concrete type isn't known until runtime. Also
+        useful in large codebases where you want to reduce compile times -- one
+        compiled function instead of N monomorphized copies.
+      </p>
+
+      <h3>The Decision Framework</h3>
+
+      <p>
+        When you're staring at a function signature and wondering which form to use,
+        ask these questions in order:
+      </p>
+
+      <p>
+        Do you need a collection of mixed types? If yes, you need
+        <code>dyn Trait</code>. Generics can't give you a
+        <code>Vec&lt;different types&gt;</code>. That said, if the set of types is
+        small and known at compile time, consider
+        <a href="rust-patterns-enum-dispatch.html">enum dispatch</a> instead --
+        it's faster and doesn't require heap allocation.
+      </p>
+
+      <p>
+        Do you need maximum performance? Use <code>T: Trait</code> or
+        <code>impl Trait</code>. The compiler can inline everything and optimize
+        across the trait boundary. For hot loops processing millions of items, this
+        matters.
+      </p>
+
+      <p>
+        Is the set of types open or closed? If users of your library will define
+        their own types that implement the trait, <code>dyn Trait</code> is the
+        natural choice for storing them. If you control all the implementations,
+        generics or enums give you better performance.
+      </p>
+
+      <p>
+        None of this is absolute. Plenty of programs use <code>dyn Trait</code>
+        everywhere and are fast enough. The vtable overhead is a pointer
+        indirection -- nanoseconds. Profile before you optimize. But knowing the
+        trade-offs means you make the right call when it matters.
+      </p>
+
+      <h2>Associated Types vs Generic Parameters</h2>
+
+      <p>
+        Here's a question that trips up a lot of people: should your trait have
+        <code>type Output</code> or should it be <code>Trait&lt;T&gt;</code>? Both
+        let you parameterize behavior by type. The difference is how many times a
+        given type can implement the trait.
+      </p>
+
+      <p>
+        The rule of thumb: if there's exactly one sensible implementation per type,
+        use an associated type. If a type could implement the trait multiple times
+        with different parameters, use a generic.
+      </p>
+
+      <h3>Associated types: one implementation per type</h3>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">Iterator</span> {
+    <span class="kw">type</span> <span class="ty">Item</span>;
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;;
+}</code></pre>
+
+      <p>
+        <code>Iterator</code> uses an associated type because a
+        <code>Vec&lt;i32&gt;</code> iterator always yields <code>i32</code>. It
+        doesn't make sense for the same iterator to yield <code>i32</code> sometimes
+        and <code>String</code> other times. There's one natural implementation, so
+        there's one associated type.
+      </p>
+
+      <p>
+        The payoff at the call site is cleaner code. When you call a function that
+        returns an iterator, you don't need turbofish:
+      </p>
+
+      <pre><code><span class="cm">// Associated type: no ambiguity, no turbofish</span>
+<span class="kw">let</span> sum: <span class="ty">i32</span> = numbers.<span class="fn">iter</span>().<span class="fn">sum</span>();
+
+<span class="cm">// If Iterator were generic (Iterator&lt;Item&gt;), you'd need:</span>
+<span class="cm">// let sum: i32 = numbers.iter::&lt;i32&gt;().sum::&lt;i32&gt;(); // awful</span></code></pre>
+
+      <h3>Generic parameters: multiple implementations per type</h3>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">From</span>&lt;T&gt; {
+    <span class="kw">fn</span> <span class="fn">from</span>(value: T) -&gt; <span class="kw">Self</span>;
+}</code></pre>
+
+      <p>
+        <code>From</code> is generic because a single type can be converted from many
+        sources. <code>String</code> implements <code>From&lt;&amp;str&gt;</code>,
+        <code>From&lt;Vec&lt;u8&gt;&gt;</code>,
+        <code>From&lt;char&gt;</code>, and more. Each is a different implementation
+        of the same trait, parameterized by the source type.
+      </p>
+
+      <p>
+        Another way to think about it: associated types are "output" types determined
+        by the implementor. Generic parameters are "input" types chosen by the caller
+        or the use site. <code>Iterator</code> decides what it yields. But
+        <code>From</code> is called with whatever source type the caller has.
+      </p>
+
+      <h3>When you need both</h3>
+
+      <p>
+        Sometimes a trait has both. <code>Add&lt;Rhs&gt;</code> has a generic
+        parameter for the right-hand side and an associated type for the output:
+      </p>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">Add</span>&lt;Rhs = <span class="kw">Self</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Output</span>;
+    <span class="kw">fn</span> <span class="fn">add</span>(<span class="kw">self</span>, rhs: Rhs) -&gt; <span class="kw">Self</span>::<span class="ty">Output</span>;
+}</code></pre>
+
+      <p>
+        A <code>Matrix</code> might implement <code>Add&lt;Matrix&gt;</code> (matrix
+        plus matrix) and <code>Add&lt;f64&gt;</code> (matrix plus scalar). The
+        <code>Rhs</code> is generic because there are multiple valid right-hand
+        sides. But for each specific <code>Rhs</code>, there's exactly one sensible
+        output type, so <code>Output</code> is associated.
+      </p>
+
+      <h2>Extension Traits</h2>
+
+      <p>
+        Rust's orphan rule says you can't implement a foreign trait for a foreign
+        type. You can't add methods to <code>Iterator</code> directly -- it's defined
+        in <code>std</code>, and you don't own it. But you <em>can</em> define a new
+        trait that extends <code>Iterator</code> and provides a blanket
+        implementation for all iterators.
+      </p>
+
+      <pre><code><span class="kw">trait</span> <span class="ty">IteratorExt</span>: <span class="ty">Iterator</span> {
+    <span class="kw">fn</span> <span class="fn">collect_vec</span>(<span class="kw">self</span>) -&gt; <span class="ty">Vec</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;
+    <span class="kw">where</span>
+        <span class="kw">Self</span>: <span class="ty">Sized</span>,
+    {
+        <span class="kw">self</span>.<span class="fn">collect</span>()
+    }
+
+    <span class="kw">fn</span> <span class="fn">try_find</span>&lt;E&gt;(
+        &amp;<span class="kw">mut</span> <span class="kw">self</span>,
+        <span class="kw">mut</span> f: <span class="kw">impl</span> <span class="ty">FnMut</span>(&amp;<span class="kw">Self</span>::<span class="ty">Item</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">bool</span>, E&gt;,
+    ) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;, E&gt;
+    <span class="kw">where</span>
+        <span class="kw">Self</span>: <span class="ty">Sized</span>,
+    {
+        <span class="kw">for</span> item <span class="kw">in</span> <span class="kw">self</span> {
+            <span class="kw">if</span> <span class="fn">f</span>(&amp;item)? {
+                <span class="kw">return</span> <span class="ty">Ok</span>(<span class="ty">Some</span>(item));
+            }
+        }
+        <span class="ty">Ok</span>(<span class="ty">None</span>)
+    }
+}
+
+<span class="cm">// Blanket implementation: every Iterator automatically gets these methods</span>
+<span class="kw">impl</span>&lt;I: <span class="ty">Iterator</span>&gt; <span class="ty">IteratorExt</span> <span class="kw">for</span> I {}</code></pre>
+
+      <p>
+        Now any iterator in your codebase has <code>.collect_vec()</code> and
+        <code>.try_find()</code>. The <code>itertools</code> crate is built
+        entirely on this pattern -- it defines <code>Itertools</code> as an
+        extension trait with a blanket impl for all iterators, adding dozens of
+        useful methods.
+      </p>
+
+      <p>
+        This pattern isn't just for <code>std</code> types. It's useful inside your
+        own projects too. Say you have a domain-specific operation that applies to
+        anything that implements <code>Read</code>:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::io::<span class="ty">Read</span>;
+
+<span class="kw">trait</span> <span class="ty">ReadExt</span>: <span class="ty">Read</span> {
+    <span class="kw">fn</span> <span class="fn">read_exact_or_eof</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, buf: &amp;<span class="kw">mut</span> [<span class="ty">u8</span>]) -&gt; <span class="ty">Result</span>&lt;<span class="ty">usize</span>, <span class="ty">io::Error</span>&gt; {
+        <span class="kw">let</span> <span class="kw">mut</span> total = <span class="num">0</span>;
+        <span class="kw">while</span> total &lt; buf.<span class="fn">len</span>() {
+            <span class="kw">match</span> <span class="kw">self</span>.<span class="fn">read</span>(&amp;<span class="kw">mut</span> buf[total..])? {
+                <span class="num">0</span> =&gt; <span class="kw">break</span>,
+                n =&gt; total += n,
+            }
+        }
+        <span class="ty">Ok</span>(total)
+    }
+}
+
+<span class="kw">impl</span>&lt;R: <span class="ty">Read</span>&gt; <span class="ty">ReadExt</span> <span class="kw">for</span> R {}</code></pre>
+
+      <p>
+        The convention is to name the extension trait <code>FooExt</code> where
+        <code>Foo</code> is the trait being extended. Users import the extension
+        trait and the methods appear on all types that implement the base trait.
+        Clean, discoverable, and it doesn't require modifying any existing code.
+      </p>
+
+      <h2>Supertraits</h2>
+
+      <p>
+        When you write <code>trait Widget: Display + Debug</code>, you're saying
+        that anything implementing <code>Widget</code> must also implement
+        <code>Display</code> and <code>Debug</code>. The syntax looks like
+        inheritance, but the mental model is different: supertraits are
+        <em>requirements</em>, not a class hierarchy.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::fmt;
+
+<span class="kw">trait</span> <span class="ty">Widget</span>: fmt::<span class="ty">Display</span> + fmt::<span class="ty">Debug</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>, area: <span class="ty">Rect</span>);
+    <span class="kw">fn</span> <span class="fn">handle_event</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, event: <span class="ty">Event</span>) -&gt; <span class="ty">bool</span>;
+}</code></pre>
+
+      <p>
+        You're not saying a <code>Widget</code> "is a" <code>Display</code>. You're
+        saying "implementing <code>Widget</code> requires <code>Display</code> as a
+        prerequisite." This means inside any code that has a <code>dyn Widget</code>
+        or a <code>T: Widget</code>, you can call <code>Display</code> and
+        <code>Debug</code> methods -- they're guaranteed to exist.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">log_and_render</span>(widget: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span>, area: <span class="ty">Rect</span>) {
+    <span class="fn">println!</span>(<span class="str">"Rendering: {}"</span>, widget);      <span class="cm">// Display is guaranteed</span>
+    <span class="fn">println!</span>(<span class="str">"Debug: {:?}"</span>, widget);         <span class="cm">// Debug is guaranteed</span>
+    widget.<span class="fn">render</span>(area);
+}</code></pre>
+
+      <p>
+        Supertraits are especially useful for <code>dyn Trait</code> objects. Without
+        the supertrait bound, you'd need <code>dyn Widget + Display + Debug</code>,
+        which quickly gets unwieldy and may not even be object-safe. With the
+        supertrait, <code>dyn Widget</code> alone gives you everything.
+      </p>
+
+      <p>
+        A common pattern in libraries: require <code>Send + Sync</code> as
+        supertraits when your trait will be used across threads.
+      </p>
+
+      <pre><code><span class="cm">// Any Handler must be safe to share across threads</span>
+<span class="kw">trait</span> <span class="ty">Handler</span>: <span class="ty">Send</span> + <span class="ty">Sync</span> {
+    <span class="kw">fn</span> <span class="fn">handle</span>(&amp;<span class="kw">self</span>, request: &amp;<span class="ty">Request</span>) -&gt; <span class="ty">Response</span>;
+}
+
+<span class="cm">// Now Arc&lt;dyn Handler&gt; works without extra bounds everywhere</span>
+<span class="kw">struct</span> <span class="ty">Server</span> {
+    handlers: <span class="ty">Vec</span>&lt;<span class="ty">Arc</span>&lt;<span class="kw">dyn</span> <span class="ty">Handler</span>&gt;&gt;,
+}</code></pre>
+
+      <p>
+        Without the supertrait, every function that stores or shares handlers would
+        need to repeat <code>dyn Handler + Send + Sync</code>. The supertrait makes
+        the requirement part of the trait's contract.
+      </p>
+
+      <h2>Sealed Traits</h2>
+
+      <p>
+        Sometimes you want a trait that external code can <em>use</em> but not
+        <em>implement</em>. This matters for library design: if you control all the
+        implementations, you can add new methods to the trait without it being a
+        breaking change. If external code can implement the trait, adding a method
+        breaks every external implementation.
+      </p>
+
+      <p>
+        The sealed trait pattern prevents external implementations:
+      </p>
+
+      <pre><code><span class="kw">mod</span> private {
+    <span class="kw">pub</span> <span class="kw">trait</span> <span class="ty">Sealed</span> {}
+}
+
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ty">DatabaseDriver</span>: private::<span class="ty">Sealed</span> {
+    <span class="kw">fn</span> <span class="fn">connect</span>(&amp;<span class="kw">self</span>, url: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Connection</span>, <span class="ty">Error</span>&gt;;
+    <span class="kw">fn</span> <span class="fn">execute</span>(&amp;<span class="kw">self</span>, query: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Rows</span>, <span class="ty">Error</span>&gt;;
+}
+
+<span class="cm">// Only types we impl Sealed for can implement DatabaseDriver</span>
+<span class="kw">impl</span> private::<span class="ty">Sealed</span> <span class="kw">for</span> <span class="ty">Postgres</span> {}
+<span class="kw">impl</span> <span class="ty">DatabaseDriver</span> <span class="kw">for</span> <span class="ty">Postgres</span> { <span class="cm">/* ... */</span> }
+
+<span class="kw">impl</span> private::<span class="ty">Sealed</span> <span class="kw">for</span> <span class="ty">Sqlite</span> {}
+<span class="kw">impl</span> <span class="ty">DatabaseDriver</span> <span class="kw">for</span> <span class="ty">Sqlite</span> { <span class="cm">/* ... */</span> }</code></pre>
+
+      <p>
+        The trick: <code>Sealed</code> is in a <code>mod private</code> -- it's
+        <code>pub</code> inside the module (so it can be used as a supertrait), but
+        the module itself isn't public to external crates. External code can see
+        <code>DatabaseDriver</code> and call its methods, but can't implement
+        <code>Sealed</code>, so can't implement <code>DatabaseDriver</code>.
+      </p>
+
+      <p>
+        When to seal a trait: when your trait is an API contract and you want the
+        freedom to evolve it. Adding a new required method to an unsealed trait is a
+        breaking change. Adding one to a sealed trait is fine -- you control all the
+        implementations. Many <code>std</code> traits are effectively sealed for this
+        reason.
+      </p>
+
+      <p>
+        There's a lighter-weight alternative if you just want to allow new methods
+        without breaking: provide a default implementation. But default
+        implementations can only use other methods on the trait -- they can't access
+        internal state. Sealing gives you full control.
+      </p>
+
+      <h2>Putting It Together</h2>
+
+      <p>
+        Let's design a small plugin system that uses several of these patterns. We're
+        building a data pipeline where plugins can transform records. The
+        requirements: plugins must be thread-safe, some pipeline stages are known at
+        compile time, and users can add custom plugins at runtime.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::fmt;
+<span class="kw">use</span> std::sync::<span class="ty">Arc</span>;
+
+<span class="cm">// Supertrait: every Plugin must be Send + Sync + Debug</span>
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ty">Plugin</span>: <span class="ty">Send</span> + <span class="ty">Sync</span> + fmt::<span class="ty">Debug</span> {
+    <span class="cm">/// Human-readable name for logging</span>
+    <span class="kw">fn</span> <span class="fn">name</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">str</span>;
+
+    <span class="cm">/// Transform a record, returning None to drop it</span>
+    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, record: <span class="ty">Record</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">Record</span>&gt;;
+}
+
+<span class="cm">// Extension trait: add convenience methods to any Plugin</span>
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ty">PluginExt</span>: <span class="ty">Plugin</span> {
+    <span class="kw">fn</span> <span class="fn">chain</span>(<span class="kw">self</span>, next: <span class="kw">impl</span> <span class="ty">Plugin</span> + <span class="ty">'static</span>) -&gt; <span class="ty">ChainedPlugin</span>&lt;<span class="kw">Self</span>, <span class="kw">impl</span> <span class="ty">Plugin</span>&gt;
+    <span class="kw">where</span>
+        <span class="kw">Self</span>: <span class="ty">Sized</span>,
+    {
+        <span class="ty">ChainedPlugin</span> { first: <span class="kw">self</span>, second: next }
+    }
+}
+
+<span class="kw">impl</span>&lt;P: <span class="ty">Plugin</span>&gt; <span class="ty">PluginExt</span> <span class="kw">for</span> P {}
+
+<span class="cm">// ChainedPlugin composes two plugins -- uses generics for zero-cost</span>
+#[derive(<span class="ty">Debug</span>)]
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ty">ChainedPlugin</span>&lt;A, B&gt; {
+    first: A,
+    second: B,
+}
+
+<span class="kw">impl</span>&lt;A: <span class="ty">Plugin</span>, B: <span class="ty">Plugin</span>&gt; <span class="ty">Plugin</span> <span class="kw">for</span> <span class="ty">ChainedPlugin</span>&lt;A, B&gt; {
+    <span class="kw">fn</span> <span class="fn">name</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">str</span> { <span class="str">"chained"</span> }
+
+    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, record: <span class="ty">Record</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">Record</span>&gt; {
+        <span class="kw">self</span>.first.<span class="fn">process</span>(record)
+            .<span class="fn">and_then</span>(|r| <span class="kw">self</span>.second.<span class="fn">process</span>(r))
+    }
+}
+
+<span class="cm">// The pipeline uses dyn Trait for runtime flexibility</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ty">Pipeline</span> {
+    plugins: <span class="ty">Vec</span>&lt;<span class="ty">Arc</span>&lt;<span class="kw">dyn</span> <span class="ty">Plugin</span>&gt;&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Pipeline</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="fn">new</span>() -&gt; <span class="kw">Self</span> {
+        <span class="ty">Pipeline</span> { plugins: <span class="ty">Vec</span>::<span class="fn">new</span>() }
+    }
+
+    <span class="cm">// impl Plugin: accept any concrete plugin type</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="fn">add</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, plugin: <span class="kw">impl</span> <span class="ty">Plugin</span> + <span class="ty">'static</span>) {
+        <span class="kw">self</span>.plugins.<span class="fn">push</span>(<span class="ty">Arc</span>::<span class="fn">new</span>(plugin));
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="fn">run</span>(&amp;<span class="kw">self</span>, <span class="kw">mut</span> record: <span class="ty">Record</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">Record</span>&gt; {
+        <span class="kw">for</span> plugin <span class="kw">in</span> &amp;<span class="kw">self</span>.plugins {
+            <span class="fn">println!</span>(<span class="str">"Running plugin: {}"</span>, plugin.<span class="fn">name</span>());
+            record = plugin.<span class="fn">process</span>(record)?;
+        }
+        <span class="ty">Some</span>(record)
+    }
+}</code></pre>
+
+      <p>
+        Count the patterns at work here:
+      </p>
+
+      <p>
+        <strong>Supertraits</strong> (<code>Send + Sync + Debug</code>) guarantee
+        every plugin is thread-safe and debuggable. The <code>Pipeline</code> can
+        use <code>Arc&lt;dyn Plugin&gt;</code> without extra bounds.
+      </p>
+
+      <p>
+        <strong>Extension traits</strong> (<code>PluginExt</code>) add a
+        <code>.chain()</code> method to every <code>Plugin</code> via a blanket
+        impl. Users can compose plugins without the pipeline knowing about
+        composition.
+      </p>
+
+      <p>
+        <strong>Generics</strong> (<code>ChainedPlugin&lt;A, B&gt;</code>) give
+        zero-cost composition. When two concrete plugins are chained, the compiler
+        monomorphizes the process call -- no vtable overhead in the inner loop.
+      </p>
+
+      <p>
+        <strong>dyn Trait</strong> (<code>Vec&lt;Arc&lt;dyn Plugin&gt;&gt;</code>)
+        enables runtime flexibility. Users can add any plugin at runtime. The
+        pipeline doesn't need to know about every plugin type at compile time.
+      </p>
+
+      <p>
+        <strong>impl Trait</strong> (<code>add(&mut self, plugin: impl Plugin)</code>)
+        makes the <code>add</code> method ergonomic -- callers pass concrete types
+        without boxing them manually.
+      </p>
+
+      <p>
+        If this were a library and we wanted to prevent external implementations
+        (maybe we need to evolve the trait), we'd seal it. If the plugin's
+        <code>process</code> method needed to return a specific associated type
+        rather than just <code>Option&lt;Record&gt;</code>, we'd use an associated
+        type. The decision depends on the requirements, and now you have the
+        vocabulary to make it.
+      </p>
+
+      <p>
+        That's the thing about trait design in Rust. The individual patterns are
+        simple. The skill is knowing which combination of patterns serves your
+        specific problem -- and resisting the urge to reach for the most complex
+        option when a simpler one would do.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
