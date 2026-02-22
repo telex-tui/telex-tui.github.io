@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>macro_rules! Patterns: When Macros Are the Right Tool - Telex</title>
+  <meta name="description" content="Declarative macros aren't as scary as they look. The patterns, the fragment types, when to write one instead of a function, and when to stop.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>macro_rules! Patterns: When Macros Are the Right Tool</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Declarative macros have a reputation. People see <code>$($thing:tt)*</code> and
+        assume they've wandered into a dark corner of the language best left to library
+        authors. That's a shame, because <code>macro_rules!</code> is one of the most
+        practical tools in Rust once you understand the handful of ideas it's built on.
+        This post walks through those ideas, shows macros you'd actually write, and talks
+        about when to stop.
+      </p>
+
+      <h2>When a function isn't enough</h2>
+
+      <p>
+        Most of the time, a function is exactly what you want. Functions are typed, they show
+        up in stack traces, they're easy to read. But there are a few situations where
+        functions hit a wall.
+      </p>
+
+      <p>
+        The first is <strong>variadic arguments</strong>. Rust functions take a fixed number
+        of parameters. If you want to accept two items, or five, or twenty, you need a
+        different approach. This is why <code>vec![1, 2, 3]</code> is a macro &mdash; there's
+        no function signature that accepts "any number of expressions separated by commas."
+      </p>
+
+      <p>
+        The second is <strong>boilerplate reduction across types</strong>. If you're implementing
+        the same trait for ten types and the body is identical except for the type name, a function
+        can't help you. You need something that operates on syntax, not values.
+      </p>
+
+      <p>
+        The third is <strong>code that needs to capture context</strong>. A macro like
+        <code>file!()</code> or <code>line!()</code> embeds information from the call site.
+        A function call can't know where it was called from without you passing that
+        information explicitly.
+      </p>
+
+      <p>
+        That's the key distinction: functions operate on <strong>values</strong> at runtime,
+        macros operate on <strong>tokens</strong> at compile time. A macro receives a stream
+        of syntax tokens, matches them against patterns, and produces new tokens that the
+        compiler then processes as normal Rust code. Nothing happens at runtime. By the time
+        your program runs, every macro has already been expanded into regular Rust.
+      </p>
+
+      <h2>The anatomy of a macro</h2>
+
+      <p>
+        Let's look at a macro you've probably wished existed: a <code>hashmap!</code> literal.
+        The standard library gives you <code>vec![]</code> but no equivalent for maps. Here's
+        how you'd write one:
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">hashmap</span> {
+    ($($key:expr =&gt; $value:expr),* $(,)?) =&gt; {
+        {
+            <span class="kw">let</span> <span class="kw">mut</span> map = std::collections::<span class="ty">HashMap</span>::<span class="fn">new</span>();
+            $(
+                map.<span class="fn">insert</span>($key, $value);
+            )*
+            map
+        }
+    };
+}</code></pre>
+
+      <p>
+        There's a lot packed into those few lines. Let's take it apart.
+      </p>
+
+      <p>
+        The first line, <code>macro_rules! hashmap</code>, declares the macro's name. When
+        someone writes <code>hashmap!</code>, this is what the compiler looks up.
+      </p>
+
+      <p>
+        Inside the curly braces is a single <strong>rule</strong> (macros can have multiple
+        rules, but this one only needs one). Every rule has two parts separated by <code>=&gt;</code>:
+        a <strong>matcher</strong> on the left and an <strong>expansion</strong> (sometimes
+        called "transcriber") on the right.
+      </p>
+
+      <p>
+        The matcher is <code>($($key:expr =&gt; $value:expr),* $(,)?)</code>. Reading from the
+        inside out: <code>$key:expr</code> means "capture any expression and bind it to
+        <code>$key</code>." The <code>:expr</code> part is a <strong>fragment specifier</strong>
+        &mdash; it tells the macro what kind of syntax to expect. Then <code>=&gt;</code> is
+        a literal token that must appear between each key and value. The <code>$(...),*</code>
+        wrapper means "repeat this pattern zero or more times, separated by commas." And
+        <code>$(,)?</code> allows an optional trailing comma.
+      </p>
+
+      <p>
+        The expansion is the right side of <code>=&gt;</code>. It's the code that gets produced.
+        The outer <code>{ ... }</code> creates a block expression so the macro can declare
+        a local variable and return it. Inside, <code>$( map.insert($key, $value); )*</code>
+        repeats the insert call once for each captured key-value pair.
+      </p>
+
+      <p>
+        Using it looks exactly like you'd hope:
+      </p>
+
+      <pre><code><span class="kw">let</span> scores = <span class="fn">hashmap!</span> {
+    <span class="str">"alice"</span> =&gt; <span class="num">10</span>,
+    <span class="str">"bob"</span> =&gt; <span class="num">20</span>,
+    <span class="str">"carol"</span> =&gt; <span class="num">30</span>,
+};</code></pre>
+
+      <p>
+        After expansion, the compiler sees a block that creates a <code>HashMap</code>, inserts
+        three entries, and returns it. No runtime cost beyond what you'd write by hand.
+      </p>
+
+      <h2>The fragment specifiers</h2>
+
+      <p>
+        Fragment specifiers tell the macro parser what kind of token tree to expect in each
+        position. Here are the ones you'll actually use:
+      </p>
+
+      <h3><code>expr</code> &mdash; expressions</h3>
+
+      <p>
+        The most common specifier. Matches any Rust expression: a literal, a function call,
+        a block, an arithmetic operation, anything that produces a value.
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">double</span> {
+    ($e:expr) =&gt; {
+        $e + $e
+    };
+}
+
+<span class="kw">let</span> x = <span class="fn">double!</span>(<span class="num">5</span>);         <span class="cm">// 10</span>
+<span class="kw">let</span> y = <span class="fn">double!</span>(<span class="num">2</span> + <span class="num">3</span>);     <span class="cm">// 10, not 7 — expr is parsed as a unit</span></code></pre>
+
+      <p>
+        That second example is important. Because <code>expr</code> captures the entire
+        expression <code>2 + 3</code> as one unit, the expansion is <code>(2 + 3) + (2 + 3)</code>,
+        not <code>2 + 3 + 2 + 3</code>. This is one of the ways <code>macro_rules!</code>
+        avoids the classic C-macro pitfalls.
+      </p>
+
+      <h3><code>ident</code> &mdash; identifiers</h3>
+
+      <p>
+        Matches a single identifier: a variable name, a type name, a function name. This is
+        what you use when the macro needs to generate names.
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">make_getter</span> {
+    ($field:ident, $ty:ty) =&gt; {
+        <span class="kw">fn</span> <span class="fn">$field</span>(&amp;<span class="kw">self</span>) -&gt; &amp;$ty {
+            &amp;<span class="kw">self</span>.$field
+        }
+    };
+}</code></pre>
+
+      <h3><code>ty</code> &mdash; types</h3>
+
+      <p>
+        Matches a type expression: <code>u32</code>, <code>String</code>,
+        <code>Vec&lt;u8&gt;</code>, <code>&amp;'a str</code>. You saw it in the getter example
+        above. It's essential whenever your macro needs to work with a type that the caller
+        specifies.
+      </p>
+
+      <h3><code>tt</code> &mdash; token tree</h3>
+
+      <p>
+        The most flexible specifier. Matches a single token or a balanced group of tokens in
+        parentheses, brackets, or braces. When you don't know what kind of syntax to expect,
+        <code>tt</code> is the escape hatch. The <code>$($t:tt)*</code> pattern matches
+        literally anything.
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">pass_through</span> {
+    ($($t:tt)*) =&gt; {
+        $($t)*
+    };
+}
+
+<span class="fn">pass_through!</span>(<span class="kw">let</span> x = <span class="num">42</span>;); <span class="cm">// expands to: let x = 42;</span></code></pre>
+
+      <h3><code>literal</code>, <code>pat</code>, <code>path</code>, <code>stmt</code>, <code>block</code>, <code>item</code></h3>
+
+      <p>
+        These are more specialized. <code>literal</code> matches literal values like
+        <code>42</code> or <code>"hello"</code>. <code>pat</code> matches patterns (as in
+        <code>match</code> arms). <code>path</code> matches type paths like
+        <code>std::io::Error</code>. <code>stmt</code> matches statements.
+        <code>block</code> matches <code>{ ... }</code> blocks. And <code>item</code>
+        matches top-level items like function definitions or struct declarations.
+      </p>
+
+      <p>
+        In practice, you'll use <code>expr</code>, <code>ident</code>, <code>ty</code>, and
+        <code>tt</code> for 90% of macros. The others exist for when you need precision.
+      </p>
+
+      <h2>Repetition patterns</h2>
+
+      <p>
+        Repetition is where macros pull ahead of functions. The syntax is
+        <code>$(...) sep rep</code>, where <code>sep</code> is an optional separator token
+        and <code>rep</code> is either <code>*</code> (zero or more) or <code>+</code> (one
+        or more).
+      </p>
+
+      <pre><code><span class="cm">// Zero or more expressions, separated by commas</span>
+($($e:expr),*)
+
+<span class="cm">// One or more identifiers, separated by commas</span>
+($($name:ident),+)
+
+<span class="cm">// Key-value pairs separated by commas, trailing comma allowed</span>
+($($k:expr =&gt; $v:expr),* $(,)?)</code></pre>
+
+      <p>
+        In the expansion, you use the same <code>$(...)*</code> or <code>$(...)+</code>
+        syntax to repeat the output for each captured element. The number of repetitions
+        in the expansion must match the number in the matcher.
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">print_all</span> {
+    ($($item:expr),+) =&gt; {
+        $(
+            <span class="fn">println!</span>(<span class="str">"{}"</span>, $item);
+        )+
+    };
+}
+
+<span class="fn">print_all!</span>(<span class="str">"hello"</span>, <span class="num">42</span>, <span class="num">3.14</span>);
+<span class="cm">// Expands to:</span>
+<span class="cm">// println!("{}", "hello");</span>
+<span class="cm">// println!("{}", 42);</span>
+<span class="cm">// println!("{}", 3.14);</span></code></pre>
+
+      <p>
+        Nested repetition works too. If your matcher has <code>$( $($inner:expr),+ );+</code>,
+        the expansion can nest the <code>$(  )+</code> blocks the same way. This gets complex
+        fast, which is why you should keep macros as simple as you can.
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">matrix</span> {
+    ( $( [ $($val:expr),* ] ),+ $(,)? ) =&gt; {
+        <span class="fn">vec!</span>[
+            $(
+                <span class="fn">vec!</span>[$($val),*],
+            )+
+        ]
+    };
+}
+
+<span class="kw">let</span> m = <span class="fn">matrix!</span>[
+    [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>],
+    [<span class="num">4</span>, <span class="num">5</span>, <span class="num">6</span>],
+    [<span class="num">7</span>, <span class="num">8</span>, <span class="num">9</span>],
+];
+<span class="cm">// m is Vec&lt;Vec&lt;i32&gt;&gt;</span></code></pre>
+
+      <h2>Multiple arms</h2>
+
+      <p>
+        Just like a <code>match</code> expression, a macro can have multiple rules. The
+        compiler tries them in order and uses the first one that matches. This lets you
+        give a single macro different calling conventions.
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">log</span> {
+    <span class="cm">// log!("message")</span>
+    ($msg:expr) =&gt; {
+        <span class="fn">eprintln!</span>(<span class="str">"[LOG] {}"</span>, $msg);
+    };
+
+    <span class="cm">// log!("user: {}", name)</span>
+    ($fmt:expr, $($arg:expr),+) =&gt; {
+        <span class="fn">eprintln!</span>(<span class="fn">concat!</span>(<span class="str">"[LOG] "</span>, $fmt), $($arg),+);
+    };
+
+    <span class="cm">// log!(Level::Warn, "something happened")</span>
+    ($level:expr, $fmt:expr $(, $arg:expr)*) =&gt; {
+        <span class="fn">eprintln!</span>(<span class="fn">concat!</span>(<span class="str">"[{:?}] "</span>, $fmt), $level $(, $arg)*);
+    };
+}</code></pre>
+
+      <p>
+        Order matters. If you put the most general pattern first, it'll match everything
+        and the specific patterns will never be reached. Put the most specific patterns
+        first, and fall through to the general one at the end. Think of it like function
+        overloading, but resolved at compile time by pattern matching on token structure.
+      </p>
+
+      <p>
+        A common idiom is using a "base case + recursive case" pattern for macros that need
+        to process items one at a time:
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">count</span> {
+    () =&gt; { <span class="num">0</span> };
+    ($head:tt $($tail:tt)*) =&gt; {
+        <span class="num">1</span> + <span class="fn">count!</span>($($tail)*)
+    };
+}
+
+<span class="kw">let</span> n = <span class="fn">count!</span>(a b c d); <span class="cm">// 4</span></code></pre>
+
+      <h2>Four practical macros you'd actually write</h2>
+
+      <h3>1. Collection literals: <code>hashmap!</code> and <code>btreemap!</code></h3>
+
+      <p>
+        We already saw <code>hashmap!</code>. Here's the same idea for <code>BTreeMap</code>,
+        and a slightly more polished version that pre-allocates capacity:
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">hashmap</span> {
+    ($($key:expr =&gt; $value:expr),* $(,)?) =&gt; {{
+        <span class="kw">let</span> _cap = <span class="fn">count!</span>($($key)*);
+        <span class="kw">let</span> <span class="kw">mut</span> map = std::collections::<span class="ty">HashMap</span>::<span class="fn">with_capacity</span>(_cap);
+        $( map.<span class="fn">insert</span>($key, $value); )*
+        map
+    }};
+}
+
+<span class="kw">macro_rules!</span> <span class="fn">btreemap</span> {
+    ($($key:expr =&gt; $value:expr),* $(,)?) =&gt; {{
+        <span class="kw">let</span> <span class="kw">mut</span> map = std::collections::<span class="ty">BTreeMap</span>::<span class="fn">new</span>();
+        $( map.<span class="fn">insert</span>($key, $value); )*
+        map
+    }};
+}
+
+<span class="kw">let</span> users = <span class="fn">hashmap!</span> {
+    <span class="num">1</span> =&gt; <span class="str">"alice"</span>,
+    <span class="num">2</span> =&gt; <span class="str">"bob"</span>,
+    <span class="num">3</span> =&gt; <span class="str">"carol"</span>,
+};
+
+<span class="kw">let</span> sorted = <span class="fn">btreemap!</span> {
+    <span class="str">"z"</span> =&gt; <span class="num">26</span>,
+    <span class="str">"a"</span> =&gt; <span class="num">1</span>,
+    <span class="str">"m"</span> =&gt; <span class="num">13</span>,
+};</code></pre>
+
+      <p>
+        These macros save a few lines each time you create a map literal. That doesn't sound
+        like much, but in test code where you're constructing expected values constantly,
+        the noise reduction adds up.
+      </p>
+
+      <h3>2. <code>ensure!</code> &mdash; like <code>assert!</code> but returns <code>Err</code></h3>
+
+      <p>
+        The <code>assert!</code> macro panics on failure. That's fine in tests, but in
+        application code you usually want to return an error instead. The <code>ensure!</code>
+        pattern (used by the <code>anyhow</code> crate) does exactly that:
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">ensure</span> {
+    ($cond:expr, $msg:expr) =&gt; {
+        <span class="kw">if</span> !$cond {
+            <span class="kw">return</span> <span class="ty">Err</span>(<span class="fn">format!</span>($msg).<span class="fn">into</span>());
+        }
+    };
+    ($cond:expr, $fmt:expr, $($arg:expr),+) =&gt; {
+        <span class="kw">if</span> !$cond {
+            <span class="kw">return</span> <span class="ty">Err</span>(<span class="fn">format!</span>($fmt, $($arg),+).<span class="fn">into</span>());
+        }
+    };
+}</code></pre>
+
+      <p>
+        A function can't do this because <code>return</code> in a function body returns
+        from <em>that</em> function. In a macro expansion, <code>return</code> returns from
+        the function at the call site. That's a fundamental capability that only macros have.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">parse_port</span>(s: &amp;<span class="kw">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">u16</span>, <span class="ty">Box</span>&lt;<span class="kw">dyn</span> std::error::<span class="ty">Error</span>&gt;&gt; {
+    <span class="kw">let</span> port: <span class="ty">u16</span> = s.<span class="fn">parse</span>()?;
+    <span class="fn">ensure!</span>(port &gt; <span class="num">0</span>, <span class="str">"port must be positive"</span>);
+    <span class="fn">ensure!</span>(port &lt;= <span class="num">65535</span>, <span class="str">"port {} out of range"</span>, port);
+    <span class="ty">Ok</span>(port)
+}</code></pre>
+
+      <h3>3. <code>impl_display!</code> for multiple types</h3>
+
+      <p>
+        If you have several newtypes and you want them all to display their inner value, the
+        trait implementation is identical for each one. Writing it out five times is tedious.
+        A macro handles the repetition:
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">impl_display</span> {
+    ($($t:ty),+ $(,)?) =&gt; {
+        $(
+            <span class="kw">impl</span> std::fmt::<span class="ty">Display</span> <span class="kw">for</span> $t {
+                <span class="kw">fn</span> <span class="fn">fmt</span>(&amp;<span class="kw">self</span>, f: &amp;<span class="kw">mut</span> std::fmt::<span class="ty">Formatter</span>&lt;'_&gt;) -&gt; std::fmt::<span class="ty">Result</span> {
+                    <span class="fn">write!</span>(f, <span class="str">"{}"</span>, <span class="kw">self</span>.<span class="num">0</span>)
+                }
+            }
+        )+
+    };
+}
+
+<span class="kw">struct</span> <span class="ty">UserId</span>(<span class="ty">u64</span>);
+<span class="kw">struct</span> <span class="ty">OrderId</span>(<span class="ty">u64</span>);
+<span class="kw">struct</span> <span class="ty">SessionToken</span>(<span class="ty">String</span>);
+
+<span class="fn">impl_display!</span>(<span class="ty">UserId</span>, <span class="ty">OrderId</span>, <span class="ty">SessionToken</span>);</code></pre>
+
+      <p>
+        This is one of the most common uses of macros in real codebases. Any time you're
+        copy-pasting a trait impl and only changing the type name, a macro is the right call.
+        The standard library does this extensively &mdash; look at how numeric traits are
+        implemented for <code>u8</code>, <code>u16</code>, <code>u32</code>, etc.
+      </p>
+
+      <h3>4. Builder field macro</h3>
+
+      <p>
+        Builder patterns involve a lot of nearly-identical setter methods. A macro can
+        generate them:
+      </p>
+
+      <pre><code><span class="kw">macro_rules!</span> <span class="fn">builder_field</span> {
+    ($name:ident, $ty:ty) =&gt; {
+        <span class="kw">pub fn</span> <span class="fn">$name</span>(<span class="kw">mut self</span>, value: $ty) -&gt; <span class="kw">Self</span> {
+            <span class="kw">self</span>.$name = <span class="ty">Some</span>(value);
+            <span class="kw">self</span>
+        }
+    };
+}
+
+<span class="kw">struct</span> <span class="ty">ServerConfig</span> {
+    host: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+    port: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt;,
+    max_connections: <span class="ty">Option</span>&lt;<span class="ty">usize</span>&gt;,
+    timeout_ms: <span class="ty">Option</span>&lt;<span class="ty">u64</span>&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">ServerConfig</span> {
+    <span class="kw">fn</span> <span class="fn">new</span>() -&gt; <span class="kw">Self</span> {
+        <span class="ty">ServerConfig</span> {
+            host: <span class="ty">None</span>,
+            port: <span class="ty">None</span>,
+            max_connections: <span class="ty">None</span>,
+            timeout_ms: <span class="ty">None</span>,
+        }
+    }
+
+    <span class="fn">builder_field!</span>(host, <span class="ty">String</span>);
+    <span class="fn">builder_field!</span>(port, <span class="ty">u16</span>);
+    <span class="fn">builder_field!</span>(max_connections, <span class="ty">usize</span>);
+    <span class="fn">builder_field!</span>(timeout_ms, <span class="ty">u64</span>);
+}
+
+<span class="kw">let</span> config = <span class="ty">ServerConfig</span>::<span class="fn">new</span>()
+    .<span class="fn">host</span>(<span class="str">"localhost"</span>.<span class="fn">into</span>())
+    .<span class="fn">port</span>(<span class="num">8080</span>)
+    .<span class="fn">max_connections</span>(<span class="num">100</span>)
+    .<span class="fn">timeout_ms</span>(<span class="num">5000</span>);</code></pre>
+
+      <p>
+        Each <code>builder_field!</code> invocation expands to a complete setter method.
+        Four lines of macro calls replace sixteen lines of nearly-identical methods. And
+        if you need to change the setter convention later (say, taking <code>impl Into&lt;T&gt;</code>
+        instead of <code>T</code>), you change it once in the macro definition.
+      </p>
+
+      <h2>Debugging macros</h2>
+
+      <p>
+        Macros are harder to debug than functions. When something goes wrong, the compiler
+        error points at the macro call site, and the message often references code you didn't
+        write. Here are the tools that help.
+      </p>
+
+      <h3><code>cargo expand</code></h3>
+
+      <p>
+        The single most useful tool for macro debugging. Install it with
+        <code>cargo install cargo-expand</code>, then run:
+      </p>
+
+      <pre><code><span class="cm"># Expand all macros in your crate</span>
+cargo expand
+
+<span class="cm"># Expand macros in a specific module</span>
+cargo expand module_name
+
+<span class="cm"># Expand macros in a specific test</span>
+cargo expand --test test_name</code></pre>
+
+      <p>
+        This shows you exactly what your macro expanded to. If the compiler is complaining
+        about a type mismatch inside a macro, <code>cargo expand</code> will show you the
+        generated code so you can see where the types don't line up.
+      </p>
+
+      <h3><code>trace_macros!</code></h3>
+
+      <p>
+        A nightly-only feature that prints each macro invocation and its expansion during
+        compilation:
+      </p>
+
+      <pre><code><span class="cm">#![feature(trace_macros)]</span>
+
+<span class="fn">trace_macros!</span>(<span class="kw">true</span>);
+<span class="kw">let</span> m = <span class="fn">hashmap!</span> { <span class="str">"a"</span> =&gt; <span class="num">1</span> };
+<span class="fn">trace_macros!</span>(<span class="kw">false</span>);</code></pre>
+
+      <p>
+        This is especially helpful for recursive macros where you want to see each step
+        of the expansion.
+      </p>
+
+      <h3>Testing macro output</h3>
+
+      <p>
+        Don't just test that macros compile &mdash; test that they produce the right results.
+        Write regular unit tests that invoke the macro and check the output:
+      </p>
+
+      <pre><code><span class="cm">#[cfg(test)]</span>
+<span class="kw">mod</span> tests {
+    <span class="kw">use super</span>::*;
+
+    <span class="cm">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">hashmap_macro_creates_correct_map</span>() {
+        <span class="kw">let</span> map = <span class="fn">hashmap!</span> {
+            <span class="str">"a"</span> =&gt; <span class="num">1</span>,
+            <span class="str">"b"</span> =&gt; <span class="num">2</span>,
+        };
+        <span class="fn">assert_eq!</span>(map.<span class="fn">len</span>(), <span class="num">2</span>);
+        <span class="fn">assert_eq!</span>(map[<span class="str">"a"</span>], <span class="num">1</span>);
+        <span class="fn">assert_eq!</span>(map[<span class="str">"b"</span>], <span class="num">2</span>);
+    }
+
+    <span class="cm">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">hashmap_macro_handles_empty</span>() {
+        <span class="kw">let</span> map: std::collections::<span class="ty">HashMap</span>&lt;&amp;<span class="kw">str</span>, <span class="ty">i32</span>&gt; = <span class="fn">hashmap!</span> {};
+        <span class="fn">assert!</span>(map.<span class="fn">is_empty</span>());
+    }
+
+    <span class="cm">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">hashmap_macro_trailing_comma</span>() {
+        <span class="kw">let</span> map = <span class="fn">hashmap!</span> { <span class="str">"x"</span> =&gt; <span class="num">1</span>, };
+        <span class="fn">assert_eq!</span>(map.<span class="fn">len</span>(), <span class="num">1</span>);
+    }
+}</code></pre>
+
+      <p>
+        Test edge cases: empty invocations, trailing commas, single items, expressions with
+        side effects. If your macro does something subtle with evaluation order or
+        hygiene, write a test that catches it.
+      </p>
+
+      <h2>When to stop</h2>
+
+      <p>
+        Macros are powerful, but they have real costs. Error messages get worse. Code
+        navigation tools struggle. Your colleagues (and future you) have to mentally
+        expand the macro to understand what it does. Here are the guidelines I use.
+      </p>
+
+      <p>
+        <strong>If a function works, use a function.</strong> This is the most important rule.
+        Generics, trait bounds, and <code>impl Trait</code> solve most problems people reach
+        for macros to handle. Before writing a macro, ask: "Can I do this with generics?"
+        If yes, do that instead. Functions give you type checking, IDE support, and
+        documentation that macros don't.
+      </p>
+
+      <p>
+        <strong>If your macro is more than about 30 lines, consider a proc macro.</strong>
+        Declarative macros are great for small patterns, but they weren't designed for
+        generating large amounts of code or doing complex transformations. Proc macros
+        (derive macros, attribute macros) give you the full power of Rust at compile time.
+        They're harder to set up &mdash; they need their own crate &mdash; but the code
+        is regular Rust, not pattern-matching soup.
+      </p>
+
+      <p>
+        <strong>If only you can read it, it's too clever.</strong> A macro that saves ten
+        lines but requires five minutes to understand isn't saving anything. The best macros
+        are the ones where the call site is obvious even if you've never seen the
+        definition: <code>hashmap!{ "a" =&gt; 1 }</code> is self-explanatory,
+        <code>impl_display!(Foo, Bar, Baz)</code> is self-explanatory. If your macro's
+        call site requires a comment explaining what it does, rethink the design.
+      </p>
+
+      <p>
+        <strong>Don't use macros for control flow unless it's really worth it.</strong>
+        Macros that contain <code>return</code>, <code>break</code>, or <code>continue</code>
+        are surprising. The <code>ensure!</code> pattern is widely understood enough to get
+        a pass, but in general, hidden control flow makes code harder to follow. If someone
+        reading your function can't see the <code>return</code> statements, they can't
+        reason about the function's behavior.
+      </p>
+
+      <p>
+        <strong>Don't nest macros that generate macros.</strong> It's possible. It works. It's
+        also one of the most unreadable things you can do in Rust. If you find yourself
+        writing <code>macro_rules!</code> inside a <code>macro_rules!</code> expansion, step
+        back and find another approach.
+      </p>
+
+      <p>
+        Declarative macros are a tool, and like any tool, the skill is knowing when to
+        pick it up and when to leave it on the shelf. For reducing boilerplate across types,
+        for variadic APIs, for small DSLs that make call sites cleaner &mdash; reach for
+        <code>macro_rules!</code>. For everything else, a function is almost certainly the
+        right answer.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

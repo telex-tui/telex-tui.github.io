@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why Rust Has Six String Types (And When You'll Hit Each One) - Telex</title>
+  <meta name="description" content="&amp;str, String, OsStr, OsString, CStr, CString, Path, PathBuf — they exist because strings aren't as simple as languages pretend. Here's when each one shows up.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Why Rust Has Six String Types (And When You'll Hit Each One)</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Most languages give you one string type and call it a day. Python has <code>str</code>.
+        Go has <code>string</code>. JavaScript has <code>String</code>. Rust gives you
+        <code>&amp;str</code>, <code>String</code>, <code>OsStr</code>, <code>OsString</code>,
+        <code>CStr</code>, <code>CString</code>, <code>Path</code>, and <code>PathBuf</code>.
+        That's eight types across four pairs. The first time you see them all, it feels like
+        overengineering. It isn't. Each pair exists because the world has different ideas about
+        what a "string" is, and Rust chose honesty over pretending.
+      </p>
+
+      <p>
+        Here's when each one shows up and why.
+      </p>
+
+      <h2>The core pair: <code>&amp;str</code> and <code>String</code></h2>
+
+      <p>
+        These are the two you use 90% of the time. <code>&amp;str</code> is a borrowed, immutable
+        slice of UTF-8 bytes. Under the hood, it's just a pointer and a length -- the same two
+        words a C programmer would carry around. It doesn't own the data. It can point into a
+        <code>String</code>, into a string literal baked into your binary, or into any contiguous
+        UTF-8 buffer.
+      </p>
+
+      <p>
+        <code>String</code> is the owned, heap-allocated, growable version. It's backed by a
+        <code>Vec&lt;u8&gt;</code> that's guaranteed to contain valid UTF-8. You use it when you
+        need to build strings at runtime, store them in structs, or pass ownership across
+        function boundaries.
+      </p>
+
+      <pre><code><span class="cm">// &amp;str: borrowed, immutable, no allocation</span>
+<span class="kw">let</span> greeting: &amp;<span class="ty">str</span> = <span class="str">"hello"</span>;  <span class="cm">// points into the binary's read-only data</span>
+
+<span class="cm">// String: owned, growable, heap-allocated</span>
+<span class="kw">let</span> <span class="kw">mut</span> name = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"world"</span>);
+name.<span class="fn">push_str</span>(<span class="str">"!"</span>);
+
+<span class="cm">// String derefs to &amp;str, so you can pass it anywhere &amp;str is expected</span>
+<span class="kw">fn</span> <span class="fn">greet</span>(who: &amp;<span class="ty">str</span>) {
+    <span class="mac">println!</span>(<span class="str">"hello, {who}"</span>);
+}
+
+<span class="fn">greet</span>(&amp;name);      <span class="cm">// &amp;String coerces to &amp;str</span>
+<span class="fn">greet</span>(greeting);   <span class="cm">// &amp;str passed directly</span></code></pre>
+
+      <p>
+        The relationship between them is simple: <code>String</code> implements
+        <code>Deref&lt;Target = str&gt;</code>, so anywhere you accept <code>&amp;str</code>,
+        you can pass a <code>&amp;String</code> and it just works. This is why the standard
+        advice is to take <code>&amp;str</code> in function signatures -- it accepts both types
+        without forcing the caller to allocate.
+      </p>
+
+      <p>
+        If you're coming from C, think of <code>&amp;str</code> as a fat pointer to a
+        <code>char</code> buffer (with a length instead of a null terminator), and
+        <code>String</code> as a <code>malloc</code>'d buffer that knows its own length
+        and capacity. The key difference from C: both are guaranteed to be valid UTF-8. There
+        is no "maybe it's Latin-1, maybe it's UTF-8" ambiguity.
+      </p>
+
+      <h2>Why one pair isn't enough</h2>
+
+      <p>
+        If every string in the world were UTF-8, we'd be done. But they aren't.
+      </p>
+
+      <p>
+        File paths on Windows can contain arbitrary UTF-16 code units, including unpaired surrogates
+        that have no valid UTF-8 representation. Environment variables on Unix are arbitrary byte
+        sequences that don't have to be UTF-8 at all. C libraries use null-terminated byte arrays
+        that may or may not be valid text in any encoding.
+      </p>
+
+      <p>
+        Most languages handle this by pretending the problem doesn't exist. Python 3 throws a
+        <code>UnicodeDecodeError</code> when it encounters a filename it can't decode. Go's
+        <code>string</code> is defined as a byte sequence that's "conventionally but not
+        necessarily" UTF-8, which means bugs hide until runtime. Rust chose a different approach:
+        separate types with separate guarantees, so the compiler catches encoding mismatches at
+        compile time instead of 3 AM.
+      </p>
+
+      <h2>The OS boundary: <code>OsStr</code> and <code>OsString</code></h2>
+
+      <p>
+        <code>OsStr</code> and <code>OsString</code> are Rust's representation of
+        platform-native strings. On Unix, they're arbitrary byte sequences (the OS doesn't care
+        about encoding). On Windows, they're potentially ill-formed UTF-16 -- meaning they can
+        contain unpaired surrogates that no valid Unicode string could represent.
+      </p>
+
+      <p>
+        You hit these every time you interact with the operating system: reading environment
+        variables, listing directory entries, handling command-line arguments. The API functions
+        that return these types are the honest versions. There are convenience wrappers that
+        return <code>String</code>, but they panic or return errors when the OS hands back
+        something that isn't valid UTF-8.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::env;
+<span class="kw">use</span> std::ffi::<span class="ty">OsString</span>;
+
+<span class="cm">// env::var() returns Result&lt;String&gt; -- panics-friendly but lossy</span>
+<span class="cm">// env::var_os() returns Option&lt;OsString&gt; -- always works</span>
+<span class="kw">fn</span> <span class="fn">get_home</span>() -&gt; <span class="ty">Option</span>&lt;<span class="ty">OsString</span>&gt; {
+    env::<span class="fn">var_os</span>(<span class="str">"HOME"</span>)
+}</code></pre>
+
+      <p>
+        The same borrowed/owned pattern applies: <code>OsStr</code> is the borrowed slice,
+        <code>OsString</code> is the owned, heap-allocated version. <code>OsString</code>
+        derefs to <code>OsStr</code>, just like <code>String</code> derefs to <code>str</code>.
+      </p>
+
+      <p>
+        Converting from <code>OsStr</code> to <code>&amp;str</code> is fallible, because the OS
+        string might not be valid UTF-8. This is the whole point -- the type system forces you
+        to handle the possibility:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::ffi::<span class="ty">OsStr</span>;
+
+<span class="kw">fn</span> <span class="fn">print_env</span>(key: &amp;<span class="ty">str</span>) {
+    <span class="kw">match</span> std::env::<span class="fn">var_os</span>(key) {
+        <span class="ty">Some</span>(<span class="kw">ref</span> val) =&gt; {
+            <span class="cm">// .to_str() returns Option&lt;&amp;str&gt; -- None if not valid UTF-8</span>
+            <span class="kw">match</span> val.<span class="fn">to_str</span>() {
+                <span class="ty">Some</span>(s) =&gt; <span class="mac">println!</span>(<span class="str">"{key}={s}"</span>),
+                <span class="ty">None</span>    =&gt; <span class="mac">println!</span>(<span class="str">"{key}=&lt;not valid UTF-8&gt;"</span>),
+            }
+        }
+        <span class="ty">None</span> =&gt; <span class="mac">println!</span>(<span class="str">"{key} is not set"</span>),
+    }
+}</code></pre>
+
+      <p>
+        If you know the string is valid UTF-8 (which it almost always is in practice), you can
+        use <code>.to_str().unwrap()</code> or <code>.to_string_lossy()</code> which replaces
+        invalid sequences with the Unicode replacement character. But the type system makes this
+        an explicit choice rather than a silent assumption.
+      </p>
+
+      <h2>The C boundary: <code>CStr</code> and <code>CString</code></h2>
+
+      <p>
+        C strings are a different animal. They're null-terminated byte arrays with no length
+        field and no interior null bytes. They're not necessarily UTF-8 -- they're whatever
+        encoding the C library decided to use (often but not always UTF-8 on modern systems).
+      </p>
+
+      <p>
+        <code>CStr</code> is a borrowed reference to a null-terminated C string.
+        <code>CString</code> is an owned, heap-allocated null-terminated string. You use
+        them when calling C functions through FFI.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::ffi::{<span class="ty">CStr</span>, <span class="ty">CString</span>};
+<span class="kw">use</span> std::os::raw::c_char;
+
+<span class="kw">extern</span> <span class="str">"C"</span> {
+    <span class="kw">fn</span> <span class="fn">setenv</span>(name: *<span class="kw">const</span> c_char, value: *<span class="kw">const</span> c_char, overwrite: i32) -&gt; i32;
+    <span class="kw">fn</span> <span class="fn">getenv</span>(name: *<span class="kw">const</span> c_char) -&gt; *<span class="kw">const</span> c_char;
+}
+
+<span class="kw">fn</span> <span class="fn">safe_setenv</span>(name: &amp;<span class="ty">str</span>, value: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;(), std::ffi::<span class="ty">NulError</span>&gt; {
+    <span class="cm">// CString::new checks for interior null bytes.</span>
+    <span class="cm">// If your Rust string contains a \0, this returns Err.</span>
+    <span class="kw">let</span> c_name = <span class="ty">CString</span>::<span class="fn">new</span>(name)?;
+    <span class="kw">let</span> c_value = <span class="ty">CString</span>::<span class="fn">new</span>(value)?;
+
+    <span class="kw">unsafe</span> {
+        <span class="fn">setenv</span>(c_name.<span class="fn">as_ptr</span>(), c_value.<span class="fn">as_ptr</span>(), <span class="num">1</span>);
+    }
+    <span class="ty">Ok</span>(())
+}</code></pre>
+
+      <p>
+        The <code>CString::new</code> constructor is worth understanding. It takes any byte
+        sequence, appends a null terminator, and checks that the input contains no interior
+        null bytes. Interior nulls are fatal in C -- <code>strlen</code> would stop at the
+        first one, silently truncating your string. Rust catches this at construction time.
+      </p>
+
+      <pre><code><span class="cm">// This works: no interior nulls</span>
+<span class="kw">let</span> ok = <span class="ty">CString</span>::<span class="fn">new</span>(<span class="str">"hello"</span>);
+<span class="kw">assert!</span>(ok.<span class="fn">is_ok</span>());
+
+<span class="cm">// This fails: interior null byte at position 5</span>
+<span class="kw">let</span> bad = <span class="ty">CString</span>::<span class="fn">new</span>(<span class="str">"hello\0world"</span>);
+<span class="kw">assert!</span>(bad.<span class="fn">is_err</span>());</code></pre>
+
+      <p>
+        Going the other direction -- reading a C string back into Rust -- you use
+        <code>CStr</code>:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">safe_getenv</span>(name: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt; {
+    <span class="kw">let</span> c_name = <span class="ty">CString</span>::<span class="fn">new</span>(name).<span class="fn">ok</span>()?;
+
+    <span class="kw">unsafe</span> {
+        <span class="kw">let</span> ptr = <span class="fn">getenv</span>(c_name.<span class="fn">as_ptr</span>());
+        <span class="kw">if</span> ptr.<span class="fn">is_null</span>() {
+            <span class="kw">return</span> <span class="ty">None</span>;
+        }
+        <span class="cm">// CStr::from_ptr reads until the null terminator</span>
+        <span class="kw">let</span> c_str = <span class="ty">CStr</span>::<span class="fn">from_ptr</span>(ptr);
+        <span class="cm">// .to_str() checks for valid UTF-8</span>
+        c_str.<span class="fn">to_str</span>().<span class="fn">ok</span>().<span class="fn">map</span>(<span class="ty">String</span>::from)
+    }
+}</code></pre>
+
+      <p>
+        If you're coming from C, this is the type pair that will feel most familiar.
+        <code>CStr</code> is a safe wrapper around <code>const char*</code>, and
+        <code>CString</code> is a safe wrapper around a <code>malloc</code>'d
+        <code>char*</code> with automatic cleanup. The difference from raw C: Rust
+        guarantees no interior nulls, tracks ownership, and makes encoding conversion explicit.
+      </p>
+
+      <h2>The filesystem: <code>Path</code> and <code>PathBuf</code></h2>
+
+      <p>
+        <code>Path</code> and <code>PathBuf</code> are <code>OsStr</code> and
+        <code>OsString</code> with path-specific methods bolted on. Internally, a
+        <code>Path</code> is just a newtype wrapper around <code>OsStr</code>, and
+        <code>PathBuf</code> wraps <code>OsString</code>. The reason they exist as separate
+        types is ergonomics: paths have operations that plain OS strings don't -- joining
+        components, extracting extensions, navigating parent directories.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::path::{<span class="ty">Path</span>, <span class="ty">PathBuf</span>};
+
+<span class="kw">let</span> config = <span class="ty">Path</span>::<span class="fn">new</span>(<span class="str">"/home/user/.config/app/settings.toml"</span>);
+
+<span class="cm">// Navigate the path</span>
+<span class="kw">let</span> dir = config.<span class="fn">parent</span>();             <span class="cm">// Some("/home/user/.config/app")</span>
+<span class="kw">let</span> file = config.<span class="fn">file_name</span>();         <span class="cm">// Some("settings.toml")</span>
+<span class="kw">let</span> stem = config.<span class="fn">file_stem</span>();         <span class="cm">// Some("settings")</span>
+<span class="kw">let</span> ext = config.<span class="fn">extension</span>();          <span class="cm">// Some("toml")</span>
+
+<span class="cm">// Check properties</span>
+<span class="kw">let</span> is_abs = config.<span class="fn">is_absolute</span>();     <span class="cm">// true</span>
+<span class="kw">let</span> exists = config.<span class="fn">exists</span>();          <span class="cm">// checks the filesystem</span>
+<span class="kw">let</span> starts = config.<span class="fn">starts_with</span>(<span class="str">"/home"</span>); <span class="cm">// true (component-aware)</span></code></pre>
+
+      <p>
+        The <code>.join()</code> method is where <code>PathBuf</code> really earns its keep.
+        It handles path separators correctly on every platform, which is something you do not
+        want to do by hand with string concatenation:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::path::<span class="ty">PathBuf</span>;
+
+<span class="cm">// Building paths: .join() handles separators for you</span>
+<span class="kw">let</span> <span class="kw">mut</span> log_dir = <span class="ty">PathBuf</span>::<span class="fn">from</span>(<span class="str">"/var/log"</span>);
+log_dir.<span class="fn">push</span>(<span class="str">"myapp"</span>);
+log_dir.<span class="fn">push</span>(<span class="str">"debug.log"</span>);
+<span class="cm">// log_dir is now "/var/log/myapp/debug.log"</span>
+
+<span class="cm">// Or more concisely:</span>
+<span class="kw">let</span> log_path = <span class="ty">Path</span>::<span class="fn">new</span>(<span class="str">"/var/log"</span>).<span class="fn">join</span>(<span class="str">"myapp"</span>).<span class="fn">join</span>(<span class="str">"debug.log"</span>);
+
+<span class="cm">// Changing components</span>
+<span class="kw">let</span> <span class="kw">mut</span> p = <span class="ty">PathBuf</span>::<span class="fn">from</span>(<span class="str">"/tmp/report.csv"</span>);
+p.<span class="fn">set_extension</span>(<span class="str">"json"</span>);
+<span class="cm">// p is now "/tmp/report.json"</span></code></pre>
+
+      <p>
+        Why not just use <code>String</code> for paths? Three reasons. First, file paths
+        aren't always valid UTF-8 (the same reason <code>OsStr</code> exists). Second,
+        path operations are platform-specific -- <code>/</code> vs <code>\</code>, drive
+        letters, UNC paths on Windows -- and <code>Path</code> handles all of it correctly.
+        Third, <code>starts_with</code> on a <code>Path</code> is component-aware: it checks
+        whole path components, not just string prefixes.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::path::<span class="ty">Path</span>;
+
+<span class="cm">// String prefix matching gets this wrong:</span>
+<span class="kw">let</span> s = <span class="str">"/home/user2/docs"</span>;
+<span class="kw">assert!</span>(s.<span class="fn">starts_with</span>(<span class="str">"/home/user"</span>)); <span class="cm">// true! But user != user2</span>
+
+<span class="cm">// Path component matching gets it right:</span>
+<span class="kw">let</span> p = <span class="ty">Path</span>::<span class="fn">new</span>(<span class="str">"/home/user2/docs"</span>);
+<span class="kw">assert!</span>(!p.<span class="fn">starts_with</span>(<span class="str">"/home/user"</span>)); <span class="cm">// false -- correctly</span></code></pre>
+
+      <p>
+        That distinction alone is a security-relevant reason to use <code>Path</code>
+        instead of string manipulation for filesystem operations.
+      </p>
+
+      <h2>The conversion map</h2>
+
+      <p>
+        Conversions between these types follow a consistent pattern. Going from more-specific
+        to less-specific is cheap or free. Going from less-specific to more-specific is fallible,
+        because you're adding a guarantee (like "this is valid UTF-8") that might not hold.
+      </p>
+
+      <h3><code>String</code> / <code>&amp;str</code> to other types</h3>
+
+      <pre><code><span class="kw">use</span> std::ffi::{<span class="ty">OsStr</span>, <span class="ty">OsString</span>, <span class="ty">CString</span>};
+<span class="kw">use</span> std::path::{<span class="ty">Path</span>, <span class="ty">PathBuf</span>};
+
+<span class="kw">let</span> s: &amp;<span class="ty">str</span> = <span class="str">"hello.txt"</span>;
+<span class="kw">let</span> owned: <span class="ty">String</span> = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello.txt"</span>);
+
+<span class="cm">// To OsStr/OsString -- always succeeds (UTF-8 is valid OS string)</span>
+<span class="kw">let</span> os: &amp;<span class="ty">OsStr</span> = <span class="ty">OsStr</span>::<span class="fn">new</span>(s);
+<span class="kw">let</span> os_owned: <span class="ty">OsString</span> = <span class="ty">OsString</span>::<span class="fn">from</span>(owned.<span class="fn">clone</span>());
+
+<span class="cm">// To Path/PathBuf -- always succeeds (any string is a valid path)</span>
+<span class="kw">let</span> path: &amp;<span class="ty">Path</span> = <span class="ty">Path</span>::<span class="fn">new</span>(s);
+<span class="kw">let</span> path_owned: <span class="ty">PathBuf</span> = <span class="ty">PathBuf</span>::<span class="fn">from</span>(owned.<span class="fn">clone</span>());
+
+<span class="cm">// To CString -- fallible (interior nulls are not allowed)</span>
+<span class="kw">let</span> c: <span class="ty">CString</span> = <span class="ty">CString</span>::<span class="fn">new</span>(s).<span class="fn">expect</span>(<span class="str">"no interior nulls"</span>);</code></pre>
+
+      <h3><code>OsStr</code> / <code>OsString</code> to other types</h3>
+
+      <pre><code><span class="kw">use</span> std::ffi::<span class="ty">OsStr</span>;
+<span class="kw">use</span> std::path::<span class="ty">Path</span>;
+
+<span class="kw">let</span> os: &amp;<span class="ty">OsStr</span> = <span class="ty">OsStr</span>::<span class="fn">new</span>(<span class="str">"data.bin"</span>);
+
+<span class="cm">// To &amp;str -- fallible (might not be valid UTF-8)</span>
+<span class="kw">let</span> s: <span class="ty">Option</span>&lt;&amp;<span class="ty">str</span>&gt; = os.<span class="fn">to_str</span>();
+
+<span class="cm">// To String -- lossy option (replaces invalid bytes with U+FFFD)</span>
+<span class="kw">let</span> lossy: <span class="ty">String</span> = os.<span class="fn">to_string_lossy</span>().<span class="fn">into_owned</span>();
+
+<span class="cm">// To &amp;Path -- always succeeds (OsStr is the inner type of Path)</span>
+<span class="kw">let</span> path: &amp;<span class="ty">Path</span> = <span class="ty">Path</span>::<span class="fn">new</span>(os);</code></pre>
+
+      <h3><code>CStr</code> to other types</h3>
+
+      <pre><code><span class="kw">use</span> std::ffi::<span class="ty">CStr</span>;
+
+<span class="kw">let</span> c: &amp;<span class="ty">CStr</span> = <span class="kw">unsafe</span> { <span class="ty">CStr</span>::<span class="fn">from_ptr</span>(some_c_pointer) };
+
+<span class="cm">// To &amp;str -- fallible (C string might not be valid UTF-8)</span>
+<span class="kw">let</span> s: <span class="ty">Result</span>&lt;&amp;<span class="ty">str</span>, _&gt; = c.<span class="fn">to_str</span>();
+
+<span class="cm">// To String -- lossy option</span>
+<span class="kw">let</span> lossy: <span class="ty">String</span> = c.<span class="fn">to_string_lossy</span>().<span class="fn">into_owned</span>();
+
+<span class="cm">// To &amp;[u8] -- always succeeds (raw bytes without the null terminator)</span>
+<span class="kw">let</span> bytes: &amp;[<span class="ty">u8</span>] = c.<span class="fn">to_bytes</span>();</code></pre>
+
+      <h3><code>Path</code> / <code>PathBuf</code> to other types</h3>
+
+      <pre><code><span class="kw">use</span> std::path::<span class="ty">Path</span>;
+<span class="kw">use</span> std::ffi::<span class="ty">OsStr</span>;
+
+<span class="kw">let</span> path = <span class="ty">Path</span>::<span class="fn">new</span>(<span class="str">"/tmp/data.csv"</span>);
+
+<span class="cm">// To &amp;OsStr -- always succeeds (Path is a wrapper around OsStr)</span>
+<span class="kw">let</span> os: &amp;<span class="ty">OsStr</span> = path.<span class="fn">as_os_str</span>();
+
+<span class="cm">// To &amp;str -- fallible (path might not be valid UTF-8)</span>
+<span class="kw">let</span> s: <span class="ty">Option</span>&lt;&amp;<span class="ty">str</span>&gt; = path.<span class="fn">to_str</span>();
+
+<span class="cm">// To String -- via to_str or lossy</span>
+<span class="kw">let</span> lossy: <span class="ty">String</span> = path.<span class="fn">to_string_lossy</span>().<span class="fn">into_owned</span>();
+
+<span class="cm">// display() for user-facing output (also lossy)</span>
+<span class="mac">println!</span>(<span class="str">"reading from: {}"</span>, path.<span class="fn">display</span>());</code></pre>
+
+      <p>
+        The pattern is always the same. If both types guarantee UTF-8, conversion is free. If
+        you're going from "maybe UTF-8" to "definitely UTF-8," you get a <code>Result</code>
+        or <code>Option</code>. The types encode what the compiler can and can't prove about
+        your data.
+      </p>
+
+      <h2>The practical rule</h2>
+
+      <p>
+        You don't need to memorize all of this. Here's the decision tree that covers real-world code:
+      </p>
+
+      <p>
+        Most of the time, you use <code>&amp;str</code> and <code>String</code>. They cover
+        user-facing text, JSON, configuration, log messages, HTTP bodies -- anything that's
+        text in the UTF-8 sense. Accept <code>&amp;str</code> in function parameters. Store
+        <code>String</code> in structs.
+      </p>
+
+      <p>
+        When you touch the filesystem, you switch to <code>Path</code> and <code>PathBuf</code>.
+        Don't build file paths with <code>format!</code> or string concatenation. Use
+        <code>Path::new()</code> and <code>.join()</code>. Your code becomes portable and
+        correct on platforms where paths aren't UTF-8.
+      </p>
+
+      <pre><code><span class="cm">// Don't do this:</span>
+<span class="kw">let</span> path = <span class="mac">format!</span>(<span class="str">"{}/{}/{}"</span>, base_dir, subdir, filename);
+
+<span class="cm">// Do this:</span>
+<span class="kw">let</span> path = <span class="ty">Path</span>::<span class="fn">new</span>(&amp;base_dir).<span class="fn">join</span>(&amp;subdir).<span class="fn">join</span>(&amp;filename);</code></pre>
+
+      <p>
+        When you call C functions through FFI, you use <code>CStr</code> and
+        <code>CString</code>. They handle the null terminator and the interior-null check
+        so you don't have to think about it in unsafe blocks. You'll encounter these when
+        wrapping C libraries or interacting with system APIs that don't have Rust-native
+        bindings yet.
+      </p>
+
+      <p>
+        When you need raw OS strings -- the ones that might not be UTF-8 and aren't
+        file paths -- you use <code>OsStr</code> and <code>OsString</code>. In practice,
+        this is mostly environment variables (via <code>var_os</code>) and the raw forms
+        of path components. You rarely create these yourself; they come to you from the
+        standard library's OS interfaces.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::path::<span class="ty">PathBuf</span>;
+<span class="kw">use</span> std::ffi::<span class="ty">CString</span>;
+
+<span class="cm">// Text: &amp;str and String</span>
+<span class="kw">fn</span> <span class="fn">process_message</span>(msg: &amp;<span class="ty">str</span>) -&gt; <span class="ty">String</span> {
+    <span class="mac">format!</span>(<span class="str">"[INFO] {msg}"</span>)
+}
+
+<span class="cm">// Files: Path and PathBuf</span>
+<span class="kw">fn</span> <span class="fn">config_path</span>() -&gt; <span class="ty">PathBuf</span> {
+    <span class="kw">let</span> home = std::env::<span class="fn">var</span>(<span class="str">"HOME"</span>).<span class="fn">unwrap_or_else</span>(|_| <span class="str">"/tmp"</span>.<span class="fn">into</span>());
+    <span class="ty">PathBuf</span>::<span class="fn">from</span>(home).<span class="fn">join</span>(<span class="str">".config"</span>).<span class="fn">join</span>(<span class="str">"myapp.toml"</span>)
+}
+
+<span class="cm">// FFI: CStr and CString</span>
+<span class="kw">fn</span> <span class="fn">call_c_api</span>(name: &amp;<span class="ty">str</span>) {
+    <span class="kw">let</span> c_name = <span class="ty">CString</span>::<span class="fn">new</span>(name).<span class="fn">expect</span>(<span class="str">"no nulls in name"</span>);
+    <span class="kw">unsafe</span> { <span class="fn">some_c_function</span>(c_name.<span class="fn">as_ptr</span>()) }
+}</code></pre>
+
+      <p>
+        That's it. Four pairs, four contexts, one consistent borrowed/owned split across
+        all of them. It looks like a lot when you see all eight types listed together, but
+        in any given function you're usually working with just one pair. The type system
+        guides you to the right one, and the compiler tells you when you've picked wrong.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

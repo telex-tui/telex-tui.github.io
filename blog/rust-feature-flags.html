@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feature Flags and Conditional Compilation in Rust - Telex</title>
+  <meta name="description" content="#[cfg()], Cargo features, optional dependencies, and cfg_attr — the project-level patterns for building Rust code that adapts to different environments and configurations.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Feature Flags and Conditional Compilation in Rust</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Most real-world Rust crates don't compile exactly the same code every time. Some
+        code only runs on Linux. Some code only exists in debug builds. Some code disappears
+        entirely unless the user opts into a feature. Rust handles all of this at compile
+        time, not at runtime, and the mechanisms are surprisingly straightforward once you
+        see how the pieces fit together.
+      </p>
+
+      <p>
+        This post covers the full toolkit: <code>#[cfg()]</code> attributes, the <code>cfg!</code>
+        macro, Cargo features, optional dependencies, <code>#[cfg_attr()]</code>, platform-specific
+        dependencies, and the common patterns and mistakes you'll encounter in practice.
+      </p>
+
+      <h2>#[cfg()] — Conditional compilation basics</h2>
+
+      <p>
+        The <code>#[cfg()]</code> attribute tells the compiler to include or exclude a piece
+        of code based on a condition. When the condition is false, the code doesn't just
+        get skipped at runtime — it's removed entirely during compilation. It won't appear
+        in the binary, and it won't even be type-checked.
+      </p>
+
+      <p>
+        Rust ships with a set of built-in configuration options. The most useful ones come
+        up constantly.
+      </p>
+
+      <h3>test</h3>
+
+      <p>
+        The <code>test</code> cfg is set when you run <code>cargo test</code>. This is how
+        test modules work:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(test)]</span>
+<span class="kw">mod</span> tests {
+    <span class="kw">use super</span>::*;
+
+    <span class="kw">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">it_parses_valid_input</span>() {
+        <span class="kw">let</span> result = <span class="fn">parse</span>(<span class="str">"hello"</span>);
+        <span class="fn">assert!</span>(result.<span class="fn">is_ok</span>());
+    }
+}</code></pre>
+
+      <p>
+        The entire <code>tests</code> module vanishes in release builds. It's not just
+        not-executed — it's not compiled. Any test-only dependencies you import inside that
+        module don't need to exist in your production binary.
+      </p>
+
+      <h3>debug_assertions</h3>
+
+      <p>
+        This one is set in debug builds and unset in release builds. It's useful for
+        expensive sanity checks you want during development but not in production:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">process_batch</span>(items: &amp;[<span class="ty">Item</span>]) {
+    <span class="kw">#[cfg(debug_assertions)]</span>
+    {
+        <span class="kw">for</span> item <span class="kw">in</span> items {
+            <span class="fn">assert!</span>(item.<span class="fn">is_valid</span>(), <span class="str">"invalid item: {:?}"</span>, item);
+        }
+    }
+
+    <span class="cm">// actual processing...</span>
+}</code></pre>
+
+      <p>
+        In debug mode, every item gets validated before processing. In release mode, that
+        entire block is gone. Zero cost.
+      </p>
+
+      <h3>target_os and target_arch</h3>
+
+      <p>
+        These let you write platform-specific code. The values come from the target triple
+        you're compiling for:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(target_os = <span class="str">"linux"</span>)]</span>
+<span class="kw">fn</span> <span class="fn">get_memory_usage</span>() -&gt; <span class="ty">u64</span> {
+    <span class="cm">// read from /proc/self/statm</span>
+    <span class="kw">let</span> contents = std::fs::<span class="fn">read_to_string</span>(<span class="str">"/proc/self/statm"</span>).<span class="fn">unwrap</span>();
+    <span class="kw">let</span> pages: <span class="ty">u64</span> = contents.<span class="fn">split_whitespace</span>()
+        .<span class="fn">next</span>().<span class="fn">unwrap</span>()
+        .<span class="fn">parse</span>().<span class="fn">unwrap</span>();
+    pages * <span class="num">4096</span>
+}
+
+<span class="kw">#[cfg(target_os = <span class="str">"macos"</span>)]</span>
+<span class="kw">fn</span> <span class="fn">get_memory_usage</span>() -&gt; <span class="ty">u64</span> {
+    <span class="cm">// use mach kernel APIs</span>
+    <span class="fn">todo!</span>(<span class="str">"macOS implementation"</span>)
+}
+
+<span class="kw">#[cfg(target_arch = <span class="str">"aarch64"</span>)]</span>
+<span class="kw">fn</span> <span class="fn">use_neon_simd</span>(data: &amp;[<span class="ty">f32</span>]) {
+    <span class="cm">// ARM NEON intrinsics</span>
+}</code></pre>
+
+      <p>
+        You can also use the shorthand <code>unix</code> and <code>windows</code> cfgs,
+        which cover broader families:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(unix)]</span>
+<span class="kw">fn</span> <span class="fn">set_permissions</span>(path: &amp;<span class="ty">Path</span>) {
+    <span class="kw">use</span> std::os::unix::fs::<span class="ty">PermissionsExt</span>;
+    <span class="kw">let</span> perms = <span class="ty">Permissions</span>::<span class="fn">from_mode</span>(<span class="num">0o755</span>);
+    std::fs::<span class="fn">set_permissions</span>(path, perms).<span class="fn">unwrap</span>();
+}
+
+<span class="kw">#[cfg(windows)]</span>
+<span class="kw">fn</span> <span class="fn">set_permissions</span>(path: &amp;<span class="ty">Path</span>) {
+    <span class="cm">// Windows ACLs are a different beast entirely</span>
+}</code></pre>
+
+      <p>
+        The <code>unix</code> cfg is true on Linux, macOS, FreeBSD, and other Unix-like
+        systems. It's more practical than checking for each OS individually when you just
+        need POSIX-style APIs.
+      </p>
+
+      <h3>Combining conditions</h3>
+
+      <p>
+        You can combine cfgs with <code>all()</code>, <code>any()</code>, and <code>not()</code>:
+      </p>
+
+      <pre><code><span class="cm">// Only on 64-bit Linux</span>
+<span class="kw">#[cfg(all(target_os = <span class="str">"linux"</span>, target_arch = <span class="str">"x86_64"</span>))]</span>
+<span class="kw">fn</span> <span class="fn">use_io_uring</span>() { <span class="cm">/* ... */</span> }
+
+<span class="cm">// On any desktop OS</span>
+<span class="kw">#[cfg(any(target_os = <span class="str">"linux"</span>, target_os = <span class="str">"macos"</span>, target_os = <span class="str">"windows"</span>))]</span>
+<span class="kw">fn</span> <span class="fn">open_browser</span>(url: &amp;<span class="ty">str</span>) { <span class="cm">/* ... */</span> }
+
+<span class="cm">// Everything except Windows</span>
+<span class="kw">#[cfg(not(target_os = <span class="str">"windows"</span>))]</span>
+<span class="kw">fn</span> <span class="fn">use_fork</span>() { <span class="cm">/* ... */</span> }</code></pre>
+
+      <h2>cfg! macro vs #[cfg] attribute</h2>
+
+      <p>
+        There are two ways to check configuration in Rust, and they behave differently.
+        The <code>#[cfg]</code> attribute removes code at compile time. The <code>cfg!()</code>
+        macro evaluates to <code>true</code> or <code>false</code> at compile time, but
+        both branches must still type-check.
+      </p>
+
+      <pre><code><span class="cm">// #[cfg] — code is removed entirely</span>
+<span class="kw">#[cfg(target_os = <span class="str">"linux"</span>)]</span>
+<span class="kw">fn</span> <span class="fn">linux_only</span>() {
+    <span class="cm">// This function doesn't exist on macOS or Windows.</span>
+    <span class="cm">// Calling it from non-Linux code is a compile error.</span>
+}
+
+<span class="cm">// cfg!() — both branches are compiled, result is a bool</span>
+<span class="kw">fn</span> <span class="fn">describe_platform</span>() -&gt; &amp;<span class="kw">'static</span> <span class="ty">str</span> {
+    <span class="kw">if</span> <span class="fn">cfg!</span>(target_os = <span class="str">"linux"</span>) {
+        <span class="str">"running on linux"</span>
+    } <span class="kw">else if</span> <span class="fn">cfg!</span>(target_os = <span class="str">"macos"</span>) {
+        <span class="str">"running on macos"</span>
+    } <span class="kw">else</span> {
+        <span class="str">"running on something else"</span>
+    }
+}</code></pre>
+
+      <p>
+        The key difference: with <code>#[cfg]</code>, the excluded code is invisible to the
+        compiler. It can reference types that don't exist on the current platform, call
+        functions that aren't defined, or use syntax from a future edition. None of that
+        matters because the compiler never sees it.
+      </p>
+
+      <p>
+        With <code>cfg!()</code>, both branches are type-checked. The dead branch gets
+        optimized away by LLVM (so there's no runtime cost), but the code must still be
+        valid Rust. This means you can't call platform-specific APIs inside a
+        <code>cfg!()</code> branch — they'll fail to compile on other platforms.
+      </p>
+
+      <p>
+        When should you use which? Use <code>#[cfg]</code> when the code literally can't
+        compile on the other platform — different function signatures, platform-specific
+        types, OS-level APIs. Use <code>cfg!()</code> when both branches are valid Rust and
+        you just want to pick a value or toggle a behavior:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">default_config_path</span>() -&gt; <span class="ty">PathBuf</span> {
+    <span class="kw">if</span> <span class="fn">cfg!</span>(target_os = <span class="str">"windows"</span>) {
+        <span class="ty">PathBuf</span>::<span class="fn">from</span>(<span class="str">r"C:\ProgramData\myapp\config.toml"</span>)
+    } <span class="kw">else</span> {
+        <span class="ty">PathBuf</span>::<span class="fn">from</span>(<span class="str">"/etc/myapp/config.toml"</span>)
+    }
+}</code></pre>
+
+      <p>
+        Both branches construct a <code>PathBuf</code> from a string literal. Perfectly
+        valid Rust on every platform. The optimizer will collapse the dead branch, so the
+        runtime behavior is identical to using <code>#[cfg]</code>.
+      </p>
+
+      <h2>Cargo features</h2>
+
+      <p>
+        This is the main event. Cargo features let crate authors and users control which
+        parts of a crate get compiled. They're defined in <code>Cargo.toml</code>, passed
+        on the command line or through dependency declarations, and checked in code with
+        <code>#[cfg(feature = "...")]</code>.
+      </p>
+
+      <h3>Defining features</h3>
+
+      <p>
+        Features live in the <code>[features]</code> table in your <code>Cargo.toml</code>:
+      </p>
+
+      <pre><code><span class="kw">[features]</span>
+<span class="cm"># The default set — enabled unless the user opts out</span>
+default = [<span class="str">"json"</span>, <span class="str">"logging"</span>]
+
+<span class="cm"># Individual features</span>
+json = []
+yaml = []
+toml-support = []
+logging = []
+tracing = []
+
+<span class="cm"># A "kitchen sink" feature that turns on everything</span>
+full = [<span class="str">"json"</span>, <span class="str">"yaml"</span>, <span class="str">"toml-support"</span>, <span class="str">"logging"</span>, <span class="str">"tracing"</span>]</code></pre>
+
+      <p>
+        Each feature is a name that maps to a list of other features it implies. An empty
+        list <code>[]</code> means the feature stands alone. The <code>default</code> key
+        is special — those features are enabled when a user adds your crate as a dependency
+        without specifying anything.
+      </p>
+
+      <h3>Using features in code</h3>
+
+      <p>
+        In your Rust source, check for features with <code>#[cfg(feature = "...")]</code>:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">load_config</span>(path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Config</span>, <span class="ty">Error</span>&gt; {
+    <span class="kw">let</span> contents = std::fs::<span class="fn">read_to_string</span>(path)?;
+
+    <span class="kw">match</span> path.<span class="fn">extension</span>().<span class="fn">and_then</span>(|e| e.<span class="fn">to_str</span>()) {
+        <span class="kw">#[cfg(feature = <span class="str">"json"</span>)]</span>
+        <span class="ty">Some</span>(<span class="str">"json"</span>) =&gt; serde_json::<span class="fn">from_str</span>(&amp;contents).<span class="fn">map_err</span>(<span class="ty">Error</span>::<span class="fn">from</span>),
+
+        <span class="kw">#[cfg(feature = <span class="str">"yaml"</span>)]</span>
+        <span class="ty">Some</span>(<span class="str">"yaml"</span>) | <span class="ty">Some</span>(<span class="str">"yml"</span>) =&gt; serde_yaml::<span class="fn">from_str</span>(&amp;contents).<span class="fn">map_err</span>(<span class="ty">Error</span>::<span class="fn">from</span>),
+
+        <span class="kw">#[cfg(feature = <span class="str">"toml-support"</span>)]</span>
+        <span class="ty">Some</span>(<span class="str">"toml"</span>) =&gt; toml::<span class="fn">from_str</span>(&amp;contents).<span class="fn">map_err</span>(<span class="ty">Error</span>::<span class="fn">from</span>),
+
+        _ =&gt; <span class="ty">Err</span>(<span class="ty">Error</span>::<span class="fn">UnsupportedFormat</span>),
+    }
+}</code></pre>
+
+      <p>
+        Each match arm only exists if the corresponding feature is enabled. If a user
+        enables only <code>json</code>, the YAML and TOML arms are stripped from the binary
+        entirely, along with their dependencies.
+      </p>
+
+      <h3>Optional dependencies</h3>
+
+      <p>
+        Features really shine when combined with optional dependencies. When you mark a
+        dependency as <code>optional = true</code>, Cargo automatically creates a feature
+        with the same name:
+      </p>
+
+      <pre><code><span class="kw">[dependencies]</span>
+serde = { version = <span class="str">"1"</span>, optional = <span class="kw">true</span> }
+serde_json = { version = <span class="str">"1"</span>, optional = <span class="kw">true</span> }
+tracing = { version = <span class="str">"0.1"</span>, optional = <span class="kw">true</span> }
+
+<span class="kw">[features]</span>
+default = [<span class="str">"json"</span>]
+json = [<span class="str">"dep:serde"</span>, <span class="str">"dep:serde_json"</span>]</code></pre>
+
+      <p>
+        The <code>dep:</code> prefix is important. Without it, enabling the <code>serde</code>
+        feature would also create an implicit feature named <code>serde</code>. The
+        <code>dep:</code> syntax (stabilized in Rust 1.60) says "I'm referring to the
+        dependency, not a feature." This gives you clean control over your public feature
+        API — users enable <code>json</code>, which pulls in <code>serde</code> and
+        <code>serde_json</code> as implementation details.
+      </p>
+
+      <h3>Enabling features</h3>
+
+      <p>
+        From the command line:
+      </p>
+
+      <pre><code><span class="cm"># Enable a specific feature</span>
+cargo build --features json
+
+<span class="cm"># Enable multiple features</span>
+cargo build --features <span class="str">"json yaml tracing"</span>
+
+<span class="cm"># Disable defaults and enable only what you want</span>
+cargo build --no-default-features --features yaml
+
+<span class="cm"># Enable all features</span>
+cargo build --all-features</code></pre>
+
+      <p>
+        From a dependent's <code>Cargo.toml</code>:
+      </p>
+
+      <pre><code><span class="kw">[dependencies]</span>
+mylib = { version = <span class="str">"1.0"</span>, default-features = <span class="kw">false</span>, features = [<span class="str">"yaml"</span>] }</code></pre>
+
+      <p>
+        Setting <code>default-features = false</code> disables the defaults. You then
+        explicitly list the features you want. This is important for keeping binary size
+        and compile times down in applications where you know exactly what you need.
+      </p>
+
+      <h2>Designing good features</h2>
+
+      <p>
+        The most important rule: features should be additive. Enabling a feature should
+        only add functionality, never remove it. If enabling feature A breaks code that
+        worked without it, something is wrong with your feature design.
+      </p>
+
+      <p>
+        This matters because of how Cargo resolves features. If crate X depends on your
+        library with feature A, and crate Y depends on it with feature B, Cargo enables
+        both A and B. This is called feature unification. If A and B conflict, the build
+        breaks — and neither X nor Y can fix it.
+      </p>
+
+      <pre><code><span class="cm">// BAD: mutually exclusive features</span>
+<span class="kw">[features]</span>
+async-runtime-tokio = []
+async-runtime-async-std = []
+<span class="cm"># If two crates enable different runtimes, the build breaks</span>
+
+<span class="cm">// BETTER: one default, override via code or build config</span>
+<span class="kw">[features]</span>
+default = [<span class="str">"tokio-runtime"</span>]
+tokio-runtime = [<span class="str">"dep:tokio"</span>]
+async-std-runtime = [<span class="str">"dep:async-std"</span>]
+<span class="cm"># Still not perfect, but at least both can compile together</span></code></pre>
+
+      <p>
+        Put common functionality in the default features. Most users should get a useful
+        crate by just adding it to their dependencies without extra configuration. Reserve
+        non-default features for niche use cases: alternative backends, heavyweight
+        dependencies, unstable APIs.
+      </p>
+
+      <p>
+        Don't feature-gate core functionality. If your crate is a JSON parser, the JSON
+        parsing shouldn't be behind a feature flag. Features are for optional extras — serde
+        integration, async support, alternative allocators, format converters.
+      </p>
+
+      <p>
+        Name features after what they add, not what they affect. <code>serde</code> is
+        better than <code>serialization</code>. <code>tokio</code> is better than
+        <code>async</code>. Users read feature names and immediately understand what
+        dependency or capability they're opting into.
+      </p>
+
+      <h2>#[cfg_attr()] — Conditional attributes</h2>
+
+      <p>
+        Sometimes you don't want to conditionally include code — you want to conditionally
+        apply an attribute to code that's always present. That's <code>#[cfg_attr()]</code>.
+        The syntax is <code>#[cfg_attr(condition, attribute)]</code>: if the condition is
+        true, apply the attribute; otherwise, ignore it.
+      </p>
+
+      <p>
+        The classic use case is optional serde support. You want your types to always exist,
+        but only derive <code>Serialize</code> and <code>Deserialize</code> when the user
+        enables a feature:
+      </p>
+
+      <pre><code><span class="kw">#[derive(Debug, Clone, PartialEq)]</span>
+<span class="kw">#[cfg_attr(feature = <span class="str">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]</span>
+<span class="kw">pub struct</span> <span class="ty">Config</span> {
+    <span class="kw">pub</span> host: <span class="ty">String</span>,
+    <span class="kw">pub</span> port: <span class="ty">u16</span>,
+    <span class="kw">pub</span> max_retries: <span class="ty">u32</span>,
+}</code></pre>
+
+      <p>
+        Without the <code>serde</code> feature, this is just a plain struct with
+        <code>Debug</code>, <code>Clone</code>, and <code>PartialEq</code>. With the
+        feature enabled, it also derives serde's traits. The struct itself always exists
+        — only the attribute changes.
+      </p>
+
+      <p>
+        You can stack multiple conditional attributes:
+      </p>
+
+      <pre><code><span class="kw">#[derive(Debug, Clone)]</span>
+<span class="kw">#[cfg_attr(feature = <span class="str">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]</span>
+<span class="kw">#[cfg_attr(feature = <span class="str">"serde"</span>, serde(rename_all = <span class="str">"camelCase"</span>))]</span>
+<span class="kw">pub struct</span> <span class="ty">ApiResponse</span> {
+    <span class="kw">pub</span> status_code: <span class="ty">u16</span>,
+    <span class="kw">pub</span> response_body: <span class="ty">String</span>,
+    <span class="kw">#[cfg_attr(feature = <span class="str">"serde"</span>, serde(skip_serializing_if = <span class="str">"Option::is_none"</span>))]</span>
+    <span class="kw">pub</span> error_message: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+}</code></pre>
+
+      <p>
+        This pattern is everywhere in the Rust ecosystem. Crates like <code>url</code>,
+        <code>chrono</code>, <code>uuid</code>, and <code>bytes</code> all use
+        <code>cfg_attr</code> to offer optional serde support without making serde a
+        required dependency.
+      </p>
+
+      <p>
+        Another common use: conditional linting.
+      </p>
+
+      <pre><code><span class="cm">// Only deny missing docs in CI (where we set the `strict` cfg)</span>
+<span class="kw">#![cfg_attr(feature = <span class="str">"strict"</span>, deny(missing_docs))]</span>
+<span class="kw">#![cfg_attr(feature = <span class="str">"strict"</span>, deny(warnings))]</span></code></pre>
+
+      <h2>Platform-specific dependencies</h2>
+
+      <p>
+        Cargo lets you declare dependencies that only apply on certain platforms. The
+        syntax uses <code>[target.'cfg(...)'.dependencies]</code> in your
+        <code>Cargo.toml</code>:
+      </p>
+
+      <pre><code><span class="kw">[target.'cfg(target_os = "linux")'.dependencies]</span>
+inotify = <span class="str">"0.10"</span>
+
+<span class="kw">[target.'cfg(target_os = "macos")'.dependencies]</span>
+fsevent-sys = <span class="str">"4"</span>
+
+<span class="kw">[target.'cfg(windows)'.dependencies]</span>
+windows = { version = <span class="str">"0.52"</span>, features = [<span class="str">"Win32_Storage_FileSystem"</span>] }</code></pre>
+
+      <p>
+        This is different from optional dependencies. Platform-specific dependencies are
+        always included on the matching platform — you don't need to enable a feature.
+        They simply don't exist when compiling for a different target.
+      </p>
+
+      <p>
+        In your code, pair these with <code>#[cfg]</code> to use the platform-specific API:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(target_os = <span class="str">"linux"</span>)]</span>
+<span class="kw">mod</span> watcher {
+    <span class="kw">use</span> inotify::{<span class="ty">Inotify</span>, <span class="ty">WatchMask</span>};
+
+    <span class="kw">pub fn</span> <span class="fn">watch_directory</span>(path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">Error</span>&gt; {
+        <span class="kw">let mut</span> inotify = <span class="ty">Inotify</span>::<span class="fn">init</span>()?;
+        inotify.<span class="fn">watches</span>().<span class="fn">add</span>(path, <span class="ty">WatchMask</span>::MODIFY | <span class="ty">WatchMask</span>::CREATE)?;
+        <span class="cm">// poll for events...</span>
+        <span class="ty">Ok</span>(())
+    }
+}
+
+<span class="kw">#[cfg(target_os = <span class="str">"macos"</span>)]</span>
+<span class="kw">mod</span> watcher {
+    <span class="kw">pub fn</span> <span class="fn">watch_directory</span>(path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">Error</span>&gt; {
+        <span class="cm">// use FSEvents via fsevent-sys</span>
+        <span class="fn">todo!</span>()
+    }
+}
+
+<span class="kw">#[cfg(windows)]</span>
+<span class="kw">mod</span> watcher {
+    <span class="kw">pub fn</span> <span class="fn">watch_directory</span>(path: &amp;<span class="ty">Path</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">Error</span>&gt; {
+        <span class="cm">// use ReadDirectoryChangesW</span>
+        <span class="fn">todo!</span>()
+    }
+}</code></pre>
+
+      <p>
+        Each platform gets its own implementation of the <code>watcher</code> module. From
+        the outside, callers just use <code>watcher::watch_directory()</code> without caring
+        which backend is active. This is the same pattern used by crates like
+        <code>notify</code> and <code>mio</code>.
+      </p>
+
+      <p>
+        You can also use platform-specific dev-dependencies for testing:
+      </p>
+
+      <pre><code><span class="kw">[target.'cfg(unix)'.dev-dependencies]</span>
+nix = <span class="str">"0.27"</span>  <span class="cm"># for testing with Unix signals, pipes, etc.</span></code></pre>
+
+      <h2>The test module pattern</h2>
+
+      <p>
+        You've seen <code>#[cfg(test)]</code> at the top of every test module. Let's look
+        at the conventions and subtleties.
+      </p>
+
+      <p>
+        The standard pattern is an inline test module at the bottom of each source file:
+      </p>
+
+      <pre><code><span class="cm">// src/parser.rs</span>
+
+<span class="kw">pub fn</span> <span class="fn">parse</span>(input: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Ast</span>, <span class="ty">ParseError</span>&gt; {
+    <span class="cm">// ...</span>
+}
+
+<span class="kw">fn</span> <span class="fn">skip_whitespace</span>(input: &amp;<span class="ty">str</span>) -&gt; &amp;<span class="ty">str</span> {
+    input.<span class="fn">trim_start</span>()
+}
+
+<span class="kw">#[cfg(test)]</span>
+<span class="kw">mod</span> tests {
+    <span class="kw">use super</span>::*;
+
+    <span class="kw">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">parse_empty_input</span>() {
+        <span class="fn">assert!</span>(<span class="fn">parse</span>(<span class="str">""</span>).<span class="fn">is_err</span>());
+    }
+
+    <span class="kw">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">skip_whitespace_trims_leading</span>() {
+        <span class="fn">assert_eq!</span>(<span class="fn">skip_whitespace</span>(<span class="str">"  hello"</span>), <span class="str">"hello"</span>);
+    }
+}</code></pre>
+
+      <p>
+        The <code>use super::*</code> import pulls in everything from the parent module,
+        including private functions like <code>skip_whitespace</code>. This is intentional
+        — test modules are children of the module under test, so they can access private
+        items. This is one of the reasons Rust doesn't need a separate "friend" or
+        "internal" visibility modifier.
+      </p>
+
+      <p>
+        Test-only helper functions and fixtures should also live behind
+        <code>#[cfg(test)]</code>:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(test)]</span>
+<span class="kw">mod</span> tests {
+    <span class="kw">use super</span>::*;
+
+    <span class="cm">/// Build a Config with test defaults. Only exists during testing.</span>
+    <span class="kw">fn</span> <span class="fn">test_config</span>() -&gt; <span class="ty">Config</span> {
+        <span class="ty">Config</span> {
+            host: <span class="str">"localhost"</span>.<span class="fn">to_string</span>(),
+            port: <span class="num">0</span>,  <span class="cm">// let the OS pick a port</span>
+            max_retries: <span class="num">1</span>,
+            timeout: <span class="ty">Duration</span>::<span class="fn">from_millis</span>(<span class="num">100</span>),
+        }
+    }
+
+    <span class="kw">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">connects_with_defaults</span>() {
+        <span class="kw">let</span> config = <span class="fn">test_config</span>();
+        <span class="kw">let</span> client = <span class="ty">Client</span>::<span class="fn">new</span>(config);
+        <span class="fn">assert!</span>(client.<span class="fn">connect</span>().<span class="fn">is_ok</span>());
+    }
+}</code></pre>
+
+      <p>
+        If you need test helpers shared across multiple modules, put them in a dedicated
+        test utility module:
+      </p>
+
+      <pre><code><span class="cm">// src/test_helpers.rs</span>
+<span class="kw">#![cfg(test)]</span>
+
+<span class="kw">use</span> <span class="kw">crate</span>::<span class="ty">Config</span>;
+
+<span class="kw">pub fn</span> <span class="fn">test_config</span>() -&gt; <span class="ty">Config</span> {
+    <span class="cm">// shared test configuration</span>
+    <span class="ty">Config</span>::<span class="fn">default</span>()
+}
+
+<span class="kw">pub fn</span> <span class="fn">setup_temp_dir</span>() -&gt; <span class="ty">tempfile</span>::<span class="ty">TempDir</span> {
+    <span class="fn">tempfile::tempdir</span>().<span class="fn">expect</span>(<span class="str">"failed to create temp dir"</span>)
+}</code></pre>
+
+      <pre><code><span class="cm">// src/lib.rs</span>
+<span class="kw">#[cfg(test)]</span>
+<span class="kw">mod</span> test_helpers;
+
+<span class="kw">mod</span> parser;
+<span class="kw">mod</span> compiler;</code></pre>
+
+      <p>
+        The <code>#![cfg(test)]</code> at the top of the file (note the <code>!</code> for
+        inner attribute) means the entire file is test-only. It won't be compiled in
+        release builds.
+      </p>
+
+      <h2>Common patterns and gotchas</h2>
+
+      <h3>Testing feature permutations with cargo hack</h3>
+
+      <p>
+        Your crate compiles with default features. Great. Does it compile with
+        <code>--no-default-features</code>? With every individual feature on its own?
+        With every combination? You need to check, and checking manually is tedious.
+      </p>
+
+      <p>
+        The <code>cargo-hack</code> tool automates this:
+      </p>
+
+      <pre><code><span class="cm"># Install it</span>
+cargo install cargo-hack
+
+<span class="cm"># Check that each feature compiles independently</span>
+cargo hack check --each-feature
+
+<span class="cm"># Check all combinations (exponential — use with few features)</span>
+cargo hack check --feature-powerset
+
+<span class="cm"># Check each feature with and without defaults</span>
+cargo hack check --each-feature --no-dev-deps</code></pre>
+
+      <p>
+        The <code>--feature-powerset</code> flag tests every possible combination of
+        features. For a crate with 5 features, that's 32 combinations. For 10 features,
+        it's 1,024. Use it on small feature sets, or combine it with
+        <code>--exclude-features</code> to skip features that are known to work.
+      </p>
+
+      <p>
+        Add this to your CI pipeline. Feature-related breakage is one of the most common
+        sources of "works on my machine" bugs in the Rust ecosystem.
+      </p>
+
+      <h3>Breaking --no-default-features builds</h3>
+
+      <p>
+        This is the most common feature-related bug. You write code that implicitly depends
+        on a default feature, and it breaks when someone disables defaults:
+      </p>
+
+      <pre><code><span class="cm">// Cargo.toml</span>
+<span class="kw">[features]</span>
+default = [<span class="str">"logging"</span>]
+logging = [<span class="str">"dep:log"</span>]
+
+<span class="cm">// src/lib.rs</span>
+<span class="kw">pub fn</span> <span class="fn">process</span>(data: &amp;[<span class="ty">u8</span>]) {
+    <span class="fn">log::info!</span>(<span class="str">"processing {} bytes"</span>, data.<span class="fn">len</span>());  <span class="cm">// BUG!</span>
+    <span class="cm">// This fails with --no-default-features because `log` isn't available</span>
+}</code></pre>
+
+      <p>
+        The fix: wrap the logging call behind the feature gate:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">process</span>(data: &amp;[<span class="ty">u8</span>]) {
+    <span class="kw">#[cfg(feature = <span class="str">"logging"</span>)]</span>
+    <span class="fn">log::info!</span>(<span class="str">"processing {} bytes"</span>, data.<span class="fn">len</span>());
+
+    <span class="cm">// actual processing...</span>
+}</code></pre>
+
+      <p>
+        Or create a macro that silently no-ops when logging is disabled. Many crates take
+        this approach to avoid scattering <code>#[cfg]</code> annotations everywhere:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(feature = <span class="str">"logging"</span>)]</span>
+<span class="kw">macro_rules!</span> <span class="fn">trace</span> {
+    ($($arg:tt)*) =&gt; { <span class="fn">log::trace!</span>($($arg)*) }
+}
+
+<span class="kw">#[cfg(not(feature = <span class="str">"logging"</span>))]</span>
+<span class="kw">macro_rules!</span> <span class="fn">trace</span> {
+    ($($arg:tt)*) =&gt; { }  <span class="cm">// expands to nothing</span>
+}</code></pre>
+
+      <h3>Feature-gated trait implementations</h3>
+
+      <p>
+        A common pattern in library crates: implement a trait only when a feature is
+        enabled. This is how most crates add serde support:
+      </p>
+
+      <pre><code><span class="kw">#[derive(Debug, Clone)]</span>
+<span class="kw">pub struct</span> <span class="ty">Timestamp</span> {
+    secs: <span class="ty">u64</span>,
+    nanos: <span class="ty">u32</span>,
+}
+
+<span class="kw">#[cfg(feature = <span class="str">"serde"</span>)]</span>
+<span class="kw">impl</span> serde::<span class="ty">Serialize</span> <span class="kw">for</span> <span class="ty">Timestamp</span> {
+    <span class="kw">fn</span> <span class="fn">serialize</span>&lt;<span class="ty">S</span>: serde::<span class="ty">Serializer</span>&gt;(&amp;<span class="kw">self</span>, serializer: <span class="ty">S</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">S</span>::<span class="ty">Ok</span>, <span class="ty">S</span>::<span class="ty">Error</span>&gt; {
+        <span class="kw">let</span> total = <span class="kw">self</span>.secs <span class="kw">as</span> <span class="ty">f64</span> + <span class="kw">self</span>.nanos <span class="kw">as</span> <span class="ty">f64</span> / <span class="num">1_000_000_000.0</span>;
+        serializer.<span class="fn">serialize_f64</span>(total)
+    }
+}</code></pre>
+
+      <p>
+        This is more flexible than <code>cfg_attr</code> with derive because you get full
+        control over the serialization format. The struct always exists. The
+        <code>Serialize</code> impl only shows up when <code>serde</code> is enabled.
+      </p>
+
+      <h3>Compile-time feature detection with compile_error!</h3>
+
+      <p>
+        Sometimes you need to give users a clear error message when they've misconfigured
+        features. The <code>compile_error!</code> macro is your friend:
+      </p>
+
+      <pre><code><span class="kw">#[cfg(all(feature = <span class="str">"backend-opengl"</span>, feature = <span class="str">"backend-vulkan"</span>))]</span>
+<span class="fn">compile_error!</span>(<span class="str">"features `backend-opengl` and `backend-vulkan` are mutually exclusive"</span>);
+
+<span class="kw">#[cfg(not(any(feature = <span class="str">"backend-opengl"</span>, feature = <span class="str">"backend-vulkan"</span>)))]</span>
+<span class="fn">compile_error!</span>(<span class="str">"at least one backend feature must be enabled: `backend-opengl` or `backend-vulkan`"</span>);</code></pre>
+
+      <p>
+        This turns a confusing "function not found" error into a clear message explaining
+        what went wrong. It's a small thing, but it makes a big difference when someone
+        hits the problem at 2 AM.
+      </p>
+
+      <h3>Feature-gated public API</h3>
+
+      <p>
+        When you feature-gate public items, document it. Users reading your docs need to
+        know which feature to enable:
+      </p>
+
+      <pre><code><span class="cm">/// Compress data using zstd.</span>
+<span class="cm">///</span>
+<span class="cm">/// Requires the `zstd` feature.</span>
+<span class="kw">#[cfg(feature = <span class="str">"zstd"</span>)]</span>
+<span class="kw">pub fn</span> <span class="fn">compress</span>(data: &amp;[<span class="ty">u8</span>]) -&gt; <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; {
+    zstd::<span class="fn">encode_all</span>(data, <span class="num">3</span>).<span class="fn">unwrap</span>()
+}</code></pre>
+
+      <p>
+        On docs.rs, you can enable all features for documentation by adding this to your
+        <code>Cargo.toml</code>:
+      </p>
+
+      <pre><code><span class="kw">[package.metadata.docs.rs]</span>
+all-features = <span class="kw">true</span></code></pre>
+
+      <p>
+        This ensures that feature-gated items show up in the generated documentation. You
+        can also annotate items with <code>#[doc(cfg(...))]</code> on nightly to show a
+        badge indicating which feature is required, though this is still unstable at the
+        time of writing.
+      </p>
+
+      <p>
+        Feature flags and conditional compilation are one of those areas where the initial
+        learning curve is shallow — <code>#[cfg(test)]</code> just works — but the deeper
+        patterns take time to internalize. The key insight is that all of this happens at
+        compile time. There's no runtime overhead, no feature-check functions called in hot
+        loops, no if-else branches that the CPU has to predict. The binary you ship contains
+        exactly the code that was selected, nothing more. That's the Rust way: zero-cost
+        abstractions that let you pay only for what you use.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
