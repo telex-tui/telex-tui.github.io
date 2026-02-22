@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rust's Smart Pointer Patterns — Part 1: The Ownership and Sharing System - Telex</title>
+  <meta name="description" content="A practical guide to Box, Rc, Arc, Weak, Cell, RefCell, Mutex, and RwLock -- when you'd actually reach for each one, how they compose, and the six method pairs that make the system livable.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Rust's Smart Pointer Patterns -- Part 1: The Ownership and Sharing System</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        Rust has a handful of wrapper types that sit between you and your data.
+        <code>Box</code>, <code>Rc</code>, <code>Arc</code>, <code>Mutex</code>,
+        <code>RefCell</code> -- you've seen them in tutorials and you know roughly what
+        each one does. But when you're staring at a real problem, the question isn't
+        "what does <code>Rc</code> do?" It's "should I use <code>Rc</code> here, or
+        <code>Arc</code>, or neither?"
+      </p>
+
+      <p>
+        This post is the decision guide. For each type, I'll tell you what it is in one
+        line, then spend the rest of the section on <em>when you'd actually reach for it</em>
+        and why the alternatives don't work. The types build on each other, so they're in
+        dependency order -- each one solves a problem the previous one can't.
+      </p>
+
+      <p>
+        If you're coming from C, think of this as "what replaces <code>malloc</code>,
+        <code>free</code>, reference counting, and <code>pthread_mutex_t</code> -- and
+        why Rust splits these into separate types instead of giving you one raw pointer
+        and a prayer."
+      </p>
+
+      <p>
+        This is Part 1 of two. This post covers the core ownership, sharing, and mutation
+        system. Part 2 covers the specialists: <code>Cow</code>, <code>OnceCell</code>,
+        <code>Pin</code>, and friends.
+      </p>
+
+      <h2>I. The Types</h2>
+
+      <h3>1. Box&lt;T&gt; -- "Put it on the heap"</h3>
+
+      <p>
+        <code>Box&lt;T&gt;</code> is a pointer to a heap-allocated value with a single
+        owner. When the <code>Box</code> goes out of scope, the value is freed. That's it.
+        No reference counting, no locking, no shared access. It's <code>malloc</code> plus
+        automatic <code>free</code>.
+      </p>
+
+      <p>
+        You reach for <code>Box</code> in three situations.
+      </p>
+
+      <p>
+        <strong>Recursive types.</strong> A struct that contains itself has infinite size.
+        The compiler needs to know how big things are at compile time, and "infinitely big"
+        doesn't work. A <code>Box</code> is always one pointer wide, so it breaks the
+        recursion.
+      </p>
+
+      <pre><code><span class="kw">enum</span> <span class="ty">List</span> {
+    <span class="ty">Cons</span>(<span class="ty">i32</span>, <span class="ty">Box</span>&lt;<span class="ty">List</span>&gt;),
+    <span class="ty">Nil</span>,
+}</code></pre>
+
+      <p>
+        Without the <code>Box</code>, the compiler would try to compute the size of
+        <code>List</code>, find that it contains a <code>List</code>, which contains
+        a <code>List</code>, and give up. The <code>Box</code> makes the inner
+        <code>List</code> a fixed-size pointer instead of an inline value.
+      </p>
+
+      <p>
+        <strong>Large values you don't want on the stack.</strong> If you have a
+        <code>[u8; 1_000_000]</code> and you're passing it between functions, that's
+        a megabyte of stack copying on each move. Box it and you're passing eight bytes.
+      </p>
+
+      <pre><code><span class="kw">let</span> buffer = <span class="ty">Box</span>::<span class="fn">new</span>([<span class="num">0u8</span>; <span class="num">1_000_000</span>]);
+<span class="cm">// Moving `buffer` copies 8 bytes (the pointer), not 1MB</span></code></pre>
+
+      <p>
+        <strong>Trait objects.</strong> When you need a value whose concrete type isn't
+        known at compile time -- a plugin, a strategy, a callback -- you need dynamic
+        dispatch. <code>Box&lt;dyn Trait&gt;</code> puts the value on the heap and
+        carries a vtable pointer alongside it.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">create_logger</span>(verbose: <span class="ty">bool</span>) -&gt; <span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Logger</span>&gt; {
+    <span class="kw">if</span> verbose {
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">DetailedLogger</span>::<span class="fn">new</span>())
+    } <span class="kw">else</span> {
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">QuietLogger</span>::<span class="fn">new</span>())
+    }
+}</code></pre>
+
+      <p>
+        The C equivalent would be returning a <code>void*</code> with a
+        <code>struct</code> of function pointers. <code>Box&lt;dyn Trait&gt;</code> is
+        the same idea, except the compiler generates the vtable and the memory is freed
+        automatically.
+      </p>
+
+      <p>
+        If you don't need any of these three things -- recursion, large values, or
+        dynamic dispatch -- you probably don't need <code>Box</code>. Rust values live
+        on the stack by default, and that's usually fine.
+      </p>
+
+      <h3>2. Rc&lt;T&gt; -- "Shared ownership, single thread"</h3>
+
+      <p>
+        <code>Rc&lt;T&gt;</code> is a reference-counted pointer. Multiple
+        <code>Rc</code>s can point to the same heap-allocated value. Each time you
+        <code>clone</code> an <code>Rc</code>, the reference count goes up. Each time
+        one is dropped, the count goes down. When it hits zero, the value is freed.
+      </p>
+
+      <p>
+        You reach for <code>Rc</code> when you have a data structure where multiple
+        parts need to own the same data. Trees where nodes share children. A graph
+        where multiple edges point to the same node. A UI framework where multiple
+        widgets reference the same state object.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+
+<span class="kw">let</span> shared_config = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">Config</span>::<span class="fn">load</span>());
+
+<span class="kw">let</span> widget_a = <span class="ty">Widget</span>::<span class="fn">new</span>(<span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;shared_config));
+<span class="kw">let</span> widget_b = <span class="ty">Widget</span>::<span class="fn">new</span>(<span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;shared_config));
+<span class="kw">let</span> widget_c = <span class="ty">Widget</span>::<span class="fn">new</span>(<span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;shared_config));
+<span class="cm">// All three widgets read the same Config. Ref count is 4.</span></code></pre>
+
+      <p>
+        Two things <code>Rc</code> cannot do. First, it cannot cross thread boundaries.
+        <code>Rc</code> is not <code>Send</code> -- the reference count uses
+        non-atomic operations, so concurrent increments would be a data race. If you need
+        shared ownership across threads, that's <code>Arc</code> (next section).
+      </p>
+
+      <p>
+        Second, <code>Rc</code> alone gives you read-only access. You can't get a
+        <code>&amp;mut T</code> out of an <code>Rc&lt;T&gt;</code> because other
+        <code>Rc</code>s might be reading the same data. If you need mutation, you
+        combine <code>Rc</code> with <code>RefCell</code> (covered later in this post).
+      </p>
+
+      <p>
+        A note on the convention: use <code>Rc::clone(&amp;x)</code> instead of
+        <code>x.clone()</code>. They do the same thing, but <code>Rc::clone</code>
+        makes it visually obvious that you're bumping a counter, not deep-copying
+        data. In code review, <code>.clone()</code> is a signal for "expensive
+        allocation might be happening here." <code>Rc::clone</code> says "this is
+        cheap, relax."
+      </p>
+
+      <h3>3. Arc&lt;T&gt; -- "Rc but thread-safe"</h3>
+
+      <p>
+        <code>Arc&lt;T&gt;</code> is <code>Rc&lt;T&gt;</code> with atomic reference
+        counting. The reference count is incremented and decremented using atomic CPU
+        instructions, so it's safe to share across threads. That's the only difference.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::<span class="ty">Arc</span>;
+<span class="kw">use</span> std::thread;
+
+<span class="kw">let</span> data = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]);
+
+<span class="kw">let</span> handles: <span class="ty">Vec</span>&lt;_&gt; = (<span class="num">0</span>..<span class="num">3</span>).<span class="fn">map</span>(|i| {
+    <span class="kw">let</span> data = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;data);
+    thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+        <span class="fn">println!</span>(<span class="str">"Thread {i}: sum = {}"</span>, data.<span class="fn">iter</span>().<span class="fn">sum</span>::&lt;<span class="ty">i32</span>&gt;());
+    })
+}).<span class="fn">collect</span>();
+
+<span class="kw">for</span> h <span class="kw">in</span> handles { h.<span class="fn">join</span>().<span class="fn">unwrap</span>(); }</code></pre>
+
+      <p>
+        The atomic operations have a small cost compared to <code>Rc</code>. On modern
+        CPUs, an atomic increment is roughly 5-10x slower than a non-atomic one. In
+        practice, this almost never matters -- you're not incrementing reference counts
+        in a tight loop. But it's the reason both types exist: <code>Rc</code> is for
+        when you know you're single-threaded and want to avoid paying for atomics
+        you don't need.
+      </p>
+
+      <p>
+        Like <code>Rc</code>, <code>Arc</code> alone gives you read-only access. You
+        can't get <code>&amp;mut T</code> from an <code>Arc&lt;T&gt;</code>. For
+        shared mutable state across threads, you combine <code>Arc</code> with
+        <code>Mutex</code> or <code>RwLock</code>.
+      </p>
+
+      <p>
+        The decision is simple: single-threaded shared ownership? <code>Rc</code>.
+        Multi-threaded shared ownership? <code>Arc</code>. If you guess wrong, the
+        compiler tells you -- trying to send an <code>Rc</code> across a thread
+        boundary gives you a clear error about <code>Send</code>.
+      </p>
+
+      <h3>4. Weak&lt;T&gt; -- "Breaking cycles"</h3>
+
+      <p>
+        <code>Weak&lt;T&gt;</code> is a non-owning reference that works with both
+        <code>Rc</code> and <code>Arc</code>. It doesn't keep the value alive. To
+        actually use the data, you call <code>upgrade()</code>, which gives you an
+        <code>Option&lt;Rc&lt;T&gt;&gt;</code> (or <code>Option&lt;Arc&lt;T&gt;&gt;</code>).
+        If the value has already been dropped, you get <code>None</code>.
+      </p>
+
+      <p>
+        The problem <code>Weak</code> solves is reference cycles. If node A owns an
+        <code>Rc</code> to node B, and node B owns an <code>Rc</code> back to node A,
+        neither reference count will ever reach zero. The data leaks. This is the
+        fundamental weakness of reference counting -- and it's the same problem you'd
+        have in C++ with <code>shared_ptr</code> cycles.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::rc::{<span class="ty">Rc</span>, <span class="ty">Weak</span>};
+<span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+
+<span class="kw">struct</span> <span class="ty">Node</span> {
+    value: <span class="ty">i32</span>,
+    parent: <span class="ty">RefCell</span>&lt;<span class="ty">Weak</span>&lt;<span class="ty">Node</span>&gt;&gt;,       <span class="cm">// doesn't keep parent alive</span>
+    children: <span class="ty">RefCell</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">Rc</span>&lt;<span class="ty">Node</span>&gt;&gt;&gt;,  <span class="cm">// owns children</span>
+}
+
+<span class="kw">let</span> parent = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">Node</span> {
+    value: <span class="num">1</span>,
+    parent: <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="ty">Weak</span>::<span class="fn">new</span>()),
+    children: <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[]),
+});
+
+<span class="kw">let</span> child = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">Node</span> {
+    value: <span class="num">2</span>,
+    parent: <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="ty">Rc</span>::<span class="fn">downgrade</span>(&amp;parent)),  <span class="cm">// Weak ref to parent</span>
+    children: <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[]),
+});
+
+parent.children.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(<span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;child));</code></pre>
+
+      <p>
+        The rule of thumb: in any parent-child relationship with reference counting,
+        the parent owns (strong <code>Rc</code>/<code>Arc</code>) the children, and
+        the children hold <code>Weak</code> references back to the parent. Same pattern
+        for caches (the cache holds <code>Weak</code> refs so entries can be evicted)
+        and observer patterns (the subject holds <code>Weak</code> refs to observers
+        so they can be dropped without the subject knowing).
+      </p>
+
+      <p>
+        The <code>upgrade()</code> call returning <code>Option</code> is the key design
+        choice. It forces you to handle the case where the data is gone. There's no
+        dangling pointer, no use-after-free -- just a <code>None</code> you have to
+        deal with.
+      </p>
+
+      <h3>5. Cell&lt;T&gt; -- "Interior mutability for Copy types"</h3>
+
+      <p>
+        <code>Cell&lt;T&gt;</code> lets you mutate a value through a shared
+        (<code>&amp;</code>) reference. Normally, Rust's borrow rules say: shared
+        references are read-only. <code>Cell</code> breaks that rule -- safely -- by
+        never giving you a reference to the inner value. You can only <code>get</code>
+        (copy the value out) and <code>set</code> (replace it). No borrowing, no
+        aliasing problems.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::cell::<span class="ty">Cell</span>;
+
+<span class="kw">struct</span> <span class="ty">Counter</span> {
+    count: <span class="ty">Cell</span>&lt;<span class="ty">u32</span>&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Counter</span> {
+    <span class="kw">fn</span> <span class="fn">increment</span>(&amp;<span class="kw">self</span>) {
+        <span class="kw">self</span>.count.<span class="fn">set</span>(<span class="kw">self</span>.count.<span class="fn">get</span>() + <span class="num">1</span>);
+    }
+}
+
+<span class="kw">let</span> c = <span class="ty">Counter</span> { count: <span class="ty">Cell</span>::<span class="fn">new</span>(<span class="num">0</span>) };
+c.<span class="fn">increment</span>();  <span class="cm">// mutates through &self, not &mut self</span>
+c.<span class="fn">increment</span>();
+<span class="fn">assert_eq!</span>(c.count.<span class="fn">get</span>(), <span class="num">2</span>);</code></pre>
+
+      <p>
+        The restriction is that <code>T</code> must be <code>Copy</code>. Because
+        <code>get</code> returns a copy of the value, the types you use with
+        <code>Cell</code> are small: integers, booleans, enums, character types. You
+        can't put a <code>String</code> or <code>Vec</code> in a <code>Cell</code>
+        (well, you can, but you'd only be able to <code>set</code> and
+        <code>replace</code>, not <code>get</code>).
+      </p>
+
+      <p>
+        <code>Cell</code> has zero runtime overhead. No dynamic borrow tracking, no
+        atomic operations, no locks. It compiles down to the same machine code as
+        direct mutation. The "interior mutability" is purely a type-system concept that
+        tells the compiler "trust me, I'm only copying small values in and out."
+      </p>
+
+      <p>
+        When you need it: counters behind shared references, dirty flags, caches of
+        small computed values. Anywhere you'd use a <code>volatile</code> local in C,
+        except <code>Cell</code> is actually safe.
+      </p>
+
+      <h3>6. RefCell&lt;T&gt; -- "Interior mutability with runtime borrow checking"</h3>
+
+      <p>
+        <code>RefCell&lt;T&gt;</code> is the big sibling of <code>Cell</code>. It
+        lets you mutate any type through a shared reference -- not just <code>Copy</code>
+        types. The tradeoff: borrow rules are enforced at runtime instead of compile
+        time. If you violate them, the program panics.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+
+<span class="kw">let</span> data = <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]);
+
+<span class="cm">// Borrow immutably -- like &T</span>
+{
+    <span class="kw">let</span> r = data.<span class="fn">borrow</span>();
+    <span class="fn">println!</span>(<span class="str">"Length: {}"</span>, r.<span class="fn">len</span>());
+}
+
+<span class="cm">// Borrow mutably -- like &mut T</span>
+{
+    <span class="kw">let</span> <span class="kw">mut</span> w = data.<span class="fn">borrow_mut</span>();
+    w.<span class="fn">push</span>(<span class="num">4</span>);
+}
+
+<span class="cm">// This would panic at runtime:</span>
+<span class="cm">// let r = data.borrow();</span>
+<span class="cm">// let w = data.borrow_mut(); // PANIC: already borrowed</span></code></pre>
+
+      <p>
+        The rules are the same as the compile-time borrow checker: any number of
+        shared borrows (<code>borrow()</code>), or exactly one mutable borrow
+        (<code>borrow_mut()</code>), but not both at the same time. The difference is
+        that violations are caught when the code runs, not when it compiles. A
+        <code>RefCell</code> tracks its borrow state internally.
+      </p>
+
+      <p>
+        When you reach for it: you have a data structure behind a shared reference and
+        you need to mutate it. The most common case is <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> --
+        shared ownership plus mutation (covered in the combos section). But you also
+        see <code>RefCell</code> on struct fields when a method takes <code>&amp;self</code>
+        but needs to update internal caches or bookkeeping.
+      </p>
+
+      <p>
+        <code>RefCell</code> is single-threaded only. It is not <code>Sync</code>, so
+        you can't share it across threads. For the multi-threaded equivalent, use
+        <code>Mutex</code>.
+      </p>
+
+      <p>
+        The mental model: <code>RefCell</code> moves borrow checking from the compiler's
+        job to your job. The compiler can't prove your borrows are safe, so you're
+        telling it "I'll manage this, and if I'm wrong, crash rather than corrupt memory."
+        That's a reasonable tradeoff when the alternative is fighting the borrow checker
+        into contortions -- but it should feel like a deliberate choice, not a default.
+      </p>
+
+      <h3>7. Mutex&lt;T&gt; -- "RefCell for threads"</h3>
+
+      <p>
+        <code>Mutex&lt;T&gt;</code> protects data with a lock. Only one thread can
+        access the data at a time. You call <code>lock()</code> to acquire it, which
+        blocks until the lock is available and returns a <code>MutexGuard</code> -- an
+        RAII handle that automatically releases the lock when dropped.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">Mutex</span>};
+<span class="kw">use</span> std::thread;
+
+<span class="kw">let</span> counter = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="num">0</span>));
+
+<span class="kw">let</span> handles: <span class="ty">Vec</span>&lt;_&gt; = (<span class="num">0</span>..<span class="num">10</span>).<span class="fn">map</span>(|_| {
+    <span class="kw">let</span> counter = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;counter);
+    thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+        <span class="kw">let</span> <span class="kw">mut</span> num = counter.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+        *num += <span class="num">1</span>;
+        <span class="cm">// MutexGuard dropped here, lock released</span>
+    })
+}).<span class="fn">collect</span>();
+
+<span class="kw">for</span> h <span class="kw">in</span> handles { h.<span class="fn">join</span>().<span class="fn">unwrap</span>(); }
+<span class="fn">assert_eq!</span>(*counter.<span class="fn">lock</span>().<span class="fn">unwrap</span>(), <span class="num">10</span>);</code></pre>
+
+      <p>
+        If you're coming from C, this is <code>pthread_mutex_t</code> except the data
+        it protects is <em>inside</em> the mutex, not next to it. In C, you have a
+        mutex and some data, and you rely on conventions to remember to lock the mutex
+        before touching the data. In Rust, the only way to reach the data is through
+        the lock. The type system enforces the protocol.
+      </p>
+
+      <p>
+        <strong>Poisoning.</strong> If a thread panics while holding a
+        <code>MutexGuard</code>, the mutex becomes "poisoned." Future calls to
+        <code>lock()</code> return <code>Err</code> containing the guard, because
+        the data might be in an inconsistent state. Most of the time, you handle
+        this with <code>.unwrap()</code> (propagating the panic) or
+        <code>.lock().unwrap_or_else(|e| e.into_inner())</code> if you're confident
+        the data is still valid.
+      </p>
+
+      <pre><code><span class="cm">// If you don't care about poisoning:</span>
+<span class="kw">let</span> <span class="kw">mut</span> data = lock.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+
+<span class="cm">// If you want to recover from a poisoned mutex:</span>
+<span class="kw">let</span> <span class="kw">mut</span> data = lock.<span class="fn">lock</span>().<span class="fn">unwrap_or_else</span>(|e| e.<span class="fn">into_inner</span>());</code></pre>
+
+      <p>
+        The key design insight: hold the lock for as short a time as possible. The
+        <code>MutexGuard</code> holds the lock until it's dropped, so scope it tightly.
+        Clone data out, drop the guard, then do the expensive work with the cloned data.
+      </p>
+
+      <h3>8. RwLock&lt;T&gt; -- "Mutex with a fast path for readers"</h3>
+
+      <p>
+        <code>RwLock&lt;T&gt;</code> allows multiple simultaneous readers or one
+        exclusive writer. It's the same idea as <code>Mutex</code>, but if most of
+        your accesses are reads, multiple threads can proceed in parallel instead of
+        taking turns.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">RwLock</span>};
+<span class="kw">use</span> std::thread;
+
+<span class="kw">let</span> config = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">RwLock</span>::<span class="fn">new</span>(<span class="ty">Config</span>::<span class="fn">default</span>()));
+
+<span class="cm">// Many threads can read simultaneously</span>
+<span class="kw">let</span> readers: <span class="ty">Vec</span>&lt;_&gt; = (<span class="num">0</span>..<span class="num">10</span>).<span class="fn">map</span>(|_| {
+    <span class="kw">let</span> config = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;config);
+    thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+        <span class="kw">let</span> c = config.<span class="fn">read</span>().<span class="fn">unwrap</span>();
+        <span class="fn">println!</span>(<span class="str">"timeout: {}"</span>, c.timeout);
+    })
+}).<span class="fn">collect</span>();
+
+<span class="cm">// But writing blocks everyone</span>
+{
+    <span class="kw">let</span> <span class="kw">mut</span> c = config.<span class="fn">write</span>().<span class="fn">unwrap</span>();
+    c.timeout = <span class="num">30</span>;
+}</code></pre>
+
+      <p>
+        The tradeoff: <code>RwLock</code> has more overhead than <code>Mutex</code>
+        because it needs to track reader counts. For short critical sections or
+        write-heavy workloads, <code>Mutex</code> is often faster because its
+        lock/unlock is simpler. <code>RwLock</code> wins when you have many readers
+        and rare writers -- a configuration object read by every request but updated
+        once a minute, for example.
+      </p>
+
+      <p>
+        The default advice: start with <code>Mutex</code>. Switch to <code>RwLock</code>
+        if profiling shows lock contention on reads. Don't reach for <code>RwLock</code>
+        preemptively -- you'll pay the complexity cost without knowing whether you're
+        getting the performance benefit.
+      </p>
+
+      <h2>II. The Combos</h2>
+
+      <p>
+        The individual types above are building blocks. In practice, you almost
+        never use <code>Rc</code> without <code>RefCell</code>, or <code>Arc</code>
+        without <code>Mutex</code>. The real types you work with are combinations, and
+        they follow a consistent pattern: the <em>outer</em> wrapper handles ownership
+        (who can access the data), and the <em>inner</em> wrapper handles mutation
+        (how the data can change).
+      </p>
+
+      <h3>Rc&lt;RefCell&lt;T&gt;&gt; -- shared mutable state, single thread</h3>
+
+      <p>
+        This is the workhorse for single-threaded programs that need shared mutable
+        state. <code>Rc</code> lets multiple parts of your code own the data.
+        <code>RefCell</code> lets them mutate it. Together, they do what a
+        <code>shared_ptr</code> to a mutable object does in C++ -- except the
+        mutation rules are enforced at runtime.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::rc::<span class="ty">Rc</span>;
+<span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
+
+<span class="kw">let</span> state = <span class="ty">Rc</span>::<span class="fn">new</span>(<span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="ty">AppState</span>::<span class="fn">default</span>()));
+
+<span class="cm">// Handler A can read and write</span>
+<span class="kw">let</span> s = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;state);
+<span class="kw">let</span> on_click = <span class="kw">move</span> || {
+    s.<span class="fn">borrow_mut</span>().click_count += <span class="num">1</span>;
+};
+
+<span class="cm">// Handler B can also read and write</span>
+<span class="kw">let</span> s = <span class="ty">Rc</span>::<span class="fn">clone</span>(&amp;state);
+<span class="kw">let</span> on_reset = <span class="kw">move</span> || {
+    *s.<span class="fn">borrow_mut</span>() = <span class="ty">AppState</span>::<span class="fn">default</span>();
+};
+
+<span class="cm">// Renderer can read</span>
+<span class="fn">println!</span>(<span class="str">"Clicks: {}"</span>, state.<span class="fn">borrow</span>().click_count);</code></pre>
+
+      <p>
+        You'll see this in GUI frameworks, event systems, and anywhere a callback
+        graph needs to mutate shared state. It's Rust's answer to the global mutable
+        variable -- scoped, reference-counted, and runtime-checked.
+      </p>
+
+      <h3>Arc&lt;Mutex&lt;T&gt;&gt; -- shared mutable state, multi-thread</h3>
+
+      <p>
+        The multi-threaded equivalent of <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>.
+        <code>Arc</code> handles the sharing (with atomic reference counting), and
+        <code>Mutex</code> handles the mutation (with locking).
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">Mutex</span>};
+<span class="kw">use</span> std::thread;
+
+<span class="kw">let</span> db = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">Database</span>::<span class="fn">connect</span>()));
+
+<span class="kw">let</span> handles: <span class="ty">Vec</span>&lt;_&gt; = requests.<span class="fn">into_iter</span>().<span class="fn">map</span>(|req| {
+    <span class="kw">let</span> db = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;db);
+    thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
+        <span class="kw">let</span> <span class="kw">mut</span> conn = db.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+        conn.<span class="fn">execute</span>(&amp;req);
+    })
+}).<span class="fn">collect</span>();</code></pre>
+
+      <p>
+        This is the most common concurrent data pattern in Rust. If you're coming from
+        Go, it's roughly what a <code>sync.Mutex</code>-protected struct does. From
+        Java, it's a <code>synchronized</code> block. The Rust version is harder to
+        get wrong because the compiler won't let you access the data without going
+        through the lock.
+      </p>
+
+      <h3>Arc&lt;RwLock&lt;T&gt;&gt; -- shared mutable state, read-heavy multi-thread</h3>
+
+      <p>
+        Swap <code>Mutex</code> for <code>RwLock</code> when reads vastly outnumber
+        writes. The shape is the same -- <code>Arc</code> for ownership,
+        <code>RwLock</code> for mutation -- but reads don't block each other.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::sync::{<span class="ty">Arc</span>, <span class="ty">RwLock</span>};
+
+<span class="kw">let</span> cache = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="ty">RwLock</span>::<span class="fn">new</span>(<span class="ty">HashMap</span>::<span class="fn">new</span>()));
+
+<span class="cm">// Hot path: many concurrent reads</span>
+<span class="kw">let</span> val = cache.<span class="fn">read</span>().<span class="fn">unwrap</span>().<span class="fn">get</span>(<span class="str">"key"</span>).<span class="fn">cloned</span>();
+
+<span class="cm">// Cold path: occasional writes</span>
+cache.<span class="fn">write</span>().<span class="fn">unwrap</span>().<span class="fn">insert</span>(<span class="str">"key"</span>.<span class="fn">into</span>(), value);</code></pre>
+
+      <h3>The decision flowchart</h3>
+
+      <p>
+        Three questions determine which combo you need:
+      </p>
+
+      <pre><code><span class="cm">Do you need shared ownership? (Multiple parts of your code own the same data)
+├── No  → Just use T, &amp;T, or &amp;mut T. You don't need any of this.
+└── Yes
+    ├── Single-threaded?
+    │   ├── Read-only  → Rc&lt;T&gt;
+    │   └── Mutable    → Rc&lt;RefCell&lt;T&gt;&gt;
+    └── Multi-threaded?
+        ├── Read-only  → Arc&lt;T&gt;
+        ├── Mutable (most cases)       → Arc&lt;Mutex&lt;T&gt;&gt;
+        └── Mutable (read-heavy)       → Arc&lt;RwLock&lt;T&gt;&gt;</span></code></pre>
+
+      <p>
+        The pattern is always the same: outer wrapper for ownership, inner wrapper for
+        mutation. Once you see it that way, you stop memorizing combinations and start
+        assembling them from the two questions: "who needs access?" and "do they need
+        to write?"
+      </p>
+
+      <p>
+        A few things that don't need any of this: if you have one owner and want to
+        mutate, just use <code>&amp;mut T</code>. If you're passing data into a thread
+        and don't need it back, <code>move</code> it -- no <code>Arc</code> needed.
+        The smart pointer system exists for when ownership is genuinely shared, not
+        for every heap allocation.
+      </p>
+
+      <h2>III. The Six Supporting Method Pairs</h2>
+
+      <p>
+        The types above are the architecture. But day-to-day, you spend most of your
+        time calling methods on the values inside them -- unwrapping
+        <code>Option</code>s that come back from <code>Weak::upgrade()</code>, bridging
+        <code>Result</code>s from <code>Mutex::lock()</code>, transforming data inside
+        wrappers without taking ownership. These six method pairs are the toolkit that
+        makes the whole system livable.
+      </p>
+
+      <h3>1. The Error Control Flow Pair: ok_or / ok</h3>
+
+      <p>
+        You'll constantly cross between <code>Option</code> and <code>Result</code>
+        when working with these types. <code>Mutex::lock()</code> returns a
+        <code>Result</code>. <code>Weak::upgrade()</code> returns an
+        <code>Option</code>. HashMap lookups return <code>Option</code>. Your function
+        probably returns <code>Result</code>. You need to bridge the two.
+      </p>
+
+      <pre><code><span class="cm">// Option → Result: "None is an error"</span>
+<span class="kw">let</span> parent = node.parent.<span class="fn">upgrade</span>()
+    .<span class="fn">ok_or</span>(<span class="ty">Error</span>::ParentDropped)?;
+
+<span class="cm">// Result → Option: "I don't care about the error"</span>
+<span class="kw">let</span> value = cache.<span class="fn">lock</span>().<span class="fn">ok</span>()
+    .<span class="fn">and_then</span>(|guard| guard.<span class="fn">get</span>(key).<span class="fn">cloned</span>());</code></pre>
+
+      <p>
+        <code>ok_or</code> converts <code>None</code> into a specific error so you
+        can use <code>?</code> to propagate it. <code>ok()</code> goes the other
+        direction: it discards the error and gives you an <code>Option</code>. You'll
+        use <code>ok_or</code> when the absence is a real failure, and <code>ok()</code>
+        when it's not -- a poisoned mutex you want to silently skip, a parse that might
+        not work.
+      </p>
+
+      <h3>2. The Iterator Gatekeepers: filter / filter_map</h3>
+
+      <p>
+        When you're working with collections of wrapped values -- <code>Vec&lt;Weak&lt;T&gt;&gt;</code>,
+        <code>Vec&lt;Option&lt;T&gt;&gt;</code>, results from batch operations -- you
+        need to clean them up. <code>filter</code> removes entries that fail a test.
+        <code>filter_map</code> removes entries and transforms them in one step.
+      </p>
+
+      <pre><code><span class="cm">// Upgrade all Weak refs, dropping the dead ones</span>
+<span class="kw">let</span> live_observers: <span class="ty">Vec</span>&lt;<span class="ty">Rc</span>&lt;<span class="ty">Observer</span>&gt;&gt; = observers.<span class="fn">iter</span>()
+    .<span class="fn">filter_map</span>(|weak| weak.<span class="fn">upgrade</span>())
+    .<span class="fn">collect</span>();
+
+<span class="cm">// Keep only the connections that are still healthy</span>
+<span class="kw">let</span> active: <span class="ty">Vec</span>&lt;_&gt; = connections.<span class="fn">iter</span>()
+    .<span class="fn">filter</span>(|conn| conn.<span class="fn">is_alive</span>())
+    .<span class="fn">collect</span>();</code></pre>
+
+      <p>
+        <code>filter_map</code> is especially natural with <code>Weak</code> references.
+        <code>upgrade()</code> already returns <code>Option</code>, so
+        <code>filter_map</code> keeps the <code>Some</code>s and drops the
+        <code>None</code>s in one pass. No intermediate collection, no explicit
+        matching.
+      </p>
+
+      <h3>3. The Borrowing Bridges: as_ref / as_deref</h3>
+
+      <p>
+        You're holding an <code>Option&lt;String&gt;</code> inside a
+        <code>MutexGuard</code> or behind an <code>Rc</code>, and you want to peek at
+        it without cloning. <code>as_ref</code> gives you <code>Option&lt;&amp;String&gt;</code>.
+        <code>as_deref</code> goes further and gives you <code>Option&lt;&amp;str&gt;</code>.
+      </p>
+
+      <pre><code><span class="kw">let</span> data = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">Some</span>(<span class="str">"hello"</span>.<span class="fn">to_string</span>()));
+<span class="kw">let</span> guard = data.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+
+<span class="cm">// Peek at the string without cloning</span>
+<span class="kw">match</span> guard.<span class="fn">as_deref</span>() {
+    <span class="ty">Some</span>(<span class="str">"hello"</span>) =&gt; <span class="fn">println!</span>(<span class="str">"greeting found"</span>),
+    <span class="ty">Some</span>(other) =&gt; <span class="fn">println!</span>(<span class="str">"found: {other}"</span>),
+    <span class="ty">None</span> =&gt; <span class="fn">println!</span>(<span class="str">"empty"</span>),
+}</code></pre>
+
+      <p>
+        <code>as_deref()</code> is the gold standard for peeking. It works on
+        <code>Option&lt;String&gt;</code> (gives <code>Option&lt;&amp;str&gt;</code>),
+        <code>Option&lt;Vec&lt;T&gt;&gt;</code> (gives <code>Option&lt;&amp;[T]&gt;</code>),
+        and <code>Option&lt;Box&lt;T&gt;&gt;</code> (gives <code>Option&lt;&amp;T&gt;</code>).
+        Anywhere you have an owned value inside an <code>Option</code> and want a
+        borrowed view of its contents, <code>as_deref</code> is the answer.
+      </p>
+
+      <h3>4. The Value Swappers: take / replace</h3>
+
+      <p>
+        When data is behind a <code>MutexGuard</code> or <code>RefMut</code>, you
+        can't just move it out -- the guard is a reference, not an owner. But you can
+        <em>swap</em> it out, leaving a valid value behind. <code>take</code> swaps
+        with the default (<code>None</code> for <code>Option</code>).
+        <code>replace</code> swaps with a value you provide.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::mem;
+
+<span class="kw">let</span> state = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">State</span>::Running);
+
+<span class="cm">// Transition state, get the old value</span>
+<span class="kw">let</span> <span class="kw">mut</span> guard = state.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+<span class="kw">let</span> previous = mem::<span class="fn">replace</span>(&amp;<span class="kw">mut</span> *guard, <span class="ty">State</span>::Paused);
+<span class="cm">// guard now holds Paused, previous holds Running</span>
+
+<span class="cm">// Or with Option: take the value out</span>
+<span class="kw">let</span> pending = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">Some</span>(<span class="ty">Message</span>::<span class="fn">new</span>(<span class="str">"hello"</span>)));
+<span class="kw">let</span> <span class="kw">mut</span> guard = pending.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+<span class="kw">let</span> msg = guard.<span class="fn">take</span>();
+<span class="cm">// guard now holds None, msg holds Some(Message)</span></code></pre>
+
+      <p>
+        This pattern is essential for state machines behind locks. You can't do a
+        match-and-move because the guard only gives you a mutable reference. But
+        <code>mem::replace</code> works on any mutable reference -- it puts the new
+        value in and hands you the old one, all through <code>&amp;mut</code>. No
+        <code>Clone</code> required, no intermediate invalid state.
+      </p>
+
+      <h3>5. The Searchers: find_map / position</h3>
+
+      <p>
+        When you're searching through a collection of wrapped values -- finding the
+        first valid entry, locating an item in a <code>Vec</code> protected by a
+        lock -- you want to combine the search and the transformation.
+      </p>
+
+      <pre><code><span class="cm">// Find the first observer that's still alive and return its ID</span>
+<span class="kw">let</span> first_live_id = observers.<span class="fn">iter</span>()
+    .<span class="fn">find_map</span>(|weak| weak.<span class="fn">upgrade</span>().<span class="fn">map</span>(|rc| rc.id));
+
+<span class="cm">// Find where a specific connection is in the list</span>
+<span class="kw">let</span> idx = connections.<span class="fn">iter</span>()
+    .<span class="fn">position</span>(|c| c.id == target_id);</code></pre>
+
+      <p>
+        <code>find_map</code> searches and transforms in one pass: return
+        <code>Some(value)</code> to say "found it, here's what I want" or
+        <code>None</code> to say "keep looking." <code>position</code> returns the
+        index instead of the element -- useful when you need to remove or replace
+        an item in a <code>Vec</code>.
+      </p>
+
+      <h3>6. The Heap Signalers: copied / cloned</h3>
+
+      <p>
+        When iterating over references to values inside smart pointers, you often need
+        owned copies. <code>copied()</code> and <code>cloned()</code> both do this,
+        but they signal different costs to the reader.
+      </p>
+
+      <pre><code><span class="kw">let</span> counts = <span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>];
+<span class="kw">let</span> names = <span class="fn">vec!</span>[<span class="str">"Alice"</span>.<span class="fn">to_string</span>(), <span class="str">"Bob"</span>.<span class="fn">to_string</span>()];
+
+<span class="cm">// copied: cheap, just memcpy of small values</span>
+<span class="kw">let</span> doubled: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = counts.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">map</span>(|n| n * <span class="num">2</span>).<span class="fn">collect</span>();
+
+<span class="cm">// cloned: potentially expensive, heap allocations</span>
+<span class="kw">let</span> owned_names: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = names.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>();</code></pre>
+
+      <p>
+        The distinction matters for code review. When you see <code>copied()</code>,
+        you know it's trivial -- a few bytes of stack copying. When you see
+        <code>cloned()</code>, you know heap allocation might be involved. And
+        <code>Arc::clone()</code> is a special case: it looks like <code>cloned</code>
+        but it's cheap (just bumps a counter). That's why the convention is to write
+        <code>Arc::clone(&amp;x)</code> instead of <code>x.clone()</code> -- so readers
+        can tell the difference at a glance.
+      </p>
+
+      <pre><code><span class="cm">// These two do the same thing, but one communicates cost:</span>
+<span class="kw">let</span> a = x.<span class="fn">clone</span>();          <span class="cm">// Could be expensive. Reader has to check the type.</span>
+<span class="kw">let</span> b = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;x);    <span class="cm">// Cheap. Just a reference count bump.</span></code></pre>
+
+      <h2>What Comes Next</h2>
+
+      <p>
+        This post covered the core system: the types that handle ownership, sharing,
+        and mutation, plus the method pairs you use to work with them daily. These are
+        the types you'll use in almost every Rust program that does more than compute
+        and exit.
+      </p>
+
+      <p>
+        Part 2 covers the specialists -- types that solve narrower problems but solve
+        them extremely well: <code>Cow</code> (borrow or own, decided at runtime),
+        <code>OnceCell</code> and <code>LazyLock</code> (initialize once, use forever),
+        <code>Pin</code> (don't move this value in memory), and a few more. Where Part
+        1 is the type system you use every day, Part 2 is the toolkit you reach for
+        when a specific problem demands it.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
