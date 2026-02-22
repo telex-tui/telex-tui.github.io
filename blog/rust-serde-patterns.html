@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Serde Patterns: The Practical Guide to Serialization in Rust - Telex</title>
+  <meta name="description" content="Derive, rename, skip, flatten, untagged enums, default values, custom serialization — the patterns you actually need when working with JSON, TOML, and any other format serde supports.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Serde Patterns: The Practical Guide to Serialization in Rust</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        If you write Rust that talks to the outside world, you use serde. Config files,
+        HTTP APIs, databases, message queues &mdash; serde is behind nearly all of it. The
+        derive macros get you started in seconds, but real-world data is messy.
+        Keys are camelCase when your structs are snake_case. Fields show up sometimes and
+        don't other times. APIs wrap everything in a <code>"data"</code> envelope. Numbers
+        arrive as strings. This post covers the attributes and patterns you actually reach
+        for when that happens.
+      </p>
+
+      <h2>The basics (quick recap)</h2>
+
+      <p>
+        Add <code>serde</code> with the <code>derive</code> feature and a format crate
+        like <code>serde_json</code>. Slap <code>#[derive(Serialize, Deserialize)]</code>
+        on your struct, and you're done. Serde generates the serialization code at compile
+        time &mdash; no reflection, no runtime overhead.
+      </p>
+
+      <pre><code><span class="kw">use</span> serde::{<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>};
+
+<span class="cm">// That's it. This struct can now be converted to/from JSON, TOML,</span>
+<span class="cm">// YAML, MessagePack, and dozens of other formats.</span>
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">User</span> {
+    name: <span class="ty">String</span>,
+    email: <span class="ty">String</span>,
+    age: <span class="ty">u32</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> json = <span class="str">r#"{"name": "Alice", "email": "alice@example.com", "age": 30}"#</span>;
+    <span class="kw">let</span> user: <span class="ty">User</span> = serde_json::<span class="fn">from_str</span>(json).<span class="fn">unwrap</span>();
+    <span class="fn">println!</span>(<span class="str">"{:?}"</span>, user);
+
+    <span class="kw">let</span> back_to_json = serde_json::<span class="fn">to_string_pretty</span>(&amp;user).<span class="fn">unwrap</span>();
+    <span class="fn">println!</span>(<span class="str">"{}"</span>, back_to_json);
+}</code></pre>
+
+      <p>
+        That covers perhaps 40% of real usage. The other 60% is where the attributes come in.
+        Let's go through them.
+      </p>
+
+      <h2>Field-level attributes</h2>
+
+      <p>
+        This is where you spend most of your time with serde. The data you're working with
+        almost never matches your Rust structs perfectly out of the box. Field-level
+        attributes bridge the gap between what the external world sends you and what your
+        code wants to work with.
+      </p>
+
+      <h3><code>#[serde(rename = "...")]</code></h3>
+
+      <p>
+        The JSON key is <code>"userName"</code> but your Rust field is <code>user_name</code>.
+        This is the most common attribute you'll use. It maps a Rust field name to a
+        different serialized name without forcing you to break Rust naming conventions.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">ApiResponse</span> {
+    #[serde(rename = <span class="str">"userId"</span>)]
+    user_id: <span class="ty">u64</span>,
+
+    #[serde(rename = <span class="str">"firstName"</span>)]
+    first_name: <span class="ty">String</span>,
+
+    #[serde(rename = <span class="str">"lastName"</span>)]
+    last_name: <span class="ty">String</span>,
+}</code></pre>
+
+      <p>
+        This works in both directions: serialization uses the renamed key, and
+        deserialization expects it. If you need different names for each direction,
+        there's <code>#[serde(rename(serialize = "...", deserialize = "..."))]</code>,
+        but you rarely need it.
+      </p>
+
+      <h3><code>#[serde(rename_all = "...")]</code></h3>
+
+      <p>
+        If every field follows the same naming convention, renaming them one by one is
+        tedious. Put <code>rename_all</code> on the struct (or enum) instead and serde
+        converts every field automatically.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+#[serde(rename_all = <span class="str">"camelCase"</span>)]
+<span class="kw">struct</span> <span class="ty">UserProfile</span> {
+    user_id: <span class="ty">u64</span>,           <span class="cm">// serializes as "userId"</span>
+    first_name: <span class="ty">String</span>,     <span class="cm">// serializes as "firstName"</span>
+    last_name: <span class="ty">String</span>,      <span class="cm">// serializes as "lastName"</span>
+    email_verified: <span class="ty">bool</span>,   <span class="cm">// serializes as "emailVerified"</span>
+}</code></pre>
+
+      <p>
+        The supported conventions are <code>"camelCase"</code>, <code>"PascalCase"</code>,
+        <code>"snake_case"</code>, <code>"SCREAMING_SNAKE_CASE"</code>,
+        <code>"kebab-case"</code>, and <code>"SCREAMING-KEBAB-CASE"</code>. For JSON APIs,
+        <code>camelCase</code> is by far the most common. For TOML and YAML config files,
+        <code>kebab-case</code> shows up frequently.
+      </p>
+
+      <h3><code>#[serde(skip)]</code></h3>
+
+      <p>
+        Some fields are internal state that shouldn't appear in the serialized output and
+        shouldn't be expected on input. <code>skip</code> excludes the field entirely from
+        both serialization and deserialization. The field must implement <code>Default</code>
+        so serde can fill it in during deserialization.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">Document</span> {
+    title: <span class="ty">String</span>,
+    body: <span class="ty">String</span>,
+
+    <span class="cm">// Internal bookkeeping, not part of the serialized format</span>
+    #[serde(skip)]
+    dirty: <span class="ty">bool</span>,
+
+    #[serde(skip)]
+    cache: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+}</code></pre>
+
+      <p>
+        There are also <code>#[serde(skip_serializing)]</code> and
+        <code>#[serde(skip_deserializing)]</code> if you only want to skip in one direction.
+      </p>
+
+      <h3><code>#[serde(skip_serializing_if = "...")]</code></h3>
+
+      <p>
+        This is the one you use to omit <code>None</code> values from JSON output instead
+        of writing them as <code>null</code>. It takes a path to a function that returns
+        <code>bool</code> &mdash; if the function returns <code>true</code>, the field is
+        omitted.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">UpdateRequest</span> {
+    #[serde(skip_serializing_if = <span class="str">"Option::is_none"</span>)]
+    name: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+
+    #[serde(skip_serializing_if = <span class="str">"Option::is_none"</span>)]
+    email: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+
+    #[serde(skip_serializing_if = <span class="str">"Vec::is_empty"</span>)]
+    tags: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;,
+}
+
+<span class="cm">// With name = Some("Alice"), email = None, tags = vec![]</span>
+<span class="cm">// Serializes to: {"name": "Alice"}</span>
+<span class="cm">// Instead of:   {"name": "Alice", "email": null, "tags": []}</span></code></pre>
+
+      <p>
+        This is especially important for PATCH-style API requests where you only want to
+        send the fields that actually changed. The predicate function can be anything &mdash;
+        <code>Option::is_none</code>, <code>Vec::is_empty</code>, or your own function that
+        checks whatever condition you want.
+      </p>
+
+      <h3><code>#[serde(default)]</code></h3>
+
+      <p>
+        When a field is missing from the input, instead of failing, use
+        <code>Default::default()</code> to fill it in. This is essential for config files
+        where you want sensible defaults for anything the user doesn't specify.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">ServerConfig</span> {
+    host: <span class="ty">String</span>,
+
+    #[serde(default = <span class="str">"default_port"</span>)]
+    port: <span class="ty">u16</span>,
+
+    #[serde(default)]
+    verbose: <span class="ty">bool</span>,    <span class="cm">// defaults to false</span>
+
+    #[serde(default)]
+    max_connections: <span class="ty">u32</span>, <span class="cm">// defaults to 0</span>
+
+    #[serde(default)]
+    allowed_origins: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;, <span class="cm">// defaults to empty vec</span>
+}
+
+<span class="kw">fn</span> <span class="fn">default_port</span>() -&gt; <span class="ty">u16</span> {
+    <span class="num">8080</span>
+}</code></pre>
+
+      <p>
+        Plain <code>#[serde(default)]</code> calls <code>Default::default()</code> for that
+        field's type. <code>#[serde(default = "path")]</code> calls a specific function. You
+        can also put <code>#[serde(default)]</code> on the struct itself to apply it to every
+        field at once.
+      </p>
+
+      <h3><code>#[serde(flatten)]</code></h3>
+
+      <p>
+        Flatten inlines a nested struct's fields into the parent. This is useful when you
+        want to compose structs in Rust but the serialized format is a flat object.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">Pagination</span> {
+    page: <span class="ty">u32</span>,
+    per_page: <span class="ty">u32</span>,
+}
+
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">SearchRequest</span> {
+    query: <span class="ty">String</span>,
+
+    #[serde(flatten)]
+    pagination: <span class="ty">Pagination</span>,
+}
+
+<span class="cm">// Serializes to: {"query": "rust serde", "page": 1, "per_page": 20}</span>
+<span class="cm">// Not:           {"query": "rust serde", "pagination": {"page": 1, "per_page": 20}}</span></code></pre>
+
+      <p>
+        This pattern is great for reusing common field groups. You define pagination, sorting,
+        and filtering as separate structs, then flatten them into whatever request type needs
+        them. In your Rust code you get nice composition. In the serialized output you get a
+        flat structure that matches what the API expects.
+      </p>
+
+      <h2>Enum representations</h2>
+
+      <p>
+        Serde supports four different ways to represent enums in serialized data. This matters
+        a lot because the choice affects what your JSON (or TOML, or whatever) looks like, and
+        you usually need to match an existing format rather than pick your favorite. Let's look
+        at all four using the same enum.
+      </p>
+
+      <pre><code><span class="cm">// The enum we'll serialize four different ways</span>
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">enum</span> <span class="ty">Message</span> {
+    <span class="ty">Text</span> { body: <span class="ty">String</span> },
+    <span class="ty">Image</span> { url: <span class="ty">String</span>, width: <span class="ty">u32</span> },
+    <span class="ty">Ping</span>,
+}</code></pre>
+
+      <h3>Externally tagged (the default)</h3>
+
+      <p>
+        With no attribute, serde uses external tagging. The variant name is a key, and the
+        content is the value.
+      </p>
+
+      <pre><code><span class="cm">// Text { body: "hello" } becomes:</span>
+<span class="cm">// {"Text": {"body": "hello"}}</span>
+<span class="cm">//</span>
+<span class="cm">// Ping becomes:</span>
+<span class="cm">// "Ping"</span></code></pre>
+
+      <p>
+        It works, but it's awkward for most JSON APIs. You can't easily add a common field
+        like a timestamp alongside the tag.
+      </p>
+
+      <h3>Internally tagged</h3>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+#[serde(tag = <span class="str">"type"</span>)]
+<span class="kw">enum</span> <span class="ty">Message</span> {
+    <span class="ty">Text</span> { body: <span class="ty">String</span> },
+    <span class="ty">Image</span> { url: <span class="ty">String</span>, width: <span class="ty">u32</span> },
+    <span class="ty">Ping</span>,
+}
+
+<span class="cm">// Text { body: "hello" } becomes:</span>
+<span class="cm">// {"type": "Text", "body": "hello"}</span>
+<span class="cm">//</span>
+<span class="cm">// Ping becomes:</span>
+<span class="cm">// {"type": "Ping"}</span></code></pre>
+
+      <p>
+        The tag is a field inside the object. This is what most REST APIs look like. You
+        can combine it with <code>rename_all</code> to get
+        <code>{"type": "text", "body": "hello"}</code> instead.
+      </p>
+
+      <h3>Adjacently tagged</h3>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+#[serde(tag = <span class="str">"type"</span>, content = <span class="str">"data"</span>)]
+<span class="kw">enum</span> <span class="ty">Message</span> {
+    <span class="ty">Text</span> { body: <span class="ty">String</span> },
+    <span class="ty">Image</span> { url: <span class="ty">String</span>, width: <span class="ty">u32</span> },
+    <span class="ty">Ping</span>,
+}
+
+<span class="cm">// Text { body: "hello" } becomes:</span>
+<span class="cm">// {"type": "Text", "data": {"body": "hello"}}</span>
+<span class="cm">//</span>
+<span class="cm">// Ping becomes:</span>
+<span class="cm">// {"type": "Ping"}</span></code></pre>
+
+      <p>
+        The tag and the content live side by side in the same object. This shows up in some
+        APIs and event systems where the payload is explicitly separated from the metadata.
+      </p>
+
+      <h3>Untagged</h3>
+
+      <pre><code>#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+#[serde(untagged)]
+<span class="kw">enum</span> <span class="ty">Message</span> {
+    <span class="ty">Text</span> { body: <span class="ty">String</span> },
+    <span class="ty">Image</span> { url: <span class="ty">String</span>, width: <span class="ty">u32</span> },
+    <span class="ty">Ping</span>,
+}
+
+<span class="cm">// Text { body: "hello" } becomes:</span>
+<span class="cm">// {"body": "hello"}</span>
+<span class="cm">//</span>
+<span class="cm">// No variant name appears anywhere.</span></code></pre>
+
+      <p>
+        Untagged enums have no discriminator. Serde tries each variant in order and uses the
+        first one that successfully deserializes. This is powerful but comes with trade-offs:
+        error messages are terrible (you just get "data did not match any variant"), and
+        variant order matters because ambiguous data will match whichever variant comes first.
+      </p>
+
+      <p>
+        The decision: for JSON APIs, internally tagged is the most common and usually the
+        right choice. It produces clean, readable JSON and makes it obvious what type of
+        object you're looking at. Use untagged when you're consuming an API you don't
+        control that doesn't include a type discriminator. Use adjacently tagged when the
+        API wraps payloads in a separate field. The external default is fine for Rust-to-Rust
+        communication where humans won't read the data.
+      </p>
+
+      <h2>Handling messy real-world data</h2>
+
+      <p>
+        The patterns above cover the well-designed cases. But real APIs are not well-designed.
+        Here's how to deal with the common headaches.
+      </p>
+
+      <h3>String-or-number fields</h3>
+
+      <p>
+        Some APIs send the same field as a number sometimes and a string other times.
+        A user ID might be <code>12345</code> in one response and <code>"12345"</code> in
+        another. An untagged enum handles this cleanly.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::fmt;
+
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>, <span class="ty">Debug</span>, <span class="ty">Clone</span>)]
+#[serde(untagged)]
+<span class="kw">enum</span> <span class="ty">StringOrNumber</span> {
+    <span class="ty">Number</span>(<span class="ty">u64</span>),
+    <span class="ty">Text</span>(<span class="ty">String</span>),
+}
+
+<span class="kw">impl</span> <span class="ty">StringOrNumber</span> {
+    <span class="kw">fn</span> <span class="fn">as_u64</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">u64</span>&gt; {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">StringOrNumber</span>::<span class="ty">Number</span>(n) =&gt; <span class="ty">Some</span>(*n),
+            <span class="ty">StringOrNumber</span>::<span class="ty">Text</span>(s) =&gt; s.<span class="fn">parse</span>().<span class="fn">ok</span>(),
+        }
+    }
+}
+
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">ApiUser</span> {
+    id: <span class="ty">StringOrNumber</span>,
+    name: <span class="ty">String</span>,
+}
+
+<span class="cm">// Both of these work:</span>
+<span class="cm">// {"id": 12345,   "name": "Alice"}</span>
+<span class="cm">// {"id": "12345", "name": "Alice"}</span></code></pre>
+
+      <p>
+        Note the variant order: <code>Number</code> comes first because serde tries variants
+        in order for untagged enums. If <code>Text</code> came first, every number would
+        deserialize as a string (since JSON numbers are valid strings in many parsers).
+      </p>
+
+      <h3>Unknown fields</h3>
+
+      <p>
+        By default, serde silently ignores fields it doesn't recognize. That's usually fine,
+        but sometimes you want to be strict or capture everything.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="cm">// Strict mode: reject any unexpected fields</span>
+#[derive(<span class="ty">Deserialize</span>)]
+#[serde(deny_unknown_fields)]
+<span class="kw">struct</span> <span class="ty">StrictConfig</span> {
+    host: <span class="ty">String</span>,
+    port: <span class="ty">u16</span>,
+}
+
+<span class="cm">// Permissive mode: capture unknown fields in a map</span>
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">FlexibleConfig</span> {
+    host: <span class="ty">String</span>,
+    port: <span class="ty">u16</span>,
+
+    #[serde(flatten)]
+    extra: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, serde_json::<span class="ty">Value</span>&gt;,
+}</code></pre>
+
+      <p>
+        The <code>deny_unknown_fields</code> approach is good for config files where a typo
+        in a key name should be an error, not silently ignored. The <code>flatten</code>
+        with <code>HashMap</code> approach is useful when you want to forward unknown fields
+        to another system or log them for debugging.
+      </p>
+
+      <h3>Custom date/time deserialization</h3>
+
+      <p>
+        Dates are a perennial pain point. Some APIs send Unix timestamps, some send ISO 8601
+        strings, some send epoch milliseconds. Serde's <code>deserialize_with</code>
+        attribute lets you write a function that handles whatever format you're dealing with.
+      </p>
+
+      <pre><code><span class="kw">use</span> serde::{<span class="ty">Deserialize</span>, <span class="ty">Deserializer</span>};
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">Event</span> {
+    name: <span class="ty">String</span>,
+
+    #[serde(deserialize_with = <span class="str">"deserialize_timestamp"</span>)]
+    created_at: <span class="ty">u64</span>, <span class="cm">// always stored as seconds</span>
+}
+
+<span class="cm">// Accept either seconds (u64) or milliseconds (u64 > 1e12)</span>
+<span class="kw">fn</span> <span class="fn">deserialize_timestamp</span>&lt;'de, D&gt;(deserializer: D) -&gt; <span class="ty">Result</span>&lt;<span class="ty">u64</span>, D::<span class="ty">Error</span>&gt;
+<span class="kw">where</span>
+    D: <span class="ty">Deserializer</span>&lt;'de&gt;,
+{
+    <span class="kw">let</span> value = <span class="ty">u64</span>::<span class="fn">deserialize</span>(deserializer)?;
+    <span class="kw">if</span> value &gt; <span class="num">1_000_000_000_000</span> {
+        <span class="cm">// Looks like milliseconds, convert to seconds</span>
+        <span class="ty">Ok</span>(value / <span class="num">1000</span>)
+    } <span class="kw">else</span> {
+        <span class="ty">Ok</span>(value)
+    }
+}
+
+<span class="cm">// Both work:</span>
+<span class="cm">// {"name": "deploy", "created_at": 1700000000}</span>
+<span class="cm">// {"name": "deploy", "created_at": 1700000000000}</span></code></pre>
+
+      <h3>Nested JSON strings</h3>
+
+      <p>
+        Sometimes an API returns a field that contains a JSON string inside a JSON string.
+        Yes, this happens. The outer JSON has a string field, and that string is itself
+        valid JSON that you need to parse into a struct.
+      </p>
+
+      <pre><code><span class="kw">use</span> serde::{<span class="ty">Deserialize</span>, <span class="ty">Deserializer</span>};
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">Metadata</span> {
+    version: <span class="ty">u32</span>,
+    region: <span class="ty">String</span>,
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">Webhook</span> {
+    event: <span class="ty">String</span>,
+
+    <span class="cm">// The API sends this as a JSON string, not a JSON object</span>
+    #[serde(deserialize_with = <span class="str">"deserialize_nested_json"</span>)]
+    metadata: <span class="ty">Metadata</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">deserialize_nested_json</span>&lt;'de, D, T&gt;(deserializer: D) -&gt; <span class="ty">Result</span>&lt;T, D::<span class="ty">Error</span>&gt;
+<span class="kw">where</span>
+    D: <span class="ty">Deserializer</span>&lt;'de&gt;,
+    T: serde::de::<span class="ty">DeserializeOwned</span>,
+{
+    <span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">deserialize</span>(deserializer)?;
+    serde_json::<span class="fn">from_str</span>(&amp;s).<span class="fn">map_err</span>(serde::de::<span class="ty">Error</span>::custom)
+}
+
+<span class="cm">// Handles: {"event": "push", "metadata": "{\"version\":2,\"region\":\"us-east\"}"}</span></code></pre>
+
+      <p>
+        The <code>deserialize_nested_json</code> function is generic over <code>T</code>, so
+        you can reuse it for any field that has this "JSON string inside JSON" problem.
+      </p>
+
+      <h2>Custom serialization and deserialization</h2>
+
+      <p>
+        When attributes aren't enough, serde gives you three levels of customization:
+        the <code>with</code> module pattern, standalone functions, and full manual
+        implementations.
+      </p>
+
+      <h3><code>#[serde(with = "module")]</code></h3>
+
+      <p>
+        The <code>with</code> attribute points to a module that provides both
+        <code>serialize</code> and <code>deserialize</code> functions. This is the
+        cleanest approach when you need to customize both directions for a field.
+      </p>
+
+      <pre><code><span class="kw">mod</span> hex_bytes {
+    <span class="kw">use</span> serde::{<span class="ty">Serializer</span>, <span class="ty">Deserializer</span>, <span class="ty">Deserialize</span>};
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="fn">serialize</span>&lt;S&gt;(bytes: &amp;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;, serializer: S) -&gt; <span class="ty">Result</span>&lt;S::<span class="ty">Ok</span>, S::<span class="ty">Error</span>&gt;
+    <span class="kw">where</span>
+        S: <span class="ty">Serializer</span>,
+    {
+        <span class="kw">let</span> hex_string: <span class="ty">String</span> = bytes.<span class="fn">iter</span>().<span class="fn">map</span>(|b| <span class="fn">format!</span>(<span class="str">"{:02x}"</span>, b)).<span class="fn">collect</span>();
+        serializer.<span class="fn">serialize_str</span>(&amp;hex_string)
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="fn">deserialize</span>&lt;'de, D&gt;(deserializer: D) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;, D::<span class="ty">Error</span>&gt;
+    <span class="kw">where</span>
+        D: <span class="ty">Deserializer</span>&lt;'de&gt;,
+    {
+        <span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">deserialize</span>(deserializer)?;
+        (<span class="num">0</span>..s.<span class="fn">len</span>())
+            .<span class="fn">step_by</span>(<span class="num">2</span>)
+            .<span class="fn">map</span>(|i| {
+                <span class="ty">u8</span>::<span class="fn">from_str_radix</span>(&amp;s[i..i + <span class="num">2</span>], <span class="num">16</span>)
+                    .<span class="fn">map_err</span>(|e| serde::de::<span class="ty">Error</span>::<span class="fn">custom</span>(e))
+            })
+            .<span class="fn">collect</span>()
+    }
+}
+
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>)]
+<span class="kw">struct</span> <span class="ty">FileHash</span> {
+    name: <span class="ty">String</span>,
+
+    #[serde(with = <span class="str">"hex_bytes"</span>)]
+    checksum: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;,
+}
+
+<span class="cm">// Serializes as: {"name": "data.bin", "checksum": "a1b2c3d4"}</span>
+<span class="cm">// Instead of:    {"name": "data.bin", "checksum": [161, 178, 195, 212]}</span></code></pre>
+
+      <h3><code>#[serde(deserialize_with = "function")]</code></h3>
+
+      <p>
+        If you only need to customize deserialization, point to a single function instead
+        of a whole module. We already saw this with the timestamp example above. Here's
+        another common case: deserializing a comma-separated string into a <code>Vec</code>.
+      </p>
+
+      <pre><code><span class="kw">use</span> serde::{<span class="ty">Deserialize</span>, <span class="ty">Deserializer</span>};
+
+<span class="kw">fn</span> <span class="fn">comma_separated</span>&lt;'de, D&gt;(deserializer: D) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;, D::<span class="ty">Error</span>&gt;
+<span class="kw">where</span>
+    D: <span class="ty">Deserializer</span>&lt;'de&gt;,
+{
+    <span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">deserialize</span>(deserializer)?;
+    <span class="ty">Ok</span>(s.<span class="fn">split</span>(<span class="str">','</span>).<span class="fn">map</span>(|s| s.<span class="fn">trim</span>().<span class="fn">to_string</span>()).<span class="fn">collect</span>())
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">CsvRow</span> {
+    name: <span class="ty">String</span>,
+
+    #[serde(deserialize_with = <span class="str">"comma_separated"</span>)]
+    tags: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;,
+}
+
+<span class="cm">// {"name": "post", "tags": "rust, serde, json"}</span>
+<span class="cm">// Parses tags as: vec!["rust", "serde", "json"]</span></code></pre>
+
+      <h3>Manual Serialize/Deserialize implementation</h3>
+
+      <p>
+        Sometimes no combination of attributes will do what you need. You can implement
+        the traits by hand. This is verbose but gives you total control. You'll rarely need
+        this, but it's good to know it's an option.
+      </p>
+
+      <pre><code><span class="kw">use</span> serde::{<span class="ty">Serialize</span>, <span class="ty">Serializer</span>, <span class="ty">Deserialize</span>, <span class="ty">Deserializer</span>};
+<span class="kw">use</span> serde::ser::<span class="ty">SerializeStruct</span>;
+
+<span class="kw">struct</span> <span class="ty">Color</span> {
+    r: <span class="ty">u8</span>,
+    g: <span class="ty">u8</span>,
+    b: <span class="ty">u8</span>,
+}
+
+<span class="cm">// Serialize as "#rrggbb" string instead of {"r": 0, "g": 0, "b": 0}</span>
+<span class="kw">impl</span> <span class="ty">Serialize</span> <span class="kw">for</span> <span class="ty">Color</span> {
+    <span class="kw">fn</span> <span class="fn">serialize</span>&lt;S&gt;(&amp;<span class="kw">self</span>, serializer: S) -&gt; <span class="ty">Result</span>&lt;S::<span class="ty">Ok</span>, S::<span class="ty">Error</span>&gt;
+    <span class="kw">where</span>
+        S: <span class="ty">Serializer</span>,
+    {
+        <span class="kw">let</span> hex = <span class="fn">format!</span>(<span class="str">"#{:02x}{:02x}{:02x}"</span>, <span class="kw">self</span>.r, <span class="kw">self</span>.g, <span class="kw">self</span>.b);
+        serializer.<span class="fn">serialize_str</span>(&amp;hex)
+    }
+}
+
+<span class="cm">// Deserialize from "#rrggbb" string</span>
+<span class="kw">impl</span>&lt;'de&gt; <span class="ty">Deserialize</span>&lt;'de&gt; <span class="kw">for</span> <span class="ty">Color</span> {
+    <span class="kw">fn</span> <span class="fn">deserialize</span>&lt;D&gt;(deserializer: D) -&gt; <span class="ty">Result</span>&lt;<span class="kw">Self</span>, D::<span class="ty">Error</span>&gt;
+    <span class="kw">where</span>
+        D: <span class="ty">Deserializer</span>&lt;'de&gt;,
+    {
+        <span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">deserialize</span>(deserializer)?;
+        <span class="kw">let</span> s = s.<span class="fn">trim_start_matches</span>(<span class="str">'#'</span>);
+        <span class="kw">if</span> s.<span class="fn">len</span>() != <span class="num">6</span> {
+            <span class="kw">return</span> <span class="ty">Err</span>(serde::de::<span class="ty">Error</span>::<span class="fn">custom</span>(<span class="str">"expected 6-character hex color"</span>));
+        }
+        <span class="kw">let</span> r = <span class="ty">u8</span>::<span class="fn">from_str_radix</span>(&amp;s[<span class="num">0</span>..<span class="num">2</span>], <span class="num">16</span>).<span class="fn">map_err</span>(serde::de::<span class="ty">Error</span>::custom)?;
+        <span class="kw">let</span> g = <span class="ty">u8</span>::<span class="fn">from_str_radix</span>(&amp;s[<span class="num">2</span>..<span class="num">4</span>], <span class="num">16</span>).<span class="fn">map_err</span>(serde::de::<span class="ty">Error</span>::custom)?;
+        <span class="kw">let</span> b = <span class="ty">u8</span>::<span class="fn">from_str_radix</span>(&amp;s[<span class="num">4</span>..<span class="num">6</span>], <span class="num">16</span>).<span class="fn">map_err</span>(serde::de::<span class="ty">Error</span>::custom)?;
+        <span class="ty">Ok</span>(<span class="ty">Color</span> { r, g, b })
+    }
+}</code></pre>
+
+      <p>
+        Manual implementations are most useful when your serialized form is radically
+        different from your Rust representation. A color as a hex string, a duration as
+        a human-readable string like <code>"30s"</code> or <code>"5m"</code>, coordinates
+        as a two-element array instead of a struct &mdash; those are the cases where manual
+        impls earn their verbosity.
+      </p>
+
+      <h2>Patterns for API clients</h2>
+
+      <p>
+        When you're building a client for someone else's HTTP API, several of the patterns
+        above come together. Here are the combinations that show up constantly.
+      </p>
+
+      <h3>Response wrappers with flatten</h3>
+
+      <p>
+        Most APIs wrap their response data in an envelope. You don't want to manually unwrap
+        it every time. A generic wrapper struct with <code>flatten</code> keeps things clean.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">ApiEnvelope</span>&lt;T&gt; {
+    success: <span class="ty">bool</span>,
+    data: T,
+
+    #[serde(default)]
+    request_id: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">User</span> {
+    id: <span class="ty">u64</span>,
+    name: <span class="ty">String</span>,
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">PaginatedList</span>&lt;T&gt; {
+    items: <span class="ty">Vec</span>&lt;T&gt;,
+    total: <span class="ty">u64</span>,
+    page: <span class="ty">u32</span>,
+    per_page: <span class="ty">u32</span>,
+}
+
+<span class="cm">// Usage:</span>
+<span class="kw">fn</span> <span class="fn">get_user</span>(id: <span class="ty">u64</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">ApiEnvelope</span>&lt;<span class="ty">User</span>&gt;, <span class="ty">Box</span>&lt;<span class="kw">dyn</span> std::error::<span class="ty">Error</span>&gt;&gt; {
+    <span class="kw">let</span> response = <span class="fn">reqwest::blocking::get</span>(
+        &amp;<span class="fn">format!</span>(<span class="str">"https://api.example.com/users/{}"</span>, id)
+    )?;
+    <span class="kw">let</span> envelope: <span class="ty">ApiEnvelope</span>&lt;<span class="ty">User</span>&gt; = response.<span class="fn">json</span>()?;
+    <span class="ty">Ok</span>(envelope)
+}
+
+<span class="cm">// Handles: {"success": true, "data": {"id": 1, "name": "Alice"}, "request_id": "abc123"}</span></code></pre>
+
+      <h3>Error responses with untagged enums</h3>
+
+      <p>
+        APIs return different shapes for success and error responses. An untagged enum
+        lets you handle both with a single deserialize call.
+      </p>
+
+      <pre><code>#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">SuccessResponse</span>&lt;T&gt; {
+    data: T,
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">ErrorResponse</span> {
+    error: <span class="ty">ErrorDetail</span>,
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+<span class="kw">struct</span> <span class="ty">ErrorDetail</span> {
+    code: <span class="ty">String</span>,
+    message: <span class="ty">String</span>,
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+#[serde(untagged)]
+<span class="kw">enum</span> <span class="ty">ApiResult</span>&lt;T&gt; {
+    <span class="ty">Success</span>(<span class="ty">SuccessResponse</span>&lt;T&gt;),
+    <span class="ty">Error</span>(<span class="ty">ErrorResponse</span>),
+}
+
+<span class="kw">impl</span>&lt;T&gt; <span class="ty">ApiResult</span>&lt;T&gt; {
+    <span class="kw">fn</span> <span class="fn">into_result</span>(<span class="kw">self</span>) -&gt; <span class="ty">Result</span>&lt;T, <span class="ty">ErrorDetail</span>&gt; {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">ApiResult</span>::<span class="ty">Success</span>(s) =&gt; <span class="ty">Ok</span>(s.data),
+            <span class="ty">ApiResult</span>::<span class="ty">Error</span>(e) =&gt; <span class="ty">Err</span>(e.error),
+        }
+    }
+}
+
+<span class="cm">// Handles both:</span>
+<span class="cm">// {"data": {"id": 1, "name": "Alice"}}</span>
+<span class="cm">// {"error": {"code": "not_found", "message": "User 99 does not exist"}}</span></code></pre>
+
+      <p>
+        Note that <code>Success</code> comes before <code>Error</code> in the enum. Since
+        serde tries untagged variants in order, put the more specific (or more common)
+        variant first to avoid false matches.
+      </p>
+
+      <h3>Putting it all together</h3>
+
+      <p>
+        Here's what a real API client struct tends to look like when you combine multiple
+        serde patterns.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+#[derive(<span class="ty">Serialize</span>, <span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+#[serde(rename_all = <span class="str">"camelCase"</span>)]
+<span class="kw">struct</span> <span class="ty">CreateTaskRequest</span> {
+    title: <span class="ty">String</span>,
+
+    #[serde(skip_serializing_if = <span class="str">"Option::is_none"</span>)]
+    description: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+
+    #[serde(default = <span class="str">"default_priority"</span>)]
+    priority: <span class="ty">String</span>,
+
+    #[serde(skip_serializing_if = <span class="str">"Vec::is_empty"</span>, default)]
+    assigned_to: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;,
+
+    #[serde(skip_serializing_if = <span class="str">"Option::is_none"</span>)]
+    due_date: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+
+    #[serde(flatten)]
+    extra: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, serde_json::<span class="ty">Value</span>&gt;,
+}
+
+<span class="kw">fn</span> <span class="fn">default_priority</span>() -&gt; <span class="ty">String</span> {
+    <span class="str">"medium"</span>.<span class="fn">to_string</span>()
+}
+
+#[derive(<span class="ty">Deserialize</span>, <span class="ty">Debug</span>)]
+#[serde(rename_all = <span class="str">"camelCase"</span>)]
+<span class="kw">struct</span> <span class="ty">Task</span> {
+    id: <span class="ty">u64</span>,
+    title: <span class="ty">String</span>,
+    description: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+    priority: <span class="ty">String</span>,
+    assigned_to: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;,
+    created_at: <span class="ty">String</span>,
+
+    #[serde(default)]
+    completed: <span class="ty">bool</span>,
+}</code></pre>
+
+      <p>
+        This combines <code>rename_all</code> for the API's camelCase convention,
+        <code>skip_serializing_if</code> to keep requests minimal,
+        <code>default</code> to handle missing fields gracefully,
+        and <code>flatten</code> to forward any extra fields the API might accept.
+        Every pattern we covered earlier finds its way into real client code.
+      </p>
+
+      <p>
+        The key insight with serde is that you almost never need to write parsing code by
+        hand. Between the derive macros, field attributes, enum representations, and custom
+        deserializers, there's a declarative solution for nearly every data format mismatch
+        you'll encounter. Start with the simplest attribute that works, and only reach for
+        custom implementations when the attributes genuinely can't express what you need.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

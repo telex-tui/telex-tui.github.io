@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HashMap's Entry API: The Pattern You'll Use Every Day - Telex</title>
+  <meta name="description" content=".entry().or_insert() and friends — the clean way to handle 'insert if missing, update if present' without double lookups. The most useful HashMap pattern nobody teaches early enough.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>HashMap's Entry API: The Pattern You'll Use Every Day</h1>
+      <div class="post-meta">February 2026</div>
+
+      <p>
+        There's a thing you do with hash maps constantly: check if a key exists,
+        insert a default if it doesn't, then work with the value. In most
+        languages you'd write an <code>if</code> / <code>else</code> block or
+        call <code>contains_key</code> first. In Rust, the entry API gives you a
+        single-lookup way to do all of that. It's the most useful
+        <code>HashMap</code> pattern that nobody teaches early enough.
+      </p>
+
+      <h2>The problem: check-then-insert</h2>
+
+      <p>
+        Say you're counting word frequencies. The naive approach looks like this:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">let mut</span> counts: <span class="ty">HashMap</span>&lt;&amp;<span class="ty">str</span>, <span class="ty">i32</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">for</span> word <span class="kw">in</span> text.<span class="fn">split_whitespace</span>() {
+    <span class="kw">if</span> counts.<span class="fn">contains_key</span>(word) {
+        <span class="kw">let</span> count = counts.<span class="fn">get_mut</span>(word).<span class="fn">unwrap</span>();
+        *count += <span class="num">1</span>;
+    } <span class="kw">else</span> {
+        counts.<span class="fn">insert</span>(word, <span class="num">1</span>);
+    }
+}</code></pre>
+
+      <p>
+        This works. But it's ugly for two reasons. First, it does two hash lookups
+        per iteration: one for <code>contains_key</code> and another for
+        <code>get_mut</code> or <code>insert</code>. The map hashes the key,
+        finds the bucket, checks for a match -- and then you immediately do all
+        of that again on the same key. Second, there's an <code>unwrap</code>
+        hiding in there. You know it won't panic because you just checked
+        <code>contains_key</code>, but the compiler doesn't. It's a logic
+        invariant that isn't enforced by the type system, and that's the kind of
+        thing that rots over time as code evolves.
+      </p>
+
+      <h2>The entry API</h2>
+
+      <p>
+        <code>map.entry(key)</code> does a single lookup and returns an
+        <code>Entry</code> enum. That enum is either <code>Occupied</code> (the
+        key exists) or <code>Vacant</code> (it doesn't). You then decide what to
+        do based on which variant you got -- but the lookup already happened. No
+        double hashing. No <code>unwrap</code>.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::hash_map::<span class="ty">Entry</span>;
+
+<span class="kw">match</span> counts.<span class="fn">entry</span>(word) {
+    <span class="ty">Entry</span>::<span class="ty">Occupied</span>(<span class="kw">mut</span> entry) =&gt; {
+        *entry.<span class="fn">get_mut</span>() += <span class="num">1</span>;
+    }
+    <span class="ty">Entry</span>::<span class="ty">Vacant</span>(entry) =&gt; {
+        entry.<span class="fn">insert</span>(<span class="num">1</span>);
+    }
+}</code></pre>
+
+      <p>
+        One lookup. No <code>unwrap</code>. The compiler knows exactly which
+        variant you're in. But for common patterns you don't need to write the
+        full <code>match</code>. The entry API has convenience methods that
+        collapse the whole thing into a single expression.
+      </p>
+
+      <h2>The four methods</h2>
+
+      <h3><code>or_insert</code></h3>
+
+      <p>
+        The most common one. Insert a value if the key is absent, then return a
+        mutable reference to the value (whether it was just inserted or already
+        existed). The word-counting example becomes:
+      </p>
+
+      <pre><code><span class="kw">for</span> word <span class="kw">in</span> text.<span class="fn">split_whitespace</span>() {
+    <span class="kw">let</span> count = counts.<span class="fn">entry</span>(word).<span class="fn">or_insert</span>(<span class="num">0</span>);
+    *count += <span class="num">1</span>;
+}</code></pre>
+
+      <p>
+        That's it. One line to handle both cases. If the key isn't in the map,
+        it inserts <code>0</code>. Either way you get a <code>&amp;mut i32</code>
+        back, and you increment it. Some people write it even shorter:
+      </p>
+
+      <pre><code><span class="kw">for</span> word <span class="kw">in</span> text.<span class="fn">split_whitespace</span>() {
+    *counts.<span class="fn">entry</span>(word).<span class="fn">or_insert</span>(<span class="num">0</span>) += <span class="num">1</span>;
+}</code></pre>
+
+      <p>
+        Same thing. The <code>or_insert</code> call returns
+        <code>&amp;mut i32</code>, and you dereference and add in place.
+      </p>
+
+      <h3><code>or_insert_with</code></h3>
+
+      <p>
+        Same idea, but the default value comes from a closure that only runs when
+        the key is absent. Use this when creating the default is expensive -- you
+        don't want to pay the cost if the key already exists.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">struct</span> <span class="ty">Connection</span> {
+    host: <span class="ty">String</span>,
+    port: <span class="ty">u16</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Connection</span> {
+    <span class="kw">fn</span> <span class="fn">new</span>(host: &amp;<span class="ty">str</span>, port: <span class="ty">u16</span>) -&gt; <span class="kw">Self</span> {
+        <span class="fn">println!</span>(<span class="str">"Connecting to {host}:{port}..."</span>);
+        <span class="ty">Connection</span> { host: host.<span class="fn">to_string</span>(), port }
+    }
+}
+
+<span class="kw">let mut</span> pool: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">Connection</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">let</span> conn = pool
+    .<span class="fn">entry</span>(<span class="str">"db-primary"</span>.<span class="fn">to_string</span>())
+    .<span class="fn">or_insert_with</span>(|| <span class="ty">Connection</span>::<span class="fn">new</span>(<span class="str">"10.0.0.1"</span>, <span class="num">5432</span>));</code></pre>
+
+      <p>
+        If <code>"db-primary"</code> is already in the pool, the closure never
+        runs. No connection is opened. No side effects. The
+        <code>or_insert</code> version would create the connection eagerly every
+        time -- even when the key is already present and the connection gets
+        thrown away. With <code>or_insert_with</code>, you only pay for what you
+        use.
+      </p>
+
+      <p>
+        There's also <code>or_insert_with_key</code>, which passes the key to the
+        closure. Handy when the default value depends on the key itself:
+      </p>
+
+      <pre><code><span class="kw">let mut</span> cache: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">let</span> value = cache
+    .<span class="fn">entry</span>(<span class="str">"user:42"</span>.<span class="fn">to_string</span>())
+    .<span class="fn">or_insert_with_key</span>(|key| {
+        <span class="fn">println!</span>(<span class="str">"Cache miss for {key}, fetching..."</span>);
+        <span class="fn">fetch_from_database</span>(key)
+    });</code></pre>
+
+      <h3><code>or_default</code></h3>
+
+      <p>
+        When the type implements <code>Default</code>, you don't even need to
+        specify the value. <code>or_default()</code> calls
+        <code>Default::default()</code> for you. For numbers that's <code>0</code>.
+        For <code>String</code> it's <code>""</code>. For <code>Vec</code> it's
+        an empty vector.
+      </p>
+
+      <pre><code><span class="kw">let mut</span> char_counts: <span class="ty">HashMap</span>&lt;<span class="ty">char</span>, <span class="ty">i32</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">for</span> ch <span class="kw">in</span> <span class="str">"hello world"</span>.<span class="fn">chars</span>() {
+    *char_counts.<span class="fn">entry</span>(ch).<span class="fn">or_default</span>() += <span class="num">1</span>;
+}</code></pre>
+
+      <p>
+        This is the cleanest version for counting patterns. No explicit default
+        value, no closure -- just "give me the existing value or a fresh default."
+        It works nicely for grouping too:
+      </p>
+
+      <pre><code><span class="kw">let mut</span> groups: <span class="ty">HashMap</span>&lt;&amp;<span class="ty">str</span>, <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt;&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">for</span> (key, value) <span class="kw">in</span> data {
+    groups.<span class="fn">entry</span>(key).<span class="fn">or_default</span>().<span class="fn">push</span>(value);
+}</code></pre>
+
+      <p>
+        <code>Vec::default()</code> returns an empty <code>Vec</code>, so each
+        new key starts with an empty list. Then <code>.push(value)</code> appends
+        to it. No need for <code>or_insert(Vec::new())</code> or
+        <code>or_insert_with(Vec::new)</code>, though both would work.
+      </p>
+
+      <h3><code>and_modify</code></h3>
+
+      <p>
+        The previous methods focus on what to do when the key is missing. But
+        what if you want to do something to the existing value <em>and</em>
+        provide a default for when it's absent? That's
+        <code>and_modify</code> chained with one of the <code>or_</code>
+        methods:
+      </p>
+
+      <pre><code><span class="kw">let mut</span> scores: <span class="ty">HashMap</span>&lt;&amp;<span class="ty">str</span>, <span class="ty">i32</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">for</span> (player, points) <span class="kw">in</span> results {
+    scores.<span class="fn">entry</span>(player)
+        .<span class="fn">and_modify</span>(|score| *score += points)
+        .<span class="fn">or_insert</span>(points);
+}</code></pre>
+
+      <p>
+        If the player already has a score, add the new points to it. If this is
+        the first time we see the player, start them off with whatever they just
+        scored. The <code>and_modify</code> closure only runs on occupied entries.
+        The <code>or_insert</code> value only applies to vacant entries. Together
+        they cover both cases in one expression.
+      </p>
+
+      <p>
+        Here's another realistic one -- tracking the first and last time you see
+        an event:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::time::<span class="ty">Instant</span>;
+
+<span class="kw">struct</span> <span class="ty">Timestamps</span> {
+    first_seen: <span class="ty">Instant</span>,
+    last_seen: <span class="ty">Instant</span>,
+    count: <span class="ty">u64</span>,
+}
+
+<span class="kw">let mut</span> events: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">Timestamps</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">let</span> now = <span class="ty">Instant</span>::<span class="fn">now</span>();
+events.<span class="fn">entry</span>(event_name)
+    .<span class="fn">and_modify</span>(|ts| {
+        ts.last_seen = now;
+        ts.count += <span class="num">1</span>;
+    })
+    .<span class="fn">or_insert</span>(<span class="ty">Timestamps</span> {
+        first_seen: now,
+        last_seen: now,
+        count: <span class="num">1</span>,
+    });</code></pre>
+
+      <h2>Working with the <code>Entry</code> enum directly</h2>
+
+      <p>
+        The convenience methods handle most situations, but sometimes you need
+        different logic for the occupied and vacant cases that doesn't fit the
+        "insert a default" pattern. In those cases, match on the
+        <code>Entry</code> enum directly.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::hash_map::<span class="ty">Entry</span>;
+
+<span class="kw">fn</span> <span class="fn">register_user</span>(
+    users: &amp;<span class="kw">mut</span> <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">UserInfo</span>&gt;,
+    name: <span class="ty">String</span>,
+    info: <span class="ty">UserInfo</span>,
+) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">String</span>&gt; {
+    <span class="kw">match</span> users.<span class="fn">entry</span>(name) {
+        <span class="ty">Entry</span>::<span class="ty">Occupied</span>(entry) =&gt; {
+            <span class="ty">Err</span>(<span class="fn">format!</span>(<span class="str">"User '{}' already exists"</span>, entry.<span class="fn">key</span>()))
+        }
+        <span class="ty">Entry</span>::<span class="ty">Vacant</span>(entry) =&gt; {
+            entry.<span class="fn">insert</span>(info);
+            <span class="ty">Ok</span>(())
+        }
+    }
+}</code></pre>
+
+      <p>
+        The <code>Occupied</code> variant gives you an
+        <code>OccupiedEntry</code> with methods like <code>.get()</code>,
+        <code>.get_mut()</code>, <code>.into_mut()</code>,
+        <code>.remove()</code>, and <code>.key()</code>. The
+        <code>Vacant</code> variant gives you a <code>VacantEntry</code> with
+        <code>.insert()</code> and <code>.key()</code>. You get full control
+        without ever doing a second lookup.
+      </p>
+
+      <p>
+        Here's a more involved example -- an LRU-like cache that evicts the old
+        entry when a key already exists:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">update_or_insert</span>(
+    cache: &amp;<span class="kw">mut</span> <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">CachedValue</span>&gt;,
+    key: <span class="ty">String</span>,
+    value: <span class="ty">CachedValue</span>,
+) -&gt; <span class="ty">Option</span>&lt;<span class="ty">CachedValue</span>&gt; {
+    <span class="kw">match</span> cache.<span class="fn">entry</span>(key) {
+        <span class="ty">Entry</span>::<span class="ty">Occupied</span>(<span class="kw">mut</span> entry) =&gt; {
+            <span class="cm">// Replace the old value, return it to the caller</span>
+            <span class="kw">let</span> old = entry.<span class="fn">insert</span>(value);
+            <span class="ty">Some</span>(old)
+        }
+        <span class="ty">Entry</span>::<span class="ty">Vacant</span>(entry) =&gt; {
+            entry.<span class="fn">insert</span>(value);
+            <span class="ty">None</span>
+        }
+    }
+}</code></pre>
+
+      <p>
+        The <code>OccupiedEntry::insert</code> method replaces the value and
+        returns the old one -- something you can't do with the convenience
+        methods alone. When you need to inspect, replace, or remove existing
+        entries, matching on the enum is the way to go.
+      </p>
+
+      <h2>Real patterns</h2>
+
+      <h3>Word frequency counting</h3>
+
+      <p>
+        The classic. You've already seen it above, but here's the complete
+        version with sorted output:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">fn</span> <span class="fn">word_frequencies</span>(text: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Vec</span>&lt;(<span class="ty">String</span>, <span class="ty">usize</span>)&gt; {
+    <span class="kw">let mut</span> counts: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">usize</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+    <span class="kw">for</span> word <span class="kw">in</span> text.<span class="fn">split_whitespace</span>() {
+        <span class="kw">let</span> normalized = word.<span class="fn">to_lowercase</span>();
+        *counts.<span class="fn">entry</span>(normalized).<span class="fn">or_default</span>() += <span class="num">1</span>;
+    }
+
+    <span class="kw">let mut</span> result: <span class="ty">Vec</span>&lt;_&gt; = counts.<span class="fn">into_iter</span>().<span class="fn">collect</span>();
+    result.<span class="fn">sort_by</span>(|a, b| b.<span class="num">1</span>.<span class="fn">cmp</span>(&amp;a.<span class="num">1</span>));
+    result
+}</code></pre>
+
+      <h3>Grouping items by key</h3>
+
+      <p>
+        You have a flat list and want to group it into buckets. This comes up
+        all the time -- grouping log entries by severity, users by role, events
+        by date:
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">LogEntry</span> {
+    level: <span class="ty">String</span>,
+    message: <span class="ty">String</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">group_by_level</span>(logs: <span class="ty">Vec</span>&lt;<span class="ty">LogEntry</span>&gt;) -&gt; <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;&gt; {
+    <span class="kw">let mut</span> grouped: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt;&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+    <span class="kw">for</span> entry <span class="kw">in</span> logs {
+        grouped
+            .<span class="fn">entry</span>(entry.level)
+            .<span class="fn">or_default</span>()
+            .<span class="fn">push</span>(entry.message);
+    }
+
+    grouped
+}</code></pre>
+
+      <p>
+        The <code>or_default()</code> creates an empty <code>Vec</code> for each
+        new level, and <code>.push()</code> appends to it. Three lines in the
+        loop body, and one of those is just a closing brace.
+      </p>
+
+      <h3>Caching computations</h3>
+
+      <p>
+        Sometimes you need to compute something expensive and reuse the result.
+        The entry API makes this straightforward:
+      </p>
+
+      <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">struct</span> <span class="ty">Solver</span> {
+    cache: <span class="ty">HashMap</span>&lt;<span class="ty">u64</span>, <span class="ty">u64</span>&gt;,
+}
+
+<span class="kw">impl</span> <span class="ty">Solver</span> {
+    <span class="kw">fn</span> <span class="fn">fibonacci</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, n: <span class="ty">u64</span>) -&gt; <span class="ty">u64</span> {
+        <span class="kw">if</span> n &lt;= <span class="num">1</span> {
+            <span class="kw">return</span> n;
+        }
+
+        <span class="kw">if let</span> <span class="ty">Some</span>(&amp;cached) = <span class="kw">self</span>.cache.<span class="fn">get</span>(&amp;n) {
+            <span class="kw">return</span> cached;
+        }
+
+        <span class="kw">let</span> result = <span class="kw">self</span>.<span class="fn">fibonacci</span>(n - <span class="num">1</span>) + <span class="kw">self</span>.<span class="fn">fibonacci</span>(n - <span class="num">2</span>);
+        <span class="kw">self</span>.cache.<span class="fn">insert</span>(n, result);
+        result
+    }
+}</code></pre>
+
+      <p>
+        Note that we can't use <code>.entry().or_insert_with()</code> here
+        because the closure would need to call <code>self.fibonacci()</code>,
+        which requires a mutable borrow on <code>self</code> -- but
+        <code>.entry()</code> already holds one. The borrow checker catches
+        this. For recursive memoization you fall back to separate
+        <code>get</code> and <code>insert</code> calls. But for non-recursive
+        caching, the entry API works perfectly:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">get_config</span>(
+    cache: &amp;<span class="kw">mut</span> <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">Config</span>&gt;,
+    name: &amp;<span class="ty">str</span>,
+) -&gt; &amp;<span class="ty">Config</span> {
+    cache
+        .<span class="fn">entry</span>(name.<span class="fn">to_string</span>())
+        .<span class="fn">or_insert_with</span>(|| <span class="fn">load_config_from_disk</span>(name))
+}</code></pre>
+
+      <h3>Building adjacency lists</h3>
+
+      <p>
+        Graphs represented as adjacency lists are a natural fit. Each node maps
+        to a list of its neighbors:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">build_graph</span>(edges: &amp;[(<span class="ty">u32</span>, <span class="ty">u32</span>)]) -&gt; <span class="ty">HashMap</span>&lt;<span class="ty">u32</span>, <span class="ty">Vec</span>&lt;<span class="ty">u32</span>&gt;&gt; {
+    <span class="kw">let mut</span> graph: <span class="ty">HashMap</span>&lt;<span class="ty">u32</span>, <span class="ty">Vec</span>&lt;<span class="ty">u32</span>&gt;&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+    <span class="kw">for</span> &amp;(from, to) <span class="kw">in</span> edges {
+        graph.<span class="fn">entry</span>(from).<span class="fn">or_default</span>().<span class="fn">push</span>(to);
+        graph.<span class="fn">entry</span>(to).<span class="fn">or_default</span>().<span class="fn">push</span>(from); <span class="cm">// undirected</span>
+    }
+
+    graph
+}</code></pre>
+
+      <p>
+        Two lines per edge. Each call to <code>.entry().or_default()</code>
+        ensures the node exists in the map, and <code>.push()</code> adds the
+        neighbor. If you want a directed graph, drop the second line. The
+        pattern is the same either way.
+      </p>
+
+      <h3>Deduplication with first-seen wins</h3>
+
+      <p>
+        Sometimes you want to keep the first value for each key and ignore
+        duplicates. The entry API makes the intent explicit:
+      </p>
+
+      <pre><code><span class="kw">let mut</span> first_seen: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">Record</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+
+<span class="kw">for</span> record <span class="kw">in</span> records {
+    first_seen
+        .<span class="fn">entry</span>(record.id.<span class="fn">clone</span>())
+        .<span class="fn">or_insert</span>(record);
+}</code></pre>
+
+      <p>
+        If the key is already present, <code>or_insert</code> does nothing.
+        The first record wins. No conditional, no explicit check.
+      </p>
+
+      <h2>The connection to naming conventions</h2>
+
+      <p>
+        If you've spent time with <code>Option</code> or <code>Result</code>,
+        the entry API's method names look familiar.
+        <code>or_insert</code> follows the same <code>_or</code> pattern as
+        <code>unwrap_or</code>: provide a ready-made value.
+        <code>or_insert_with</code> follows the <code>_or_else</code> pattern:
+        provide a closure that computes the value lazily.
+        <code>or_default</code> mirrors <code>unwrap_or_default</code>: use the
+        type's <code>Default</code> implementation.
+      </p>
+
+      <p>
+        This isn't a coincidence. Rust's standard library uses these naming
+        suffixes consistently across types. Once you recognize the
+        <code>_or</code> / <code>_or_else</code> / <code>_or_default</code>
+        pattern, you can predict method names on types you haven't even seen
+        yet. <code>or_insert</code> is the eager version -- the value is always
+        evaluated. <code>or_insert_with</code> is the lazy version -- the
+        closure only runs when needed. Same principle as
+        <code>unwrap_or</code> vs <code>unwrap_or_else</code>, just applied to
+        map entries instead of option values.
+      </p>
+
+      <p>
+        The <code>and_modify</code> method follows a different pattern --
+        <code>and_</code> means "do this if the thing exists." It's the
+        counterpart to <code>or_</code>, which means "do this if it doesn't."
+        You see the same split in <code>Option</code>'s <code>and_then</code>
+        (operate on the value if <code>Some</code>) vs <code>or_else</code>
+        (provide a fallback if <code>None</code>). The naming is a system, not
+        a collection of arbitrary words.
+      </p>
+
+      <p>
+        The entry API is one of those things that feels like a minor convenience
+        at first and then quietly becomes the default way you interact with hash
+        maps. One lookup instead of two. No <code>unwrap</code>. The compiler
+        verifies your logic. Once it clicks, you reach for it without thinking.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
