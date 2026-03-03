@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The GIL Is Just a Mutex - Telex</title>
+  <meta name="description" content="A Rust developer's guide to the GIL and PyO3's concurrency model: what the GIL actually is, how allow_threads works, and how to design clean FFI boundaries.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>The GIL Is Just a Mutex: A Rust Developer's Guide to PyO3 and Python's Concurrency Model</h1>
+      <div class="post-meta">March 2026</div>
+      <p style="background:#2d1a00;border:1px solid #d29922;border-radius:6px;padding:0.6rem 1rem;font-size:0.85rem;color:#d29922;">
+        Draft — work in progress, not for publication.
+      </p>
+
+      <p>
+        If you're writing Rust that gets called from Python via PyO3, you need a mental
+        model of the GIL. Not the "GIL bad, Python slow" meme — an actual working model
+        of what's happening, so you can design your FFI boundary well.
+      </p>
+
+      <p>
+        Here's the good news: if you've ever used a mutex, you already understand it.
+      </p>
+
+      <h2>What the GIL Actually Is</h2>
+
+      <p>
+        The Global Interpreter Lock is a <code>pthread_mutex</code> (or the Windows equivalent)
+        inside CPython. It protects the interpreter's shared state: reference counts, the
+        object graph, the memory allocator. Only the thread holding the GIL can execute
+        Python bytecode or touch Python objects.
+      </p>
+
+      <p>
+        That's it. There's no special scheduler, no memory barrier dance beyond what the
+        mutex provides. It's a lock protecting a data structure — the data structure just
+        happens to be an entire language runtime.
+      </p>
+
+      <p>
+        This means that CPU-bound Python code running across multiple threads will
+        serialise. The threads take turns, one at a time, on the mutex. Multiple cores sit
+        idle. This is the part everyone complains about.
+      </p>
+
+      <p>
+        But it also means the GIL can be <em>released</em>. And that's where it gets interesting.
+      </p>
+
+      <h2>The PyO3 Paradigm</h2>
+
+      <p>
+        When Python calls into Rust via PyO3, there's a single pattern that matters:
+      </p>
+
+<pre>Python (GIL held)
+  → convert Python objects to Rust-owned data
+    → release the GIL
+      → Rust does whatever it wants
+    → reacquire the GIL
+  → convert Rust results back to Python objects
+Python (GIL held)</pre>
+
+      <p>In code, the release point looks like this:</p>
+
+<pre>py.<span class="fn">allow_threads</span>(|| {
+    <span class="cm">// GIL is released</span>
+    <span class="cm">// Full multi-core parallelism available</span>
+    <span class="cm">// But you CANNOT touch any Python objects</span>
+    <span class="fn">heavy_computation</span>(&amp;rust_data)
+})</pre>
+
+      <p>
+        Under the hood, <code>allow_threads</code> calls CPython's
+        <code>PyEval_SaveThread()</code>, which does roughly:
+      </p>
+
+<pre><span class="ty">PyThreadState</span>* <span class="fn">PyEval_SaveThread</span>(<span class="kw">void</span>) {
+    <span class="ty">PyThreadState</span> *tstate = current_thread_state;
+    current_thread_state = <span class="kw">NULL</span>;
+    <span class="fn">drop_gil</span>(tstate);   <span class="cm">// unlock the mutex</span>
+    <span class="kw">return</span> tstate;
+}</pre>
+
+      <p>
+        It unlocks the mutex. That's the whole trick.
+      </p>
+
+      <p>
+        The contract is explicit: you give up the GIL, you gain parallelism, you lose access
+        to anything Python. No <code>PyObject</code>, no <code>PyList</code>, no calling
+        back into the interpreter. Rust's type system enforces this — the
+        <code>allow_threads</code> closure can't capture any <code>Python&lt;'py&gt;</code>
+        token or <code>Bound&lt;'py, T&gt;</code> references. The compiler won't let you cheat.
+      </p>
+
+      <h2>The Concurrency Picture</h2>
+
+      <p>
+        Here's where the model gets genuinely powerful. When Rust releases the GIL, the GIL
+        is free. Other Python threads can grab it.
+      </p>
+
+      <p>Consider three Python threads dispatching work to Rust:</p>
+
+<pre>Time ──────────────────────────────────────────────────►
+
+Thread A (Python)  ┌─────┐                         ┌─────┐
+   GIL held        │dispatch│                       │collect│
+                   └───┬───┘                         └──▲──┘
+                       │  ┌──────────────────────────┐  │
+Thread A (Rust)        └─►│  heavy_computation()     ├──┘
+   GIL released           │  runs on cores 1-4       │
+                          └──────────────────────────┘
+
+Thread B (Python)       ┌─────┐                  ┌─────┐
+   GIL held             │dispatch│               │collect│
+                        └───┬───┘                └──▲──┘
+                            │  ┌─────────────────┐  │
+Thread B (Rust)             └─►│  more_work()    ├──┘
+   GIL released                │  cores 5-8      │
+                               └─────────────────┘
+
+Thread C (Python)            ┌─────┐       ┌─────┐
+   GIL held                  │dispatch│    │collect│
+                             └───┬───┘     └──▲──┘
+                                 │  ┌──────┐  │
+Thread C (Rust)                  └─►│work()├──┘
+   GIL released                     └──────┘
+
+GIL ownership:     [A]  [B]   [C]   [free]  [A] [B][C]</pre>
+
+      <p>
+        The Python threads take turns with the GIL to dispatch and collect. The Rust
+        computations run simultaneously across all available cores. The GIL is only contended
+        during the brief boundary crossings, not during the actual work.
+      </p>
+
+      <p>
+        This is how libraries like Polars achieve their performance. The Rust engine runs a
+        Rayon thread pool across all cores while Python idles, GIL available, doing nothing
+        until results come back.
+      </p>
+
+      <h2>Two Memory Worlds</h2>
+
+      <p>
+        The concurrency model works because Python and Rust don't share memory unless you
+        explicitly make them.
+      </p>
+
+<pre>┌─────────────────────────────┐   ┌─────────────────────────────┐
+│       PYTHON WORLD          │   │        RUST WORLD           │
+│                             │   │                             │
+│  CPython heap               │   │  System allocator           │
+│  Reference-counted objects  │   │  Owned values (Vec, String) │
+│  GIL-protected access       │   │  No GIL needed              │
+│                             │   │                             │
+│  PyList([1, 2, 3])  ──────────► │  vec![1_i64, 2, 3]         │
+│                        copy │   │                             │
+│  PyDict({"a": 1})   ──────────► │  HashMap&lt;String, i64&gt;      │
+│                        copy │   │                             │
+│  result_pyobj  ◄──────────────  │  computed_result            │
+│                        copy │   │                             │
+└─────────────────────────────┘   └─────────────────────────────┘
+         GIL required                    GIL not required</pre>
+
+      <p>
+        Python objects live on CPython's heap, managed by its allocator and refcounting. Rust
+        objects live in Rust's own memory. The two worlds genuinely don't overlap unless you
+        bridge them.
+      </p>
+
+      <p>
+        The data copy at the boundary is the design decision that shapes everything. You have
+        a spectrum:
+      </p>
+
+      <p>
+        <strong>Deep copy</strong> — convert a Python list into a <code>Vec&lt;f64&gt;</code>.
+        Rust owns it completely, clean separation, simple ownership. This is the safe default.
+      </p>
+
+      <p>
+        <strong>Zero-copy</strong> — use the buffer protocol or Arrow format so Rust gets a
+        pointer into memory Python also knows about. Faster, but now you need to ensure Python
+        doesn't free the buffer while Rust is working with it.
+      </p>
+
+      <p>
+        Libraries like Polars sit at the zero-copy end: data lives in Rust-owned Arrow buffers
+        and only crosses the boundary when Python actually needs to inspect values. The bridge
+        layer exists to minimise crossings, not to copy data back and forth.
+      </p>
+
+      <h2>The Boundary Is the Architecture</h2>
+
+      <p>
+        The quality of a PyO3 bridge comes down to how it manages the boundary crossings.
+        Every crossing means:
+      </p>
+
+      <ol>
+        <li>Acquiring or releasing the GIL (mutex lock/unlock)</li>
+        <li>Converting data between Python and Rust representations</li>
+        <li>A potential serialisation point where parallelism stalls</li>
+      </ol>
+
+      <p>
+        A poorly designed boundary forces too many acquire/release cycles or too much copying.
+        A well-designed one keeps Rust running free for as long as possible:
+      </p>
+
+<pre>    Bad: many small crossings         Good: few large crossings
+
+  Python ←→ Rust ←→ Python ←→ Rust   Python → Rust ─────────→ Python
+  Python ←→ Rust ←→ Python ←→ Rust
+  Python ←→ Rust ←→ Python ←→ Rust   (GIL released once, Rust does
+  (GIL thrashing, per-row overhead)    everything, returns final result)</pre>
+
+      <p>
+        This is why Polars uses lazy evaluation. Instead of crossing the boundary for each
+        operation, Python builds up a query plan as a lightweight description. One boundary
+        crossing sends the whole plan to Rust, the GIL gets released once, Rust executes the
+        full plan across all cores, and one crossing brings results back.
+      </p>
+
+      <h2>The Mental Model</h2>
+
+      <p>If you're coming from C, here's the mapping:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>C concept</th>
+            <th>GIL equivalent</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>pthread_mutex_lock()</code></td>
+            <td>Acquiring the GIL</td>
+          </tr>
+          <tr>
+            <td><code>pthread_mutex_unlock()</code></td>
+            <td><code>py.allow_threads()</code></td>
+          </tr>
+          <tr>
+            <td>Shared data protected by the mutex</td>
+            <td>Python objects on CPython's heap</td>
+          </tr>
+          <tr>
+            <td>Thread-local data, no mutex needed</td>
+            <td>Rust-owned data after GIL release</td>
+          </tr>
+          <tr>
+            <td>Worker thread pool behind a mutex-protected queue</td>
+            <td>PyO3 dispatch pattern</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        The only unusual thing is that the mutex protects an entire language runtime rather
+        than a data structure. But the discipline is identical: hold the lock to access shared
+        state, release it to do independent work, reacquire it to publish results.
+      </p>
+
+      <p>
+        PyO3's <code>allow_threads</code> makes this Rust-native by encoding the discipline
+        in the type system. You can't accidentally touch Python objects with the GIL released,
+        because the compiler won't let the closure capture them. It's a compile-time version
+        of what C programmers enforce by convention.
+      </p>
+
+      <p>
+        That's Rust's recurring trick: taking patterns that experienced C programmers already
+        follow and making the compiler enforce them. The GIL boundary in PyO3 is one of the
+        cleanest examples.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
