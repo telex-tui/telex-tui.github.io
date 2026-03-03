@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Polars Works Internally - Telex</title>
+  <meta name="description" content="A source-traced walk through Polars internals: the PyO3 boundary layer, the expression AST, eager vs lazy execution, zero-copy data paths, and the plugin FFI.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>How Polars Works Internally</h1>
+      <div class="post-meta">March 2026</div>
+      <p style="background:#2d1a00;border:1px solid #d29922;border-radius:6px;padding:0.6rem 1rem;font-size:0.85rem;color:#d29922;">
+        Draft — work in progress, not for publication.
+      </p>
+
+      <p>
+        Based on reading the actual Polars source code as of early 2026, not documentation or blog posts.
+        File paths are accurate at time of writing and subject to change — treat them as pointers, not
+        precise references.
+      </p>
+
+      <h2>The simplest possible round trip — <code>df.height</code></h2>
+
+      <p>
+        When a Python user writes <code>df.height</code>, here's exactly what happens.
+      </p>
+
+      <p>
+        <strong>Step 1: Python property</strong> —
+        <code>py-polars/src/polars/dataframe/frame.py:832&#8211;846</code>
+      </p>
+
+      <pre><code>@property
+def height(self) -&gt; int:
+    return self._df.height()</code></pre>
+
+      <p>
+        <code>self._df</code> is typed as <code>PyDataFrame</code> (declared at line 372:
+        <code>_df: PyDataFrame</code>). This is the Rust struct exposed to Python via PyO3.
+      </p>
+
+      <p>
+        <strong>Step 2: PyO3 boundary</strong> —
+        <code>crates/polars-python/src/dataframe/general.rs:183&#8211;185</code>
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">height</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">usize</span> {
+    <span class="kw">self</span>.df.<span class="fn">read</span>().<span class="fn">height</span>()
+}</code></pre>
+
+      <p>
+        <code>self.df.read()</code> acquires a <code>parking_lot</code> read lock, returning a guard
+        that derefs to <code>&amp;DataFrame</code>.
+      </p>
+
+      <p>
+        <strong>Step 3: polars-core</strong> —
+        <code>crates/polars-core/src/frame/dataframe.rs:226&#8211;228</code>
+      </p>
+
+      <pre><code><span class="cm">#[inline]</span>
+<span class="kw">pub fn</span> <span class="fn">height</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">usize</span> {
+    <span class="kw">self</span>.height
+}</code></pre>
+
+      <p>
+        It's a field read. The <code>DataFrame</code> caches its height as a plain
+        <code>usize</code>.
+      </p>
+
+      <pre>  df.height                         (Python)
+    │
+    ▼
+  self._df.height()                 (Python → PyO3 call)
+    │
+    ▼
+  PyDataFrame::height(&amp;self)        (Rust, polars-python)
+    │  self.df.read().height()
+    │       │
+    │       ▼
+    │  RwLock::read() → &amp;DataFrame
+    │       │
+    │       ▼
+    │  DataFrame::height(&amp;self)     (Rust, polars-core)
+    │       │
+    │       ▼
+    │  return self.height (usize)
+    │
+    ▼
+  usize → Python int               (PyO3 auto-conversion)</pre>
+
+      <p>
+        <strong>For contributors:</strong> This is the pattern for every simple accessor. The cost
+        is one Python-to-Rust function call (via PyO3's generated FFI), one <code>RwLock</code>
+        read-lock acquisition, one field access, and PyO3's automatic conversion of
+        <code>usize</code> to a Python <code>int</code>. No data copying, no GIL release needed.
+      </p>
+
+      <h2>What Python users actually hold</h2>
+
+      <p>
+        That trace bottoms out in <code>PyDataFrame</code> and <code>DataFrame</code>. Here's what
+        those types actually are — and the design pattern that makes the whole boundary work.
+      </p>
+
+      <h3><code>PyDataFrame</code></h3>
+
+      <p><code>crates/polars-python/src/dataframe/mod.rs:18&#8211;22</code></p>
+
+      <pre><code><span class="cm">#[pyclass(frozen)]</span>
+<span class="cm">#[repr(transparent)]</span>
+<span class="kw">pub struct</span> <span class="ty">PyDataFrame</span> {
+    <span class="kw">pub</span> df: <span class="ty">RwLock</span>&lt;<span class="ty">DataFrame</span>&gt;,
+}</code></pre>
+
+      <h3><code>PySeries</code></h3>
+
+      <p><code>crates/polars-python/src/series/mod.rs:30&#8211;34</code></p>
+
+      <pre><code><span class="cm">#[pyclass(frozen)]</span>
+<span class="cm">#[repr(transparent)]</span>
+<span class="kw">pub struct</span> <span class="ty">PySeries</span> {
+    <span class="kw">pub</span> series: <span class="ty">RwLock</span>&lt;<span class="ty">Series</span>&gt;,
+}</code></pre>
+
+      <h3><code>PyLazyFrame</code></h3>
+
+      <p><code>crates/polars-python/src/lazyframe/mod.rs:21&#8211;25</code></p>
+
+      <pre><code><span class="cm">#[pyclass(frozen)]</span>
+<span class="cm">#[repr(transparent)]</span>
+<span class="kw">pub struct</span> <span class="ty">PyLazyFrame</span> {
+    <span class="kw">pub</span> ldf: <span class="ty">RwLock</span>&lt;<span class="ty">LazyFrame</span>&gt;,
+}</code></pre>
+
+      <h3><code>PyExpr</code> — the odd one out</h3>
+
+      <p><code>crates/polars-python/src/expr/mod.rs:37&#8211;42</code></p>
+
+      <pre><code><span class="cm">#[pyclass]</span> <span class="cm">// Not marked frozen for pickling, but that's the only &amp;mut self method.</span>
+<span class="cm">#[repr(transparent)]</span>
+<span class="cm">#[derive(Clone)]</span>
+<span class="kw">pub struct</span> <span class="ty">PyExpr</span> {
+    <span class="kw">pub</span> inner: <span class="ty">Expr</span>,
+}</code></pre>
+
+      <p>
+        <code>PyExpr</code> is not <code>frozen</code> and does not use <code>RwLock</code>. The
+        comment explains why: pickling requires <code>&amp;mut self</code>, and that's the only
+        mutation path. Since <code>Expr</code> is a pure data structure (an AST node), there's no
+        interior-mutability concern — cloning is cheap and safe.
+      </p>
+
+      <h3>The <code>frozen</code> + <code>RwLock</code> pattern</h3>
+
+      <p>The other three structs share the same design:</p>
+
+      <ol>
+        <li><strong><code>#[pyclass(frozen)]</code></strong> tells PyO3 that Python will never see a
+          <code>&amp;mut self</code> reference. Python can hold multiple references to the same
+          object without violating Rust's aliasing rules. PyO3 doesn't need runtime borrow-checking
+          — every Python method receives <code>&amp;self</code>.</li>
+        <li><strong><code>RwLock&lt;T&gt;</code></strong> (from <code>parking_lot</code>, not
+          <code>std</code>) provides interior mutability within <code>&amp;self</code>. Methods that
+          read call <code>self.df.read()</code> for a shared lock. Methods that mutate call
+          <code>self.df.write()</code> for exclusive access.</li>
+        <li><strong><code>#[repr(transparent)]</code></strong> guarantees that
+          <code>PyDataFrame</code> has exactly the same memory layout as
+          <code>RwLock&lt;DataFrame&gt;</code>. This is exploited in <code>PyExpr</code>'s
+          <code>ToExprs</code> and <code>ToPyExprs</code> impls, which use <code>unsafe</code>
+          pointer casts to convert <code>Vec&lt;PyExpr&gt;</code> to <code>Vec&lt;Expr&gt;</code>
+          at zero cost (<code>expr/mod.rs:54&#8211;66</code>).</li>
+      </ol>
+
+      <pre>  Python land                  PyO3 boundary            Rust land
+  ──────────                   ─────────────            ──────────
+  polars.DataFrame ──holds──&gt; PyDataFrame
+        ._df                    │
+                                ├── RwLock&lt;DataFrame&gt;
+                                │     .read()  ──────&gt; &amp;DataFrame
+                                │     .write() ──────&gt; &amp;mut DataFrame
+                                │
+                                └── DataFrame (polars-core)
+                                      ├── height: usize
+                                      ├── columns: Vec&lt;Column&gt;
+                                      └── cached_schema: OnceLock&lt;SchemaRef&gt;</pre>
+
+      <p>
+        <strong>For contributors:</strong> Every new <code>#[pymethods]</code> function you add to
+        <code>PyDataFrame</code>, <code>PySeries</code>, or <code>PyLazyFrame</code> will receive
+        <code>&amp;self</code>. You access the inner data through <code>self.df.read()</code> (or
+        <code>self.series.read()</code>, <code>self.ldf.read()</code>). This is the first thing
+        you'll type in any new binding function.
+      </p>
+
+      <h2>How an expression is built — <code>pl.col("x")</code></h2>
+
+      <p>
+        Expressions are the heart of Polars' API. When a user writes <code>pl.col("x")</code>,
+        they're building a node in an abstract syntax tree.
+      </p>
+
+      <p>
+        <strong>Step 1: <code>pl.col</code> is a <code>Col</code> instance</strong> —
+        <code>py-polars/src/polars/functions/col.py:432</code>
+      </p>
+
+      <pre><code>col: Col = Col()</code></pre>
+
+      <p>
+        <code>pl.col</code> isn't a function — it's an instance of the <code>Col</code> class.
+        When you call <code>pl.col("x")</code>, Python invokes <code>Col.__call__</code>.
+      </p>
+
+      <p>
+        <strong>Step 2: <code>Col.__call__</code> dispatches</strong> —
+        <code>col.py:210&#8211;363</code>
+      </p>
+      <p>
+        For a simple string argument, <code>__call__</code> delegates to
+        <code>_create_col(name)</code>.
+      </p>
+
+      <p>
+        <strong>Step 3: <code>_create_col</code> for strings</strong> —
+        <code>col.py:70&#8211;71</code>
+      </p>
+
+      <pre><code>if isinstance(name, str):
+    return wrap_expr(plr.col(name))</code></pre>
+
+      <p>
+        <code>plr</code> is <code>polars._plr</code>, the compiled Rust extension module.
+        <code>plr.col(name)</code> is a <code>#[pyfunction]</code> call that crosses the PyO3
+        boundary.
+      </p>
+
+      <p>
+        <strong>Step 4: Rust <code>col()</code> function</strong> —
+        <code>crates/polars-python/src/functions/lazy.rs:113&#8211;116</code>
+      </p>
+
+      <pre><code><span class="cm">#[pyfunction]</span>
+<span class="kw">pub fn</span> <span class="fn">col</span>(name: &amp;<span class="ty">str</span>) -&gt; <span class="ty">PyExpr</span> {
+    dsl::<span class="fn">col</span>(name).<span class="fn">into</span>()
+}</code></pre>
+
+      <p>
+        PyO3 extracts the Python <code>str</code> to a Rust <code>&amp;str</code>, then calls into
+        <code>polars-plan</code>.
+      </p>
+
+      <p>
+        <strong>Step 5: The <code>Expr</code> is created</strong> —
+        <code>crates/polars-plan/src/dsl/functions/selectors.rs:27&#8211;37</code>
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">col</span>&lt;<span class="ty">S</span>&gt;(name: <span class="ty">S</span>) -&gt; <span class="ty">Expr</span>
+<span class="kw">where</span>
+    <span class="ty">S</span>: <span class="ty">Into</span>&lt;<span class="ty">PlSmallStr</span>&gt;,
+{
+    <span class="kw">let</span> name = name.<span class="fn">into</span>();
+    <span class="kw">match</span> name.<span class="fn">as_str</span>() {
+        <span class="str">"*"</span> =&gt; <span class="fn">all</span>().<span class="fn">as_expr</span>(),
+        n <span class="kw">if</span> <span class="fn">is_regex_projection</span>(n) =&gt; <span class="ty">Expr</span>::<span class="ty">Selector</span>(<span class="ty">Selector</span>::<span class="ty">Matches</span>(name)),
+        _ =&gt; <span class="ty">Expr</span>::<span class="ty">Column</span>(name),
+    }
+}</code></pre>
+
+      <p>
+        For <code>"x"</code>, this produces <code>Expr::Column(PlSmallStr::from("x"))</code> — a
+        single enum variant holding a small string.
+      </p>
+
+      <p>
+        <strong>Step 6: Wrapping back to Python</strong> —
+        <code>py-polars/src/polars/_utils/wrap.py</code>
+      </p>
+
+      <pre><code>def wrap_expr(pyexpr: PyExpr) -&gt; Expr:
+    return pl.Expr._from_pyexpr(pyexpr)</code></pre>
+
+      <p>
+        The Rust <code>PyExpr</code> (wrapping <code>Expr::Column("x")</code>) becomes a Python
+        <code>polars.Expr</code> object. The user sees a Python <code>Expr</code> whose
+        <code>_pyexpr</code> attribute holds the Rust <code>PyExpr</code>.
+      </p>
+
+      <p>
+        <strong>Step 7: Chaining — <code>pl.col("x").sum()</code></strong>
+      </p>
+      <p>
+        When the user calls <code>.sum()</code>, the Python <code>Expr.sum()</code> method
+        (<code>py-polars/src/polars/expr/expr.py:3523</code>) calls
+        <code>self._pyexpr.sum()</code>, which hits:
+      </p>
+
+      <pre><code><span class="cm">// crates/polars-python/src/expr/general.rs:151&#8211;153</span>
+<span class="kw">fn</span> <span class="fn">sum</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">Self</span> {
+    <span class="kw">self</span>.inner.<span class="fn">clone</span>().<span class="fn">sum</span>().<span class="fn">into</span>()
+}</code></pre>
+
+      <p>
+        This calls <code>Expr::sum()</code> from
+        <code>crates/polars-plan/src/dsl/statistics.rs:71&#8211;73</code>:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">sum</span>(<span class="kw">self</span>) -&gt; <span class="ty">Self</span> {
+    <span class="ty">AggExpr</span>::<span class="ty">Sum</span>(<span class="ty">Arc</span>::<span class="fn">new</span>(<span class="kw">self</span>)).<span class="fn">into</span>()
+}</code></pre>
+
+      <p>
+        So <code>pl.col("x").sum()</code> produces
+        <code>Expr::Agg(AggExpr::Sum(Arc::new(Expr::Column("x"))))</code>. A tree of enum
+        variants. No computation yet.
+      </p>
+
+      <pre>  pl.col("x")                             Python
+    │
+    ▼
+  Col.__call__("x") → _create_col("x")    Python
+    │
+    ▼
+  plr.col("x")                            PyO3 boundary crossing
+    │
+    ▼
+  dsl::col("x")                           polars-plan
+    │
+    ▼
+  Expr::Column(PlSmallStr("x"))           AST node created
+    │
+    ▼
+  PyExpr { inner: Expr::Column("x") }     wrapped for Python
+    │
+    ▼
+  wrap_expr() → polars.Expr               Python Expr object
+    │
+    ▼  .sum()
+  PyExpr::sum() → Expr::Agg(Sum(Column("x")))</pre>
+
+      <p>
+        <strong>For contributors:</strong> Adding a new expression function means: (1) adding a
+        variant or <code>FunctionExpr</code> case in <code>polars-plan</code>, (2) adding a method
+        to <code>PyExpr</code> in <code>crates/polars-python/src/expr/general.rs</code> (or a
+        sub-module), and (3) adding the Python wrapper in
+        <code>py-polars/src/polars/expr/expr.py</code>. Each <code>.method()</code> call crosses
+        the PyO3 boundary once, clones the <code>Expr</code> tree, wraps it in a new node, and
+        returns.
+      </p>
+
+      <h2>Eager vs lazy — where the boundary matters</h2>
+
+      <p>
+        The most surprising thing in this section: eager operations don't have a separate
+        implementation. <code>df.select()</code> calls <code>self.lazy().select().collect()</code>
+        internally. All eager DataFrame methods go through the lazy engine with a reduced
+        optimization set. Here's the full trace.
+      </p>
+
+      <h3>Eager: <code>df.select(pl.col("x").sum())</code></h3>
+
+      <p>
+        <code>py-polars/src/polars/dataframe/frame.py</code>:
+      </p>
+
+      <pre><code>def select(self, *exprs, **named_exprs):
+    from polars.lazyframe.opt_flags import QueryOptFlags
+    return (
+        self.lazy()
+        .select(*exprs, **named_exprs)
+        .collect(optimizations=QueryOptFlags._eager())
+    )</code></pre>
+
+      <p>
+        Eager <code>select</code> is secretly lazy. It calls <code>self.lazy()</code>, builds a
+        lazy plan, then immediately <code>.collect()</code>s it. The <code>_eager()</code> flag
+        (<code>py-polars/src/polars/lazyframe/opt_flags.py:142&#8211;148</code>) disables most
+        optimizations but keeps <code>simplify_expression</code> and sets an <code>eager</code>
+        flag.
+      </p>
+
+      <p>
+        The full boundary-crossing count for
+        <code>df.select(pl.col("x").sum())</code>:
+      </p>
+      <ol>
+        <li><code>pl.col("x")</code> — crosses once (Python → <code>plr.col</code>)</li>
+        <li><code>.sum()</code> — crosses once (<code>_pyexpr.sum()</code>)</li>
+        <li><code>df.lazy()</code> — crosses once (<code>_df.lazy()</code> →
+          <code>PyDataFrame::lazy()</code> at <code>general.rs:453</code>)</li>
+        <li><code>.select([pyexpr])</code> — crosses once (<code>_ldf.select()</code> at
+          <code>general.rs:859</code>)</li>
+        <li><code>.with_optimizations(flags)</code> — crosses once
+          (<code>general.rs:541</code>)</li>
+        <li><code>.collect(engine, callback)</code> — crosses once
+          (<code>general.rs:566</code>) — <strong>GIL is released here</strong> via
+          <code>py.enter_polars_df()</code></li>
+      </ol>
+
+      <p>Total: <strong>6 PyO3 boundary crossings</strong>, with the GIL released during actual computation.</p>
+
+      <h3>Lazy: <code>df.lazy().select(pl.col("x").sum()).collect()</code></h3>
+
+      <p>The user writes it explicitly, but the call sequence is nearly identical:</p>
+
+      <ol>
+        <li><code>pl.col("x")</code> — crosses once</li>
+        <li><code>.sum()</code> — crosses once</li>
+        <li><code>df.lazy()</code> — crosses once</li>
+        <li><code>.select([pyexpr])</code> — crosses once</li>
+        <li><code>.collect()</code> — calls <code>_ldf.with_optimizations(flags)</code> (crosses
+          once), then <code>ldf.collect(engine, callback)</code> (crosses once, GIL released)</li>
+      </ol>
+
+      <p>Total: <strong>6 PyO3 boundary crossings</strong> — the same number.</p>
+
+      <h3>So what's different?</h3>
+
+      <p>
+        The difference is in the <code>OptFlags</code>. Explicit lazy uses the default
+        <code>QueryOptFlags</code>, enabling the full optimizer suite: projection pushdown,
+        predicate pushdown, common subplan elimination, join collapsing. Eager mode disables all of
+        these except <code>simplify_expression</code>.
+      </p>
+      <p>
+        The optimizer runs inside the <code>collect()</code> call, after the GIL is released.
+        <code>ldf.collect_with_engine(engine)</code>
+        (<code>crates/polars-python/src/lazyframe/general.rs:579</code>) delegates to
+        <code>polars-lazy</code>, which runs the optimizer and then the execution engine — all in
+        pure Rust, without the GIL.
+      </p>
+
+      <pre>  EAGER PATH:                         LAZY PATH:
+  df.select(pl.col("x").sum())        df.lazy().select(pl.col("x").sum()).collect()
+    │                                   │
+    ▼                                   ▼
+  self.lazy()  ──────────────────────  df.lazy()
+    │                                   │
+    ▼                                   ▼
+  .select(exprs)                       .select(exprs)
+    │                                   │
+    ▼                                   ▼
+  .collect(                            .collect(
+    optimizations=_eager()               optimizations=DEFAULT  ← full optimizer
+  )                                    )
+    │                                   │
+    ▼                                   ▼
+  with_optimizations(flags)            with_optimizations(flags)
+    │                                   │
+    ▼                                   ▼
+  ldf.collect(engine, callback)        ldf.collect(engine, callback)
+    │                                   │
+    ▼                                   ▼
+  py.enter_polars_df(|| {              py.enter_polars_df(|| {
+    ldf.collect_with_engine(e)           ldf.collect_with_engine(e)
+  })  ← GIL released here             })  ← GIL released here</pre>
+
+      <p>
+        <strong>For contributors:</strong> The <code>enter_polars_df</code> helper
+        (<code>crates/polars-python/src/utils.rs:105&#8211;111</code>) is the canonical pattern for
+        releasing the GIL. It calls <code>self.detach(|| ...)</code> (PyO3's GIL-release
+        mechanism), wraps the closure in <code>catch_unwind</code> for panic safety, handles
+        <code>KeyboardInterrupt</code> via a timeout, and converts the result to
+        <code>PyDataFrame</code>. Any new binding that does significant computation should use
+        this pattern.
+      </p>
+
+      <h2>Where data actually crosses</h2>
+
+      <p>
+        The previous sections covered metadata and AST nodes crossing the boundary. This one is
+        about data.
+      </p>
+
+      <h3>Python → Rust: Building a Series from a Python list</h3>
+
+      <p>
+        When a user writes <code>pl.Series("x", [1, 2, 3])</code>, the Python constructor
+        eventually calls one of several <code>PySeries</code> static methods depending on the
+        inferred type.
+      </p>
+
+      <p>
+        <strong>Fast path: NumPy arrays</strong> —
+        <code>crates/polars-python/src/series/construction.rs:22&#8211;55</code>
+      </p>
+      <p>
+        For typed NumPy arrays, a macro generates per-type constructors (<code>new_i8</code>,
+        <code>new_i16</code>, ..., <code>new_u64</code>). These call
+        <code>numpy_array_to_arrow()</code>:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">numpy_array_to_arrow</span>&lt;<span class="ty">T</span>: <span class="ty">Element</span> + <span class="ty">NativeType</span>&gt;(
+    array: &amp;<span class="ty">Bound</span>&lt;<span class="ty">PyArray1</span>&lt;<span class="ty">T</span>&gt;&gt;
+) -&gt; <span class="ty">PrimitiveArray</span>&lt;<span class="ty">T</span>&gt; {
+    <span class="kw">let</span> owner = array.<span class="fn">clone</span>().<span class="fn">unbind</span>();
+    <span class="kw">let</span> ro = array.<span class="fn">readonly</span>();
+    <span class="kw">let</span> vals = ro.<span class="fn">as_slice</span>().<span class="fn">unwrap</span>();
+    <span class="kw">unsafe</span> {
+        <span class="kw">let</span> storage = <span class="ty">SharedStorage</span>::<span class="fn">from_slice_with_owner</span>(vals, owner);
+        <span class="kw">let</span> buffer = <span class="ty">Buffer</span>::<span class="fn">from_storage</span>(storage);
+        <span class="ty">PrimitiveArray</span>::<span class="fn">new_unchecked</span>(<span class="ty">T</span>::<span class="ty">PRIMITIVE</span>.<span class="fn">into</span>(), buffer, <span class="ty">None</span>)
+    }
+}</code></pre>
+
+      <p>
+        This is zero-copy. It takes the NumPy array's memory buffer, wraps it in Arrow's
+        <code>SharedStorage</code> (which retains a Python reference to prevent GC), and creates
+        an Arrow <code>PrimitiveArray</code> pointing directly at the same memory. No data is
+        copied.
+      </p>
+
+      <p>
+        <strong>Slow path: Python lists</strong> —
+        <code>construction.rs:248&#8211;275</code>
+      </p>
+      <p>
+        For plain Python lists, <code>new_from_any_values</code> iterates through the Python
+        sequence and calls <code>py_object_to_any_value</code> on each element. This is
+        inherently expensive — O(n) Python object inspections.
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">new_from_any_values</span>(name: &amp;<span class="ty">str</span>, values: &amp;<span class="ty">Bound</span>&lt;<span class="ty">PyAny</span>&gt;, strict: <span class="ty">bool</span>) -&gt; <span class="ty">PyResult</span>&lt;<span class="ty">Self</span>&gt; {
+    <span class="kw">let</span> any_values_result = values
+        .<span class="fn">try_iter</span>()?
+        .<span class="fn">map</span>(|v| <span class="fn">py_object_to_any_value</span>(&amp;(v?).<span class="fn">as_borrowed</span>(), strict, <span class="kw">true</span>))
+        .<span class="fn">collect</span>::&lt;<span class="ty">PyResult</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">AnyValue</span>&gt;&gt;&gt;();
+    <span class="cm">// ...</span>
+    <span class="kw">let</span> s = <span class="ty">Series</span>::<span class="fn">from_any_values</span>(name.<span class="fn">into</span>(), avs.<span class="fn">as_slice</span>(), strict);
+    <span class="cm">// ...</span>
+}</code></pre>
+
+      <p>
+        <code>construction.rs:295&#8211;312</code> also has a dedicated string path that uses a
+        <code>StringChunkedBuilder</code>, iterating and extracting <code>Cow&lt;str&gt;</code>
+        from each Python object.
+      </p>
+
+      <h3>Python → Rust: DataFrames</h3>
+
+      <p>
+        <code>dict_to_pydf</code>
+        (<code>py-polars/src/polars/_utils/construction/dataframe.py:76</code>) is the entry
+        point for <code>pl.DataFrame({"a": [1,2,3]})</code>. It processes each column value
+        through the Series construction pipeline above, then assembles them into a
+        <code>PyDataFrame</code>. For 3+ large NumPy arrays with <code>nan_to_null=True</code>,
+        it uses <code>multiprocessing.dummy</code> (thread pool) to parallelize the conversion
+        (<code>dataframe.py:112&#8211;145</code>).
+      </p>
+
+      <h3>Rust → Python: <code>.to_list()</code></h3>
+
+      <p>
+        The reverse direction is in
+        <code>crates/polars-python/src/series/export.rs:17</code>. The <code>to_list</code>
+        method is a big <code>match</code> on <code>series.dtype()</code>:
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">to_list</span>&lt;<span class="kw">'py</span>&gt;(&amp;<span class="kw">self</span>, py: <span class="ty">Python</span>&lt;<span class="kw">'py</span>&gt;) -&gt; <span class="ty">PyResult</span>&lt;<span class="ty">Bound</span>&lt;<span class="kw">'py</span>, <span class="ty">PyAny</span>&gt;&gt; {
+    <span class="kw">let</span> series = &amp;<span class="kw">self</span>.series.<span class="fn">read</span>();
+    <span class="kw">fn</span> <span class="fn">to_list_recursive</span>&lt;<span class="kw">'py</span>&gt;(py: <span class="ty">Python</span>&lt;<span class="kw">'py</span>&gt;, series: &amp;<span class="ty">Series</span>) -&gt; <span class="ty">PyResult</span>&lt;<span class="ty">Bound</span>&lt;<span class="kw">'py</span>, <span class="ty">PyAny</span>&gt;&gt; {
+        <span class="kw">let</span> pylist = <span class="kw">match</span> series.<span class="fn">dtype</span>() {
+            <span class="ty">DataType</span>::<span class="ty">Boolean</span> =&gt; <span class="ty">PyList</span>::<span class="fn">new</span>(py, series.<span class="fn">bool</span>()...)?,
+            <span class="ty">DataType</span>::<span class="ty">UInt8</span>   =&gt; <span class="ty">PyList</span>::<span class="fn">new</span>(py, series.<span class="fn">u8</span>()...)?,
+            <span class="cm">// ... every type handled explicitly</span>
+            <span class="ty">DataType</span>::<span class="ty">List</span>(_) =&gt; { <span class="cm">/* recursive case for nested lists */</span> },</code></pre>
+
+      <p>
+        This always copies data. Every Rust value becomes a Python object. For a million-row
+        integer column, that's a million Python <code>int</code> objects allocated on the Python
+        heap.
+      </p>
+
+      <h3>Rust → Python: Arrow PyCapsule (zero-copy export)</h3>
+
+      <p>
+        The modern zero-copy path uses Arrow's C Data Interface via PyCapsules.
+        <code>__arrow_c_stream__</code> (<code>export.rs:169&#8211;175</code>) exports a Series as
+        an Arrow stream capsule:
+      </p>
+
+      <pre><code><span class="kw">fn</span> <span class="fn">__arrow_c_stream__</span>&lt;<span class="kw">'py</span>&gt;(&amp;<span class="kw">self</span>, py: <span class="ty">Python</span>&lt;<span class="kw">'py</span>&gt;, ...) -&gt; <span class="ty">PyResult</span>&lt;<span class="ty">Bound</span>&lt;<span class="kw">'py</span>, <span class="ty">PyCapsule</span>&gt;&gt; {
+    <span class="fn">series_to_stream</span>(&amp;<span class="kw">self</span>.series.<span class="fn">read</span>(), py)
+}</code></pre>
+
+      <p>
+        This is what PyArrow and other Arrow-aware libraries use to receive Polars data without
+        copying.
+      </p>
+
+      <pre>  PYTHON → RUST (data ingestion):
+
+  pl.Series([1,2,3])
+    │
+    ├── NumPy array? ──YES──&gt; numpy_array_to_arrow()         ZERO-COPY
+    │                           SharedStorage wraps buffer
+    │
+    └── Python list? ──YES──&gt; new_from_any_values()           O(n) COPY
+                                py_object_to_any_value per element
+
+  RUST → PYTHON (data export):
+
+  series.to_list()
+    │
+    └── match on dtype ──&gt; PyList::new(py, ...) per type      O(n) COPY
+
+  series.__arrow_c_stream__()
+    │
+    └── series_to_stream() → PyCapsule                        ZERO-COPY</pre>
+
+      <p>
+        <strong>For contributors:</strong> If you're adding a new data-ingestion path, the question
+        is always: can we get an Arrow buffer without copying? If the source is NumPy or
+        Arrow-compatible, use <code>SharedStorage</code> or PyCapsule import. If it's a Python
+        iterable of Python objects, you're stuck with O(n) conversion — try to get the dtype early
+        so you can use a typed builder (like <code>StringChunkedBuilder</code>) rather than the
+        <code>AnyValue</code> fallback.
+      </p>
+
+      <h2>The plugin boundary</h2>
+
+      <p>
+        The <code>pyo3-polars</code> crate (at <code>pyo3-polars/</code> in the repo) provides a
+        completely different mechanism from the internal <code>crates/polars-python/</code>
+        bindings. Understanding why requires understanding what problem it solves.
+      </p>
+
+      <h3>Internal bindings: <code>crates/polars-python/</code></h3>
+
+      <p>
+        The internal <code>PyDataFrame</code>, <code>PySeries</code>, etc. are
+        <code>#[pyclass]</code> structs compiled <em>into the <code>polars</code> Python extension
+        module</em>. They share the same process, the same allocator, and the same Rust types. When
+        <code>PyDataFrame</code> calls <code>self.df.read()</code>, it's a direct pointer
+        dereference to a <code>DataFrame</code> on the same heap.
+      </p>
+
+      <h3>Plugin bindings: <code>pyo3-polars/pyo3-polars/src/types.rs</code></h3>
+
+      <p>The plugin crate defines its own <code>PySeries</code> and <code>PyDataFrame</code>:</p>
+
+      <pre><code><span class="cm">// pyo3-polars/pyo3-polars/src/types.rs:36&#8211;43</span>
+<span class="cm">#[repr(transparent)]</span>
+<span class="kw">pub struct</span> <span class="ty">PySeries</span>(<span class="kw">pub</span> <span class="ty">Series</span>);
+
+<span class="cm">#[repr(transparent)]</span>
+<span class="kw">pub struct</span> <span class="ty">PyDataFrame</span>(<span class="kw">pub</span> <span class="ty">DataFrame</span>);</code></pre>
+
+      <p>
+        No <code>RwLock</code>. No <code>#[pyclass]</code>. These are plain newtypes in a
+        <em>different shared library</em> from the main Polars module.
+      </p>
+
+      <h3>How data crosses between the two libraries</h3>
+
+      <p>
+        When a plugin receives a <code>PySeries</code>, the <code>FromPyObject</code> impl
+        (<code>types.rs:176&#8211;186</code>) does something clever:
+      </p>
+
+      <pre><code><span class="kw">impl</span>&lt;<span class="kw">'a</span>, <span class="kw">'py</span>&gt; <span class="ty">FromPyObject</span>&lt;<span class="kw">'a</span>, <span class="kw">'py</span>&gt; <span class="kw">for</span> <span class="ty">PySeries</span> {
+    <span class="kw">fn</span> <span class="fn">extract</span>(ob: <span class="ty">Borrowed</span>&lt;<span class="kw">'a</span>, <span class="kw">'py</span>, <span class="ty">PyAny</span>&gt;) -&gt; <span class="ty">PyResult</span>&lt;<span class="ty">Self</span>&gt; {
+        <span class="kw">let mut</span> export = <span class="ty">SeriesExport</span>::<span class="fn">empty</span>();
+        ob.<span class="fn">getattr</span>(<span class="str">"_s"</span>)?
+            .<span class="fn">call_method1</span>(<span class="str">"_export"</span>, ((&amp;<span class="kw">raw mut</span> export).<span class="fn">addr</span>(),))?;
+        <span class="kw">let</span> series = <span class="kw">unsafe</span> { <span class="fn">import_series</span>(export).<span class="fn">map_err</span>(<span class="ty">PyPolarsErr</span>::<span class="fn">from</span>)? };
+        <span class="ty">Ok</span>(<span class="ty">PySeries</span>(series))
+    }
+}</code></pre>
+
+      <p>
+        It calls <code>_export</code> on the internal <code>PySeries</code> (from
+        <code>crates/polars-python/</code>), passing a raw pointer to a
+        <code>SeriesExport</code> struct. The internal side writes Arrow C Data Interface structs
+        into that memory (<code>crates/polars-python/src/series/export.rs:177&#8211;182</code>):
+      </p>
+
+      <pre><code><span class="kw">pub fn</span> <span class="fn">_export</span>(&amp;<span class="kw">self</span>, _py: <span class="ty">Python</span>&lt;<span class="kw">'_</span>&gt;, location: <span class="ty">usize</span>) {
+    <span class="kw">let</span> export = polars_ffi::version_0::<span class="fn">export_series</span>(&amp;<span class="kw">self</span>.series.<span class="fn">read</span>());
+    <span class="kw">unsafe</span> {
+        (location <span class="kw">as</span> *<span class="kw">mut</span> <span class="ty">SeriesExport</span>).<span class="fn">write</span>(export);
+    }
+}</code></pre>
+
+      <p>
+        <code>SeriesExport</code> itself (<code>crates/polars-ffi/src/version_0.rs</code>) is a
+        C-ABI struct containing Arrow schema and array pointers:
+      </p>
+
+      <pre><code><span class="cm">#[repr(C)]</span>
+<span class="kw">pub struct</span> <span class="ty">SeriesExport</span> {
+    field: *<span class="kw">mut</span> <span class="ty">ArrowSchema</span>,
+    arrays: *<span class="kw">mut</span> *<span class="kw">mut</span> <span class="ty">ArrowArray</span>,
+    len: <span class="ty">usize</span>,
+    release: <span class="ty">Option</span>&lt;<span class="kw">unsafe extern</span> <span class="str">"C"</span> <span class="kw">fn</span>(arg1: *<span class="kw">mut</span> <span class="ty">SeriesExport</span>)&gt;,
+    private_data: *<span class="kw">mut</span> std::os::raw::<span class="ty">c_void</span>,
+}</code></pre>
+
+      <p>
+        The data doesn't get copied. The plugin library receives raw pointers to the same Arrow
+        buffers that live in the main Polars process. Cross-library zero-copy.
+      </p>
+
+      <h3>How <code>#[polars_expr]</code> works</h3>
+
+      <p>
+        The <code>polars_expr</code> proc macro
+        (<code>pyo3-polars/pyo3-polars-derive/src/lib.rs:263&#8211;285</code>) generates two
+        <code>extern "C"</code> functions for each annotated Rust function:
+      </p>
+
+      <ol>
+        <li><strong><code>_polars_plugin_{name}</code></strong> — receives
+          <code>SeriesExport</code> pointers (inputs) and writes a <code>SeriesExport</code>
+          (output). This is the computation function.</li>
+        <li><strong><code>_polars_plugin_field_{name}</code></strong> — receives
+          <code>ArrowSchema</code> pointers (input field metadata) and returns an
+          <code>ArrowSchema</code> (output type). This is the type-inference function used during
+          query planning.</li>
+      </ol>
+
+      <p>
+        The generated code for the computation function
+        (<code>lib.rs:136&#8211;163</code>):
+      </p>
+
+      <pre><code><span class="cm">#[no_mangle]</span>
+<span class="kw">pub unsafe extern</span> <span class="str">"C"</span> <span class="kw">fn</span> <span class="fn">_polars_plugin_my_func</span>(
+    e: *<span class="kw">mut</span> <span class="ty">SeriesExport</span>,
+    input_len: <span class="ty">usize</span>,
+    kwargs_ptr: *<span class="kw">const</span> <span class="ty">u8</span>,
+    kwargs_len: <span class="ty">usize</span>,
+    return_value: *<span class="kw">mut</span> <span class="ty">SeriesExport</span>,
+    context: *<span class="kw">mut</span> <span class="ty">CallerContext</span>,
+) {
+    <span class="kw">let</span> panic_result = std::panic::<span class="fn">catch_unwind</span>(<span class="kw">move</span> || {
+        <span class="kw">let</span> inputs = <span class="fn">import_series_buffer</span>(e, input_len).<span class="fn">unwrap</span>();
+        <span class="cm">// ... call user function ...</span>
+        *return_value = <span class="fn">export_series</span>(&amp;out);
+    });
+}</code></pre>
+
+      <h3>Why this bypasses the GIL</h3>
+
+      <p>
+        These are <code>extern "C"</code> functions loaded via <code>dlopen</code> /
+        <code>dlsym</code>. Polars' engine calls them directly from Rust, not through Python. Series
+        data arrives via C-ABI pointers, computation happens in pure Rust, and results go back via
+        C-ABI pointers. Python is never involved in the hot path. The GIL doesn't need to be held
+        because no Python objects are created, accessed, or modified.
+      </p>
+
+      <pre>  INTERNAL BINDINGS (crates/polars-python/):
+
+  Python obj ──PyO3 #[pymethods]──&gt; &amp;self.df.read() ──&gt; DataFrame
+                                    (same process, same heap)
+
+  PLUGIN BINDINGS (pyo3-polars/):
+
+  Python obj ──.getattr("_s")._export(ptr)──&gt; SeriesExport (Arrow C ABI)
+    │                                              │
+    │  (pointer handoff, zero copy)                │
+    │                                              ▼
+    │                                         import_series()
+    │                                              │
+    │                                              ▼
+    │                                         Plugin's own Series
+    │                                              │
+    │                                    (pure Rust, no GIL, no Python)
+    │                                              │
+    │                                              ▼
+    │                                         export_series(&amp;result)
+    │                                              │
+    ▼                                              ▼
+  Result imported back               SeriesExport written to return_value</pre>
+
+      <p>
+        <strong>For contributors:</strong> If you're building an expression plugin, you never touch
+        PyO3 <code>#[pymethods]</code> at all. You write
+        <code>fn my_func(inputs: &amp;[Series]) -&gt; PolarsResult&lt;Series&gt;</code>, annotate
+        it with <code>#[polars_expr(output_type=...)]</code>, and compile to a
+        <code>cdylib</code>. The macro handles all the FFI plumbing. Your function receives real
+        <code>Series</code> values and returns a real <code>Series</code> — the C-ABI boundary is
+        invisible.
+      </p>
+
+      <h2>Unified architecture</h2>
+
+      <pre>                        ┌─────────────────────────────────────┐
+                        │           PYTHON LAYER               │
+                        │                                      │
+                        │  polars.DataFrame  polars.LazyFrame  │
+                        │    ._df               ._ldf          │
+                        │      │                  │            │
+                        │  polars.Series    polars.Expr        │
+                        │    ._s               ._pyexpr        │
+                        └──────┬───────────────────┬───────────┘
+                               │  PyO3 #[pyclass]  │
+                ╔══════════════╧═══════════════════╧════════════════╗
+                ║        crates/polars-python/ (PyO3 boundary)      ║
+                ║                                                    ║
+                ║  PyDataFrame          PyLazyFrame     PyExpr       ║
+                ║  ┌──────────────┐    ┌────────────┐  ┌─────────┐  ║
+                ║  │RwLock&lt;DF&gt;    │    │RwLock&lt;LF&gt;  │  │Expr     │  ║
+                ║  │  .read()     │    │  .read()   │  │(no lock)│  ║
+                ║  │  .write()    │    │            │  │         │  ║
+                ║  └──────┬───────┘    └─────┬──────┘  └────┬────┘  ║
+                ║         │                  │              │        ║
+                ║         │  enter_polars_df (GIL release)  │        ║
+                ╚═════════╪══════════════════╪══════════════╪════════╝
+                          │                  │              │
+           ┌──────────────┼──────────────────┼──────────────┘
+           │              │                  │
+           ▼              ▼                  ▼
+    ┌─────────────┐ ┌───────────┐  ┌──────────────────┐
+    │polars-core  │ │polars-lazy│  │polars-plan       │
+    │             │ │           │  │                  │
+    │ DataFrame   │ │ LazyFrame │  │ Expr enum (AST)  │
+    │  .height    │ │  .collect │  │  Column(name)    │
+    │  .columns   │ │  .select  │  │  Agg(Sum(...))   │
+    │  Vec&lt;Column&gt;│ │           │  │  BinaryExpr{..}  │
+    │             │ │ optimizer │  │  Function{..}    │
+    └──────┬──────┘ └─────┬─────┘  └──────────────────┘
+           │              │
+           │      ┌───────┘
+           ▼      ▼
+    ┌──────────────────┐     ┌─────────────────────────────┐
+    │ polars-mem-engine│     │ polars-stream               │
+    │ (in-memory exec) │     │ (streaming exec)            │
+    └──────────────────┘     └─────────────────────────────┘
+           │                          │
+           ▼                          ▼
+    ┌──────────────────────────────────────────────────────┐
+    │                polars-arrow / Arrow buffers           │
+    └──────────────────────────────────────────────────────┘
+           │                                      ▲
+           │        Arrow C Data Interface        │
+           ▼           (SeriesExport)             │
+    ┌──────────────────────────────────────────────────────┐
+    │              pyo3-polars (Plugin boundary)            │
+    │                                                       │
+    │  #[polars_expr] → extern "C" fn _polars_plugin_xxx   │
+    │    receives: *mut SeriesExport (inputs)               │
+    │    returns:  *mut SeriesExport (output)               │
+    │    *** No GIL, no Python, no PyO3 #[pymethods] ***   │
+    └──────────────────────────────────────────────────────┘</pre>
+
+      <h2>Key takeaways for contributors</h2>
+
+      <ol>
+        <li><strong>The four <code>#[pyclass]</code> structs are your entry points.</strong>
+          <code>PyDataFrame</code>, <code>PySeries</code>, <code>PyLazyFrame</code> use
+          <code>frozen</code> + <code>RwLock</code>. <code>PyExpr</code> is the exception: no
+          lock, just a cloneable AST node.</li>
+        <li><strong>Eager operations go through lazy internally.</strong>
+          <code>df.select()</code> calls <code>self.lazy().select().collect()</code>. If you're
+          optimizing an eager path, you're actually optimizing the lazy path with limited
+          optimization flags.</li>
+        <li><strong>Expression building is cheap; execution is where the work happens.</strong>
+          Every <code>.method()</code> on an <code>Expr</code> is one PyO3 crossing that clones an
+          enum and wraps it in a new node. The real computation happens inside
+          <code>enter_polars_df</code>, after the GIL is released.</li>
+        <li><strong>Data conversion is the expensive boundary.</strong> Python list → Series is
+          O(n) with per-element inspection. NumPy → Series is zero-copy via
+          <code>SharedStorage</code>. Arrow PyCapsule exchange is zero-copy in both directions.</li>
+        <li><strong>Plugins bypass everything.</strong> The <code>#[polars_expr]</code> system uses
+          C-ABI FFI, not PyO3 methods. Data arrives as Arrow buffers, computation runs in pure
+          Rust, results return as Arrow buffers. If you're writing a plugin, you never interact
+          with the PyO3 layer at all.</li>
+      </ol>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
