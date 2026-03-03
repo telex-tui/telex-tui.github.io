@@ -33,15 +33,37 @@
       </p>
 
       <p>
-        Based on reading the actual Polars source code as of early 2026, not documentation or blog posts.
-        File paths are accurate at time of writing and subject to change — treat them as pointers, not
-        precise references.
+        Polars is a high-performance DataFrame library with a Python API and a Rust
+        engine. A DataFrame, in Polars and elsewhere, is a table of named, typed
+        columns; a Series is a single column. The bridge between the two languages is
+        PyO3, a Rust crate that generates the FFI layer letting Python call directly
+        into compiled Rust code.
+      </p>
+
+      <p>
+        When Python runs <code>import polars</code>, it loads a compiled shared library
+        (<code>.so</code> on Linux, <code>.dylib</code> on macOS) containing the entire
+        Rust engine. Python and Rust share the same process and address space from that
+        point on. A "boundary crossing" is just a function call across the language
+        boundary, with type conversion at each end — not IPC, not a network call.
+        Python's GIL (Global Interpreter Lock) means only one thread can run Python
+        bytecode at a time, but Rust code can release the GIL to do heavy computation
+        without blocking Python threads. This turns out to be critical for performance,
+        and we'll see exactly where it happens.
+      </p>
+
+      <p>
+        Everything below is based on reading the actual Polars source code as of early
+        2026, not documentation or blog posts. File paths are accurate at time of
+        writing and subject to change — treat them as pointers, not precise references.
       </p>
 
       <h2>The simplest possible round trip — <code>df.height</code></h2>
 
       <p>
-        When a Python user writes <code>df.height</code>, here's exactly what happens.
+        The number of rows in a DataFrame. It's the simplest property Polars exposes — a
+        single field read — which makes it the cleanest trace through the full call
+        stack, from Python property to Rust struct field.
       </p>
 
       <p>
@@ -68,8 +90,10 @@ def height(self) -&gt; int:
 }</code></pre>
 
       <p>
-        <code>self.df.read()</code> acquires a <code>parking_lot</code> read lock, returning a guard
-        that derefs to <code>&amp;DataFrame</code>.
+        <code>self.df.read()</code> acquires a <code>parking_lot</code> read lock
+        (<code>parking_lot</code> is a faster, drop-in replacement for
+        <code>std::sync::RwLock</code>), returning a guard that derefs to
+        <code>&amp;DataFrame</code>.
       </p>
 
       <p>
@@ -109,7 +133,7 @@ def height(self) -&gt; int:
   usize → Python int               (PyO3 auto-conversion)</pre>
 
       <p>
-        <strong>For contributors:</strong> This is the pattern for every simple accessor. The cost
+        This is the pattern for every simple accessor. The cost
         is one Python-to-Rust function call (via PyO3's generated FFI), one <code>RwLock</code>
         read-lock acquisition, one field access, and PyO3's automatic conversion of
         <code>usize</code> to a Python <code>int</code>. No data copying, no GIL release needed.
@@ -120,6 +144,14 @@ def height(self) -&gt; int:
       <p>
         That trace bottoms out in <code>PyDataFrame</code> and <code>DataFrame</code>. Here's what
         those types actually are — and the design pattern that makes the whole boundary work.
+      </p>
+
+      <p>
+        Four <code>#[pyclass]</code> structs form the boundary layer.
+        <code>PyDataFrame</code>, <code>PySeries</code>, and <code>PyLazyFrame</code> each
+        wrap their Rust counterpart for Python access — a <code>LazyFrame</code> represents a
+        query plan that hasn't executed yet. <code>PyExpr</code> wraps an expression node: a
+        description of an operation, not data itself.
       </p>
 
       <h3><code>PyDataFrame</code></h3>
@@ -165,9 +197,10 @@ def height(self) -&gt; int:
 
       <p>
         <code>PyExpr</code> is not <code>frozen</code> and does not use <code>RwLock</code>. The
-        comment explains why: pickling requires <code>&amp;mut self</code>, and that's the only
-        mutation path. Since <code>Expr</code> is a pure data structure (an AST node), there's no
-        interior-mutability concern — cloning is cheap and safe.
+        comment explains why: pickling — Python's serialization mechanism for converting
+        objects to bytes for storage or transfer — requires <code>&amp;mut self</code>, and
+        that's the only mutation path. Since <code>Expr</code> is a pure data structure (an
+        AST node), there's no interior-mutability concern — cloning is cheap and safe.
       </p>
 
       <h3>The <code>frozen</code> + <code>RwLock</code> pattern</h3>
@@ -205,7 +238,7 @@ def height(self) -&gt; int:
                                       └── cached_schema: OnceLock&lt;SchemaRef&gt;</pre>
 
       <p>
-        <strong>For contributors:</strong> Every new <code>#[pymethods]</code> function you add to
+        Every new <code>#[pymethods]</code> function you add to
         <code>PyDataFrame</code>, <code>PySeries</code>, or <code>PyLazyFrame</code> will receive
         <code>&amp;self</code>. You access the inner data through <code>self.df.read()</code> (or
         <code>self.series.read()</code>, <code>self.ldf.read()</code>). This is the first thing
@@ -215,8 +248,12 @@ def height(self) -&gt; int:
       <h2>How an expression is built — <code>pl.col("x")</code></h2>
 
       <p>
-        Expressions are the heart of Polars' API. When a user writes <code>pl.col("x")</code>,
-        they're building a node in an abstract syntax tree.
+        Expressions are the heart of Polars' API. An expression is a description of an
+        operation: "take column x," "sum it," "filter where it's greater than 5." Rather than
+        executing immediately, Polars builds a tree of these descriptions first, then executes
+        the whole tree later. When a user writes <code>pl.col("x")</code>, they're creating the
+        leaf node of that tree — "refer to the column named x." Each subsequent method call
+        wraps the existing tree in a new node, building up an abstract syntax tree.
       </p>
 
       <p>
@@ -249,9 +286,10 @@ def height(self) -&gt; int:
     return wrap_expr(plr.col(name))</code></pre>
 
       <p>
-        <code>plr</code> is <code>polars._plr</code>, the compiled Rust extension module.
-        <code>plr.col(name)</code> is a <code>#[pyfunction]</code> call that crosses the PyO3
-        boundary.
+        <code>plr</code> is <code>polars._plr</code>, the compiled Rust shared library that
+        gets loaded at <code>import polars</code> time — the same extension module described
+        in the opening. <code>plr.col(name)</code> is a <code>#[pyfunction]</code> call that
+        crosses the PyO3 boundary.
       </p>
 
       <p>
@@ -358,7 +396,7 @@ def height(self) -&gt; int:
   PyExpr::sum() → Expr::Agg(Sum(Column("x")))</pre>
 
       <p>
-        <strong>For contributors:</strong> Adding a new expression function means: (1) adding a
+        Adding a new expression function means: (1) adding a
         variant or <code>FunctionExpr</code> case in <code>polars-plan</code>, (2) adding a method
         to <code>PyExpr</code> in <code>crates/polars-python/src/expr/general.rs</code> (or a
         sub-module), and (3) adding the Python wrapper in
@@ -370,7 +408,14 @@ def height(self) -&gt; int:
       <h2>Eager vs lazy — where the boundary matters</h2>
 
       <p>
-        The most surprising thing in this section: eager operations don't have a separate
+        Polars has two execution modes. Eager means compute immediately and return a result:
+        <code>df.select()</code> gives you a new DataFrame right away. Lazy means record the
+        operations as a plan, optimize that plan, then compute when you finally call
+        <code>.collect()</code>.
+      </p>
+
+      <p>
+        The most surprising thing about these two modes: eager operations don't have a separate
         implementation. <code>df.select()</code> calls <code>self.lazy().select().collect()</code>
         internally. All eager DataFrame methods go through the lazy engine with a reduced
         optimization set. Here's the full trace.
@@ -437,9 +482,10 @@ def height(self) -&gt; int:
 
       <p>
         The difference is in the <code>OptFlags</code>. Explicit lazy uses the default
-        <code>QueryOptFlags</code>, enabling the full optimizer suite: projection pushdown,
-        predicate pushdown, common subplan elimination, join collapsing. Eager mode disables all of
-        these except <code>simplify_expression</code>.
+        <code>QueryOptFlags</code>, enabling the full optimizer suite: projection pushdown
+        (skip columns the query never reads), predicate pushdown (filter rows before
+        loading all the data), common subplan elimination, and join collapsing. Eager mode
+        disables all of these except <code>simplify_expression</code>.
       </p>
       <p>
         The optimizer runs inside the <code>collect()</code> call, after the GIL is released.
@@ -475,7 +521,7 @@ def height(self) -&gt; int:
   })  ← GIL released here             })  ← GIL released here</pre>
 
       <p>
-        <strong>For contributors:</strong> The <code>enter_polars_df</code> helper
+        The <code>enter_polars_df</code> helper
         (<code>crates/polars-python/src/utils.rs:105&#8211;111</code>) is the canonical pattern for
         releasing the GIL. It calls <code>self.detach(|| ...)</code> (PyO3's GIL-release
         mechanism), wraps the closure in <code>catch_unwind</code> for panic safety, handles
@@ -488,7 +534,14 @@ def height(self) -&gt; int:
 
       <p>
         The previous sections covered metadata and AST nodes crossing the boundary. This one is
-        about data.
+        about data — the actual column buffers that hold millions of values.
+      </p>
+
+      <p>
+        The key concept here is zero-copy: Rust reading the same memory buffer that
+        Python or NumPy allocated, without copying it to a new location. Why it matters is
+        straightforward — copying a billion numbers takes time and doubles memory usage. Every
+        data-crossing path in Polars is designed to avoid that copy when possible.
       </p>
 
       <h3>Python → Rust: Building a Series from a Python list</h3>
@@ -523,10 +576,14 @@ def height(self) -&gt; int:
 }</code></pre>
 
       <p>
-        This is zero-copy. It takes the NumPy array's memory buffer, wraps it in Arrow's
-        <code>SharedStorage</code> (which retains a Python reference to prevent GC), and creates
-        an Arrow <code>PrimitiveArray</code> pointing directly at the same memory. No data is
-        copied.
+        This is zero-copy. It takes the NumPy array's memory buffer, wraps it in
+        <code>SharedStorage</code> — part of Polars' Arrow implementation, which stores data in
+        Apache Arrow's columnar memory format — and creates an Arrow
+        <code>PrimitiveArray</code> pointing directly at the same memory. Arrow is a
+        standardized in-memory columnar layout, and because Polars uses it internally, zero-copy
+        exchange with other Arrow-aware tools is possible: everyone agrees on how data is laid
+        out in memory. The <code>SharedStorage</code> retains a Python reference to prevent GC.
+        No data is copied.
       </p>
 
       <p>
@@ -593,7 +650,8 @@ def height(self) -&gt; int:
       <h3>Rust → Python: Arrow PyCapsule (zero-copy export)</h3>
 
       <p>
-        The modern zero-copy path uses Arrow's C Data Interface via PyCapsules.
+        The modern zero-copy path uses Arrow's C Data Interface via PyCapsules — Python's
+        mechanism for passing raw pointers between extension modules.
         <code>__arrow_c_stream__</code> (<code>export.rs:169&#8211;175</code>) exports a Series as
         an Arrow stream capsule:
       </p>
@@ -628,7 +686,7 @@ def height(self) -&gt; int:
     └── series_to_stream() → PyCapsule                        ZERO-COPY</pre>
 
       <p>
-        <strong>For contributors:</strong> If you're adding a new data-ingestion path, the question
+        If you're adding a new data-ingestion path, the question
         is always: can we get an Arrow buffer without copying? If the source is NumPy or
         Arrow-compatible, use <code>SharedStorage</code> or PyCapsule import. If it's a Python
         iterable of Python objects, you're stuck with O(n) conversion — try to get the dtype early
@@ -641,7 +699,10 @@ def height(self) -&gt; int:
       <p>
         The <code>pyo3-polars</code> crate (at <code>pyo3-polars/</code> in the repo) provides a
         completely different mechanism from the internal <code>crates/polars-python/</code>
-        bindings. Understanding why requires understanding what problem it solves.
+        bindings. A plugin is a separately compiled shared library — it can't share Rust types
+        directly with the main Polars binary because they're different compilation units with
+        potentially different type layouts. The Arrow C Data Interface solves this by providing a
+        C-level struct layout that both sides can agree on, regardless of how each was compiled.
       </p>
 
       <h3>Internal bindings: <code>crates/polars-python/</code></h3>
@@ -703,7 +764,9 @@ def height(self) -&gt; int:
 
       <p>
         <code>SeriesExport</code> itself (<code>crates/polars-ffi/src/version_0.rs</code>) is a
-        C-ABI struct containing Arrow schema and array pointers:
+        <code>#[repr(C)]</code> struct — using the C calling convention, the common interface that
+        different languages and separately compiled libraries can agree on — containing Arrow
+        schema and array pointers:
       </p>
 
       <pre><code><span class="cm">#[repr(C)]</span>
@@ -763,10 +826,12 @@ def height(self) -&gt; int:
 
       <p>
         These are <code>extern "C"</code> functions loaded via <code>dlopen</code> /
-        <code>dlsym</code>. Polars' engine calls them directly from Rust, not through Python. Series
-        data arrives via C-ABI pointers, computation happens in pure Rust, and results go back via
-        C-ABI pointers. Python is never involved in the hot path. The GIL doesn't need to be held
-        because no Python objects are created, accessed, or modified.
+        <code>dlsym</code> — the OS-level functions for loading shared libraries at runtime
+        and looking up symbols in them. Polars' engine calls them directly from Rust, not
+        through Python. Series data arrives via C-ABI pointers, computation happens in pure
+        Rust, and results go back via C-ABI pointers. Python is never involved in the hot
+        path. The GIL doesn't need to be held because no Python objects are created, accessed,
+        or modified.
       </p>
 
       <pre>  INTERNAL BINDINGS (crates/polars-python/):
@@ -794,11 +859,12 @@ def height(self) -&gt; int:
   Result imported back               SeriesExport written to return_value</pre>
 
       <p>
-        <strong>For contributors:</strong> If you're building an expression plugin, you never touch
+        If you're building an expression plugin, you never touch
         PyO3 <code>#[pymethods]</code> at all. You write
         <code>fn my_func(inputs: &amp;[Series]) -&gt; PolarsResult&lt;Series&gt;</code>, annotate
         it with <code>#[polars_expr(output_type=...)]</code>, and compile to a
-        <code>cdylib</code>. The macro handles all the FFI plumbing. Your function receives real
+        <code>cdylib</code> (a Rust crate type that produces a C-compatible shared library).
+        The macro handles all the FFI plumbing. Your function receives real
         <code>Series</code> values and returns a real <code>Series</code> — the C-ABI boundary is
         invisible.
       </p>
