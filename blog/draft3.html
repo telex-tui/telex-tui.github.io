@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Concurrency Primitives: What Rust Inherited from C - Telex</title>
+  <meta name="description" content="A mapping of C's concurrency primitives to their Rust equivalents — mutexes, rwlocks, condvars, semaphores, atomics, barriers, and more — showing where Rust's abstractions come from.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Concurrency Primitives: What Rust Inherited from C</h1>
+      <div class="post-meta">March 2026</div>
+      <p style="background:#2d1a00;border:1px solid #d29922;border-radius:6px;padding:0.6rem 1rem;font-size:0.85rem;color:#d29922;">
+        Draft — work in progress, not for publication.
+      </p>
+
+      <p>
+        If you learned concurrency through Rust's <code>std::sync</code>, you got clean APIs
+        and compile-time guarantees. What you might not have got is a feel for <em>why</em>
+        the primitives are shaped the way they are. That comes from the C level, where you're
+        closer to the OS and the choices are more exposed.
+      </p>
+
+      <p>
+        This post maps C's concurrency primitives to their Rust equivalents — not to teach C,
+        but to show where Rust's abstractions come from and what they're doing underneath. If
+        you've read <a href="draft2.html">The GIL Is Just a Mutex</a>, this is the companion
+        piece: the foundations that make that post click.
+      </p>
+
+      <p>
+        Four groups. Each one a different answer to the same question: how do threads share
+        work without corrupting each other's state?
+      </p>
+
+      <h2>1. Mutual Exclusion</h2>
+
+      <p>
+        The simplest concurrency problem: two threads must not be in the same critical section
+        at the same time.
+      </p>
+
+      <h3>Mutex</h3>
+
+      <p>
+        One thread holds the lock. Other threads trying to acquire it will sleep until it's
+        released. The holder is the only one who can release it.
+      </p>
+
+<pre>
+          Thread A          Thread B
+             │                  │
+        ┌─lock()─┐              │
+        │critical │         ▓▓▓▓▓▓▓
+        │section  │         blocked
+        └─unlock()┘         sleeping
+             │                  │
+             │             ┌─lock()─┐
+             │             │critical │
+             │             │section  │
+             │             └─unlock()┘
+             │                  │
+             ▼                  ▼
+
+          ▓ = sleeping, waiting for lock</pre>
+
+      <p>
+        In C, this is <code>pthread_mutex_lock</code> / <code>pthread_mutex_unlock</code>.
+        The OS deschedules the blocked thread — it doesn't burn CPU.
+      </p>
+
+      <p>
+        In Rust, it's <code>std::sync::Mutex&lt;T&gt;</code>. The critical difference from C:
+        Rust's mutex <em>owns</em> the data it protects. You can't access <code>T</code>
+        without holding the lock, because <code>lock()</code> returns a
+        <code>MutexGuard&lt;T&gt;</code> that derefs to <code>T</code>. The guard drops at
+        scope exit, releasing the lock automatically.
+      </p>
+
+<pre><code><span class="cm">// C: the link between mutex and data is a comment</span>
+<span class="ty">pthread_mutex_t</span> lock;
+<span class="ty">int</span> shared_counter;  <span class="cm">// protected by 'lock' (hope you read the comment)</span>
+
+<span class="cm">// Rust: the link is the type system</span>
+<span class="kw">let</span> counter: <span class="ty">Mutex</span>&lt;<span class="ty">i32</span>&gt; = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="num">0</span>);
+<span class="cm">// Only way to reach the i32 is through lock()</span>
+*counter.<span class="fn">lock</span>().<span class="fn">unwrap</span>() += <span class="num">1</span>; <span class="cm">// Guard drops here — lock released</span></code></pre>
+
+      <p>
+        This is the pattern across all four groups: Rust takes a C convention ("this mutex
+        protects this data") and makes it a compiler-enforced invariant.
+      </p>
+
+      <h3>RwLock</h3>
+
+      <p>
+        A refinement of mutex. Many readers can hold the lock simultaneously, but a writer
+        needs exclusive access.
+      </p>
+
+<pre>
+       Reader A    Reader B    Writer C     Reader D
+          │           │           │             │
+     ┌─read()──┐      │           │             │
+     │reading  │ ┌─read()──┐      │             │
+     │         │ │reading  │  ▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓▓▓▓▓
+     │         │ │(concur.)│  blocked       blocked
+     └─────────┘ └─────────┘  until all     behind
+          │           │       readers done   writer
+          │           │           │             │
+          │           │      ┌─write()──┐       │
+          │           │      │exclusive  │       │
+          │           │      │access     │       │
+          │           │      └──────────┘       │
+          │           │           │         ┌─read()──┐
+          │           │           │         │reading  │
+          │           │           │         └─────────┘
+          ▼           ▼           ▼             ▼</pre>
+
+      <p>
+        In C: <code>pthread_rwlock_rdlock</code> / <code>pthread_rwlock_wrlock</code>. You
+        choose read or write at each call site. Nothing stops you calling <code>wrlock</code>
+        when you only needed to read.
+      </p>
+
+      <p>
+        In Rust: <code>RwLock&lt;T&gt;</code> gives you <code>read()</code> returning
+        <code>RwLockReadGuard</code> (derefs to <code>&amp;T</code>) and <code>write()</code>
+        returning <code>RwLockWriteGuard</code> (derefs to <code>&amp;mut T</code>). The type
+        system ensures you can't mutate through a read guard — the borrow checker's
+        <code>&amp;</code> vs <code>&amp;mut</code> distinction maps directly onto the
+        shared/exclusive lock semantics.
+      </p>
+
+      <h3>Spinlock</h3>
+
+      <p>
+        Like a mutex, but the blocked thread doesn't sleep — it loops, burning CPU, checking
+        repeatedly.
+      </p>
+
+<pre>
+          Thread A          Thread B
+             │                  │
+        ┌────────────┐    ↻ ↻ ↻ ↻ ↻
+        │  critical   │   spinning
+        │  section    │   (burning CPU
+        └────────────┘    each iteration)
+             │                  │
+             │            ┌────────────┐
+             │            │  critical   │
+             │            │  section    │
+             │            └────────────┘
+             ▼                  ▼
+
+          ↻ = one spin iteration (CPU busy, not sleeping)</pre>
+
+      <p>
+        The tradeoff: no syscall overhead to sleep and wake, but you're wasting cycles.
+        Spinlocks win when the critical section is very short (nanoseconds) and contention is
+        low. They lose badly if the holder gets preempted — the spinner burns an entire
+        timeslice waiting for a thread that isn't even running.
+      </p>
+
+      <p>
+        In C: you'd typically build one from atomics
+        (<code>while (!atomic_compare_exchange(&amp;locked, 0, 1)) {}</code>). The kernel uses
+        spinlocks heavily because it can disable preemption; in userspace, they're riskier.
+      </p>
+
+      <p>
+        Rust's standard library doesn't provide a spinlock, and that's deliberate. In
+        userspace, an OS mutex is almost always the right choice — the kernel is smarter about
+        scheduling than a busy loop. You'll find spinlocks in <code>no_std</code> crates and
+        embedded work where there's no OS to defer to.
+      </p>
+
+      <h3>Recursive Mutex</h3>
+
+      <p>
+        A mutex that the same thread can lock multiple times without deadlocking. An internal
+        counter tracks the depth; the lock is only truly released when the count hits zero.
+      </p>
+
+<pre>Time ──────────────────────────────────────────────────►
+
+Thread A   ┌──lock() depth=1──────────────────────────┐
+           │  ┌──lock() depth=2──────────────┐        │
+           │  │  ┌──lock() depth=3──┐        │        │
+           │  │  │  inner work      │        │        │
+           │  │  └──unlock() depth=2┘        │        │
+           │  └──unlock() depth=1────────────┘        │
+           └──unlock() depth=0 (actually released)────┘
+
+Thread B   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓┌──lock()──
+           blocked the entire time, all three depths</pre>
+
+      <p>
+        In C: <code>pthread_mutexattr_settype(&amp;attr, PTHREAD_MUTEX_RECURSIVE)</code>.
+        Common in large codebases where function A holds a lock and calls function B which also
+        tries to acquire the same lock.
+      </p>
+
+      <p>
+        Rust doesn't provide a recursive mutex in <code>std</code>, and this is also
+        deliberate. Recursive locking is usually a code smell — it means your lock boundaries
+        are unclear. Rust's ownership model pushes you to restructure: separate the data access
+        from the locking, pass <code>&amp;mut T</code> into the inner function instead of
+        re-locking. The borrow checker makes the cleaner design the path of least resistance.
+      </p>
+
+      <h2>2. Signalling</h2>
+
+      <p>
+        Mutual exclusion answers "who can access this now?" Signalling answers a different
+        question: "how does one thread tell another that something happened?"
+      </p>
+
+      <h3>Condition Variable</h3>
+
+      <p>
+        A condvar lets a thread sleep until another thread signals that some condition has
+        changed. Always used in combination with a mutex — the mutex protects the shared state,
+        the condvar handles the waiting.
+      </p>
+
+<pre>
+          Consumer              Producer
+             │                     │
+        ┌──lock()──┐               │
+        │check:    │               │
+        │queue     │               │
+        │empty?    │               │
+        │yes →     │               │
+        │wait() ───┘          ┌──lock()──┐
+        │(mutex               │ push()   │
+        │ released            │ signal()─┼──► wake
+        │ while               └──unlock()┘
+        │ sleeping)                │
+        ┌──woken───┐               │
+        │check:    │               │
+        │queue has │               │
+        │item →    │               │
+        │take()    │               │
+        └──unlock()┘               │
+             │                     │
+             ▼                     ▼</pre>
+
+      <p>
+        The critical subtlety: <code>wait()</code> atomically releases the mutex and puts the
+        thread to sleep. Without that atomicity, there's a gap where the producer could signal
+        after the consumer checks but before it sleeps — the signal is lost, the consumer
+        sleeps forever. This is the "lost wakeup" problem, and it's the entire reason condvars
+        exist as a primitive rather than being something you build from a mutex and a sleep
+        call.
+      </p>
+
+      <p>
+        In C: <code>pthread_cond_wait(&amp;cond, &amp;mutex)</code> /
+        <code>pthread_cond_signal(&amp;cond)</code>. The pairing with a mutex is explicit but
+        unenforced — you can pass the wrong mutex and get silent bugs.
+      </p>
+
+      <p>
+        In Rust: <code>Condvar::wait()</code> takes a <code>MutexGuard</code>, ensuring the
+        condvar is always paired with the right lock. The type system prevents the wrong-mutex
+        bug entirely.
+      </p>
+
+<pre><code><span class="cm">// C: hope you pair the right mutex with the right condvar</span>
+<span class="fn">pthread_cond_wait</span>(&amp;cond, &amp;mutex);  <span class="cm">// wrong mutex? silent UB</span>
+
+<span class="cm">// Rust: the guard IS the proof you hold the right lock</span>
+<span class="kw">let</span> guard = mutex.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
+<span class="kw">let</span> guard = condvar.<span class="fn">wait</span>(guard).<span class="fn">unwrap</span>(); <span class="cm">// Can't pass a guard from a different mutex — types won't match</span></code></pre>
+
+      <p>
+        The other gotcha: spurious wakeups. Both POSIX and Rust condvars can wake without a
+        signal. You must always recheck the condition in a loop. Rust's
+        <code>wait_while</code> method handles this:
+      </p>
+
+<pre><code><span class="kw">let</span> guard = condvar.<span class="fn">wait_while</span>(guard, |queue| queue.<span class="fn">is_empty</span>()).<span class="fn">unwrap</span>();
+<span class="cm">// Only proceeds when the queue is genuinely non-empty</span></code></pre>
+
+      <h3>Semaphore</h3>
+
+      <p>
+        A counter. <code>wait()</code> (or P/acquire) decrements it; if the count is already
+        zero, the thread sleeps. <code>post()</code> (or V/release) increments it, waking a
+        sleeper if any.
+      </p>
+
+<pre>
+                    Semaphore count: 2
+
+        Thread A       Thread B       Thread C
+           │              │               │
+      ┌─acquire()─┐       │               │
+      │count: 2→1 │  ┌─acquire()─┐        │
+      │working    │  │count: 1→0 │    ▓▓▓▓▓▓▓▓
+      │           │  │working    │    count=0
+      └─release()─┘  │           │    sleeping
+      count: 0→1     │           │        │
+           │         └─release()─┘   ┌─acquire()─┐
+           │         count: 0→1      │count: 1→0 │
+           │              │          │working    │
+           │              │          └─release()─┘
+           ▼              ▼               ▼</pre>
+
+      <p>
+        The key difference from a mutex: no ownership. Any thread can release a semaphore, not
+        just the one that acquired it. And the count can be higher than 1 — "up to N threads
+        can be in here." This makes it the right tool for resource pools (e.g., limiting to 10
+        concurrent database connections).
+      </p>
+
+      <p>
+        A binary semaphore (count of 1) looks like a mutex but isn't — the lack of ownership
+        means thread A can acquire and thread B can release. This is useful for signalling
+        ("I'm done, you can go") but dangerous for mutual exclusion (no guarantee the releaser
+        was the holder).
+      </p>
+
+      <p>
+        In C: <code>sem_wait</code> / <code>sem_post</code>. POSIX semaphores are separate
+        from <code>pthread_mutex</code> — different API, different semantics.
+      </p>
+
+      <p>
+        In Rust: <code>std::sync</code> doesn't include a semaphore. You'll find
+        <code>tokio::sync::Semaphore</code> for async code. The standard library's position is
+        that most semaphore use cases are better served by mutexes (for exclusion) or channels
+        (for signalling). When you genuinely need "limit N concurrent accessors," the async
+        semaphore is the idiomatic choice.
+      </p>
+
+      <h2>3. Atomic Operations</h2>
+
+      <p>
+        Locks protect critical sections. Atomics protect individual values — a single
+        read-modify-write that the hardware guarantees is indivisible.
+      </p>
+
+      <h3>Compare-and-Swap (CAS)</h3>
+
+      <p>
+        The foundation of all lock-free programming. "If the value is still what I think it is,
+        swap it to a new value. Otherwise, tell me what it changed to."
+      </p>
+
+<pre>
+                  Shared atomic: 42
+
+          Thread A              Thread B
+             │                     │
+        read: 42              read: 42
+        compute: 42+1=43      compute: 42+1=43
+             │                     │
+        CAS(42→43)                 │
+        succeeds ✓                 │
+        value now 43               │
+             │                CAS(42→43)
+             │                fails ✗ (value is 43)
+             │                     │
+             │                retry: read 43
+             │                compute: 43+1=44
+             │                CAS(43→44)
+             │                succeeds ✓
+             │                value now 44
+             ▼                     ▼</pre>
+
+      <p>
+        No lock, no sleeping. The "loser" just retries. This works well when contention is
+        low — most CAS attempts succeed first try. Under high contention, the retry loop can
+        waste cycles, and you're back to needing a real lock.
+      </p>
+
+      <p>
+        In C: <code>atomic_compare_exchange_strong(&amp;val, &amp;expected, desired)</code>.
+        You also choose a memory ordering — <code>memory_order_relaxed</code>,
+        <code>memory_order_acquire</code>, <code>memory_order_seq_cst</code>, etc. Getting
+        the ordering wrong doesn't crash; it causes subtle, architecture-dependent,
+        near-impossible-to-reproduce bugs.
+      </p>
+
+      <p>
+        In Rust: <code>AtomicI64::compare_exchange(current, new, success_ordering,
+        failure_ordering)</code>. The same memory orderings exist
+        (<code>Ordering::SeqCst</code>, <code>Ordering::Relaxed</code>, etc.) and carry the
+        same risks. Rust doesn't save you from choosing wrong here — this is one area where the
+        type system can't encode the invariant, because the correctness depends on the
+        relationship between multiple atomic operations across your whole program.
+      </p>
+
+<pre><code><span class="kw">use</span> std::sync::atomic::{<span class="ty">AtomicI64</span>, <span class="ty">Ordering</span>};
+
+<span class="kw">let</span> counter = <span class="ty">AtomicI64</span>::<span class="fn">new</span>(<span class="num">42</span>);
+
+<span class="cm">// Simple atomic add — no CAS loop needed</span>
+counter.<span class="fn">fetch_add</span>(<span class="num">1</span>, <span class="ty">Ordering</span>::SeqCst);
+
+<span class="cm">// CAS loop for complex updates</span>
+<span class="kw">loop</span> {
+    <span class="kw">let</span> current = counter.<span class="fn">load</span>(<span class="ty">Ordering</span>::Acquire);
+    <span class="kw">let</span> new_val = <span class="fn">complex_computation</span>(current);
+    <span class="kw">match</span> counter.<span class="fn">compare_exchange</span>(
+        current, new_val,
+        <span class="ty">Ordering</span>::Release,  <span class="cm">// on success</span>
+        <span class="ty">Ordering</span>::Relaxed,  <span class="cm">// on failure</span>
+    ) {
+        <span class="ty">Ok</span>(_) =&gt; <span class="kw">break</span>,     <span class="cm">// swapped successfully</span>
+        <span class="ty">Err</span>(_) =&gt; <span class="kw">continue</span>, <span class="cm">// someone else changed it, retry</span>
+    }
+}</code></pre>
+
+      <h3>fetch_add, fetch_sub, fetch_or...</h3>
+
+      <p>
+        Hardware-level atomic arithmetic. Simpler than CAS — no loop, no retry, guaranteed to
+        succeed in one shot.
+      </p>
+
+<pre>
+                  Shared atomic: 0
+
+          Thread A          Thread B
+             │                  │
+        fetch_add(1)            │
+        → 0, value now 1        │
+             │             fetch_add(1)
+             │             → 1, value now 2
+        fetch_add(1)            │
+        → 2, value now 3        │
+             │                  │
+             ▼                  ▼
+
+        Every increment is accounted for.
+        No lost updates, no locks.</pre>
+
+      <p>
+        Use these when the operation is a single arithmetic step. The moment you need "read,
+        compute something complex, write back," you're in CAS territory.
+      </p>
+
+      <h3>Memory Ordering</h3>
+
+      <p>
+        This is where atomics get genuinely hard. The question isn't whether an operation is
+        atomic — it's about what <em>other</em> memory operations are visible to other threads
+        before and after.
+      </p>
+
+<pre><code>          Thread A                    Thread B
+
+          data = <span class="num">42</span>;
+          flag.<span class="fn">store</span>(<span class="kw">true</span>, ???);      <span class="kw">if</span> flag.<span class="fn">load</span>(???) {
+                                          <span class="cm">// is data guaranteed</span>
+                                          <span class="cm">// to be 42 here?</span>
+                                      }</code></pre>
+
+      <p>The answer depends on the ordering:</p>
+
+      <p>
+        <strong>Relaxed</strong> — no. The compiler and CPU can reorder. Thread B might see
+        <code>flag=true</code> but <code>data</code> still at its old value.
+      </p>
+
+      <p>
+        <strong>Release (store) + Acquire (load)</strong> — yes. Release says "everything I
+        wrote before this store is visible to anyone who acquires." Acquire says "I can see
+        everything the releaser wrote." This is the pairing you want for most producer/consumer
+        patterns.
+      </p>
+
+      <p>
+        <strong>SeqCst</strong> — yes, and all threads agree on a single total order of all
+        SeqCst operations. Strongest guarantee, highest cost. The safe default when you're not
+        sure.
+      </p>
+
+      <p>
+        In C, these are explicit:
+        <code>atomic_store_explicit(&amp;flag, true, memory_order_release)</code>. In Rust,
+        they're the <code>Ordering</code> enum. Both languages give you the same foot-gun.
+        SeqCst everywhere is correct but slow. Weaker orderings are faster but demand you
+        understand the happens-before relationships in your code.
+      </p>
+
+      <p>
+        The honest advice: use SeqCst until profiling shows it matters. Incorrect memory
+        ordering creates bugs that don't show up on x86 (which has a strong memory model) but
+        explode on ARM (which doesn't). You don't want that bug.
+      </p>
+
+      <h2>4. Thread Coordination</h2>
+
+      <p>
+        These primitives aren't about protecting data — they're about synchronising progress.
+        "Everyone wait here until we're all ready."
+      </p>
+
+      <h3>Barrier</h3>
+
+      <p>
+        N threads arrive at a barrier. Each one blocks. When the Nth thread arrives, all are
+        released simultaneously.
+      </p>
+
+<pre>Time ──────────────────────────────────────────────────►
+                     Barrier(3)
+
+Thread A   ──work──►│ wait ▓▓▓▓▓▓▓▓▓▓▓▓▓│──── continue ──►
+                    │                     │
+Thread B   ──work────────►│ wait ▓▓▓▓▓▓▓▓│──── continue ──►
+                          │               │
+Thread C   ──work──────────────►│all here!│──── continue ──►
+                                │ RELEASE │</pre>
+
+      <p>
+        Classic use case: parallel computation in phases. All threads compute phase 1, barrier,
+        all threads compute phase 2. Ensures no thread starts phase 2 while another is still on
+        phase 1.
+      </p>
+
+      <p>
+        In C: <code>pthread_barrier_init(&amp;barrier, NULL, 3)</code> /
+        <code>pthread_barrier_wait(&amp;barrier)</code>.
+      </p>
+
+      <p>
+        In Rust: <code>std::sync::Barrier::new(3)</code> / <code>barrier.wait()</code>. The
+        API is almost identical — barriers are simple enough that there's not much for the type
+        system to add. The <code>wait()</code> returns a <code>BarrierWaitResult</code> that
+        tells one (arbitrary) thread it's the "leader," useful if exactly one thread needs to
+        do some post-barrier cleanup.
+      </p>
+
+      <h3>Once</h3>
+
+      <p>
+        Run initialisation exactly once, regardless of how many threads try simultaneously. The
+        first caller runs the closure; all others block until it's done, then skip.
+      </p>
+
+<pre>Time ──────────────────────────────────────────────────►
+                     Once::new()
+
+Thread A   ──call_once()──►│ runs init │──► uses result ──►
+                           │           │
+Thread B   ──call_once()──►│ ▓▓▓▓▓▓▓▓▓ │──► uses result ──►
+                           │ blocked   │
+                           │ waiting   │
+Thread C   ──────────────────call_once()──► skips, already done ──►</pre>
+
+      <p>
+        In C: <code>pthread_once(&amp;once_control, init_function)</code>. Or you see
+        hand-rolled versions with double-checked locking — a mutex around the initialisation,
+        guarded by a flag, with the flag check outside the lock for performance. Getting
+        double-checked locking right in C requires careful memory ordering. Getting it wrong is
+        a classic bug.
+      </p>
+
+      <p>
+        In Rust: <code>std::sync::Once</code> and, more commonly now,
+        <code>std::sync::OnceLock&lt;T&gt;</code>. <code>OnceLock</code> combines the
+        once-init with storage for the result — you initialise and store the value atomically.
+        No hand-rolled double-checked locking needed.
+      </p>
+
+<pre><code><span class="kw">use</span> std::sync::<span class="ty">OnceLock</span>;
+
+<span class="kw">static</span> CONFIG: <span class="ty">OnceLock</span>&lt;<span class="ty">Config</span>&gt; = <span class="ty">OnceLock</span>::<span class="fn">new</span>();
+
+<span class="kw">fn</span> <span class="fn">get_config</span>() -&gt; &amp;'<span class="kw">static</span> <span class="ty">Config</span> {
+    CONFIG.<span class="fn">get_or_init</span>(|| {
+        <span class="cm">// Runs exactly once, even if 100 threads call simultaneously</span>
+        <span class="fn">load_config_from_disk</span>()
+    })
+}</code></pre>
+
+      <p>
+        This replaces a whole category of unsafe lazy-static patterns that C programmers would
+        recognise: the global that needs initialising on first use, the flag that says whether
+        it's been initialised, the mutex that protects the flag-check-and-init sequence.
+      </p>
+
+      <h2>The Pattern</h2>
+
+      <p>
+        Across all four groups, Rust does the same thing: it takes a C concurrency primitive
+        and encodes its usage contract into the type system.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>C convention (enforced by discipline)</th>
+            <th>Rust enforcement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>"This mutex protects this struct"</td>
+            <td><code>Mutex&lt;T&gt;</code> owns the data</td>
+          </tr>
+          <tr>
+            <td>"Only write-lockers should mutate"</td>
+            <td><code>RwLockReadGuard</code> gives <code>&amp;T</code>, <code>WriteGuard</code> gives <code>&amp;mut T</code></td>
+          </tr>
+          <tr>
+            <td>"Always pair this condvar with this mutex"</td>
+            <td><code>wait()</code> takes a <code>MutexGuard</code></td>
+          </tr>
+          <tr>
+            <td>"Check the condition after wakeup"</td>
+            <td><code>wait_while()</code> loops for you</td>
+          </tr>
+          <tr>
+            <td>"Release the lock when you're done"</td>
+            <td>Guard drops at scope exit</td>
+          </tr>
+          <tr>
+            <td>"Initialise this global exactly once"</td>
+            <td><code>OnceLock::get_or_init()</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        The primitives are the same. The operations are the same. The scheduling and
+        performance characteristics are the same — Rust's <code>Mutex</code> calls
+        <code>pthread_mutex_lock</code> underneath. What changes is that the rules a C
+        programmer carries in their head become rules the compiler checks.
+      </p>
+
+      <p>
+        The one exception is memory ordering on atomics. There, Rust gives you the same
+        <code>Ordering</code> enum as C's <code>memory_order</code>, and you can get it wrong
+        just as easily. The type system can't help because the correctness depends on
+        relationships between operations, not properties of a single value. This remains expert
+        territory in both languages.
+      </p>
+
+      <p>
+        If you want to see this pattern applied to a specific real-world case — where a mutex
+        protects an entire language runtime and releasing it is the key to cross-language
+        parallelism — see the companion post:
+        <a href="draft2.html">The GIL Is Just a Mutex</a>.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
