@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rust's Smart Pointer Patterns — Part 2: The Specialists - Telex</title>
-  <meta name="description" content="Cow, OnceCell, OnceLock, LazyLock, Pin, and PhantomData — the specialist wrapper types that solve specific problems the core ownership system doesn't address.">
+  <meta name="description" content="Cow, OnceCell, OnceLock, LazyLock, LazyCell, Pin, and PhantomData — the specialist wrapper types that solve specific problems the core ownership system doesn't address.">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
 </head>
@@ -339,6 +339,19 @@
         the right tool.
       </p>
 
+      <h3>LazyCell: the single-threaded equivalent</h3>
+
+      <p>
+        Just as <code>OnceLock</code> has a single-threaded counterpart in
+        <code>OnceCell</code>, <code>LazyLock</code> has
+        <code>LazyCell</code> (in <code>std::cell</code>). It works the
+        same way -- closure baked in at construction, value computed on first
+        access -- but without the thread-safety overhead. Use it for lazy
+        fields inside structs that aren't shared across threads.
+        Both <code>LazyLock</code> and <code>LazyCell</code> were stabilized
+        in Rust 1.80.
+      </p>
+
       <h3>When you reach for it</h3>
 
       <p>
@@ -347,7 +360,8 @@
         tables, parsed configuration, constant data loaded from embedded
         files. If you're typing <code>static FOO: ... = ...</code> and the
         right-hand side can't be a <code>const</code>, <code>LazyLock</code>
-        is probably what you want.
+        is probably what you want. For lazy fields inside single-threaded
+        structs, use <code>LazyCell</code>.
       </p>
 
       <h2>4. Pin&lt;T&gt; — Promise This Won't Move</h2>
@@ -362,7 +376,7 @@
       <h3>The problem: self-referential structs</h3>
 
       <p>
-        Most values in Rust can move freely in memory. When you push a value
+        By default, all values in Rust can be moved to a new memory location. When you push a value
         into a <code>Vec</code> or return it from a function, the bytes get
         copied to a new location. This is fine for most types -- an
         <code>i32</code> is an <code>i32</code> no matter where it lives, and
@@ -468,14 +482,16 @@
 }</code></pre>
 
       <p>
-        <strong>pin!()</strong> — Pin a value to the stack. Available as
-        <code>std::pin::pin!</code> since Rust 1.68:
+        <strong>pin!()</strong> — Pin a value to the stack without heap
+        allocation. Available as <code>std::pin::pin!</code> since Rust
+        1.68. Unlike <code>Box::pin</code>, this avoids a heap allocation
+        entirely, which matters in hot async paths:
       </p>
 
       <pre><code><span class="kw">use</span> std::pin::<span class="fn">pin</span>;
 
 <span class="kw">let</span> fut = <span class="fn">pin!</span>(<span class="fn">some_async_operation</span>());
-<span class="cm">// fut is Pin&lt;&amp;mut impl Future&gt; — pinned to the stack</span></code></pre>
+<span class="cm">// fut is Pin&lt;&amp;mut impl Future&gt; — pinned to the stack, no heap allocation</span></code></pre>
 
       <p>
         <strong>The Future::poll signature:</strong> If you ever implement
@@ -521,18 +537,30 @@
       <h3>The problem it solves</h3>
 
       <p>
-        You're writing a generic struct that has a type parameter
-        <code>T</code>, but none of the struct's fields actually contain a
-        <code>T</code>. The compiler complains: "parameter <code>T</code> is
-        never used."
+        Sometimes a struct has a type or lifetime parameter that none of
+        its fields directly express. The simplest case: the compiler says
+        "parameter <code>T</code> is never used."
       </p>
 
       <pre><code><span class="cm">// This doesn't compile: T is unused</span>
+<span class="kw">struct</span> <span class="ty">Id</span>&lt;<span class="ty">T</span>&gt; {
+    value: <span class="ty">u64</span>,
+    <span class="cm">// T doesn't appear in any field</span>
+}</code></pre>
+
+      <p>
+        The more subtle case involves raw pointers. Raw pointers use
+        <code>T</code> syntactically, but the compiler can't infer
+        ownership, lifetime, or variance from them:
+      </p>
+
+      <pre><code><span class="cm">// This compiles, but 'a is unused and variance is wrong</span>
 <span class="kw">struct</span> <span class="ty">Slice</span>&lt;<span class="kw">'a</span>, <span class="ty">T</span>&gt; {
     start: *<span class="kw">const</span> <span class="ty">T</span>,
     end: *<span class="kw">const</span> <span class="ty">T</span>,
-    <span class="cm">// The compiler doesn't know this struct "owns" or "borrows" T</span>
-    <span class="cm">// through these raw pointers.</span>
+    <span class="cm">// 'a is declared but never used — won't compile.</span>
+    <span class="cm">// And the compiler can't tell whether this struct</span>
+    <span class="cm">// "owns" or "borrows" T through these raw pointers.</span>
 }</code></pre>
 
       <p>
@@ -677,9 +705,10 @@
       <p>
         <strong>I need to mutate through a shared reference
         (single-threaded).</strong> Use <code>RefCell&lt;T&gt;</code> for
-        full borrow checking at runtime, or <code>Cell&lt;T&gt;</code> when
-        you only need get/set (where <code>get</code> requires
-        <code>T: Copy</code>).
+        full borrow checking at runtime, or <code>Cell&lt;T&gt;</code> for
+        small values where you only need get/set/replace (note:
+        <code>get</code> requires <code>T: Copy</code>; for non-Copy types
+        use <code>set</code>, <code>take</code>, or <code>replace</code>).
       </p>
 
       <p>
@@ -724,9 +753,11 @@
       </p>
 
       <p>
-        <strong>I have a generic struct with an unused type parameter.</strong>
-        Add a <code>PhantomData&lt;T&gt;</code> field to tell the compiler
-        how the parameter relates to the struct.
+        <strong>I have a generic struct with an unused type parameter, or
+        raw pointers where the compiler can't infer lifetime/variance.</strong>
+        Add a <code>PhantomData</code> field to express the relationship:
+        <code>PhantomData&lt;T&gt;</code> for ownership,
+        <code>PhantomData&lt;&amp;'a T&gt;</code> for borrowing.
       </p>
 
       <h2>Putting It All Together</h2>
@@ -751,12 +782,14 @@
       <p>
         If you've also read
         <a href="40-rust-patterns-that-matter.html">40 Rust Patterns That
-        Matter</a>, you now have a solid intermediate toolkit: the patterns
+        Matter</a> and the companion
+        <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>
+        series, you now have a solid intermediate toolkit: the patterns
         for working with <code>Option</code>, <code>Result</code>, iterators,
         and collections, plus the wrapper types for managing ownership and
-        memory at every scale. The three posts complement each other -- the
-        40 patterns tell you <em>what to do</em> with values, and the smart
-        pointer series tells you <em>how to hold</em> them.
+        memory at every scale. These complement each other -- the patterns
+        tell you <em>what to do</em> with values, and the smart pointer
+        series tells you <em>how to hold</em> them.
       </p>
 
     </article>
