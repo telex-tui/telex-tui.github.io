@@ -320,9 +320,10 @@
 
       <ul>
         <li><strong>OnceLock:</strong> You provide the initialization closure at
-          the call site. The cell can be initialized differently depending on
-          who calls <code>get_or_init</code> first (though in practice you'd
-          always pass the same closure).</li>
+          the call site via <code>get_or_init</code>. This means initialization
+          can depend on runtime data -- a port number from a config file, a
+          connection string from an environment variable, anything you can't
+          express as a <code>static</code> closure.</li>
         <li><strong>LazyLock:</strong> The initialization closure is baked in at
           declaration time. Every access gets the same initialization logic.
           You can't change your mind later.</li>
@@ -333,8 +334,9 @@
         the most common case -- <code>LazyLock</code> is the cleaner choice.
         The initialization is right there with the declaration, and you don't
         have to worry about passing the right closure everywhere. For struct
-        fields or situations where the initialization depends on runtime data,
-        <code>OnceLock</code> gives you more flexibility.
+        fields or situations where the initialization depends on runtime data
+        that isn't available at declaration time, <code>OnceLock</code> is
+        the right tool.
       </p>
 
       <h3>When you reach for it</h3>
@@ -395,11 +397,13 @@
 
       <p>
         You might think self-referential structs are exotic. They're not.
-        Every <code>async fn</code> generates one. When the compiler
-        transforms an <code>async fn</code> into a state machine, the
-        resulting struct holds local variables across <code>.await</code>
-        points. If one of those locals is a reference to another local,
-        you've got a self-referential struct:
+        When the compiler transforms an <code>async fn</code> into a state
+        machine, the resulting struct holds local variables across
+        <code>.await</code> points. If one of those locals is a reference to
+        another local, you've got a self-referential struct. Not every
+        <code>async fn</code> produces one -- only those that hold borrows
+        across suspension points -- but it's common enough that the language
+        needed a general solution:
       </p>
 
       <pre><code><span class="kw">async fn</span> <span class="fn">example</span>() {
@@ -559,16 +563,51 @@
         field takes zero bytes.
       </p>
 
+      <p>
+        What you put inside the <code>PhantomData</code> matters. Two common
+        forms serve different purposes:
+      </p>
+
+      <ul>
+        <li><code>PhantomData&lt;&amp;'a T&gt;</code> — "this struct
+          <em>borrows</em> a <code>T</code>." Used for iterators and views
+          over borrowed data. Tells the compiler about lifetime and
+          variance.</li>
+        <li><code>PhantomData&lt;T&gt;</code> — "this struct <em>owns</em> a
+          <code>T</code>." Used for owning raw-pointer types like a custom
+          <code>Vec</code>. Tells the compiler that dropping this struct
+          might drop a <code>T</code>, which is critical for drop check
+          correctness.</li>
+      </ul>
+
+      <p>
+        Getting this wrong doesn't just produce incorrect variance -- it can
+        cause unsound drop behavior. If you're building an owning abstraction
+        over raw pointers, you need <code>PhantomData&lt;T&gt;</code>, not
+        <code>PhantomData&lt;&amp;'a T&gt;</code>.
+      </p>
+
       <h3>Common uses</h3>
 
       <p>
-        <strong>Associating a lifetime with a raw pointer:</strong>
+        <strong>Associating a lifetime with a raw pointer (borrows T):</strong>
       </p>
 
       <pre><code><span class="kw">struct</span> <span class="ty">RawIter</span>&lt;<span class="kw">'a</span>, <span class="ty">T</span>&gt; {
     ptr: *<span class="kw">const</span> <span class="ty">T</span>,
     end: *<span class="kw">const</span> <span class="ty">T</span>,
-    _marker: <span class="ty">PhantomData</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">T</span>&gt;,
+    _marker: <span class="ty">PhantomData</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">T</span>&gt;,  <span class="cm">// borrows T — drop check knows T outlives this</span>
+}</code></pre>
+
+      <p>
+        <strong>Owning raw-pointer abstraction (owns T):</strong>
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">MyVec</span>&lt;<span class="ty">T</span>&gt; {
+    ptr: *<span class="kw">mut</span> <span class="ty">T</span>,
+    len: <span class="ty">usize</span>,
+    cap: <span class="ty">usize</span>,
+    _marker: <span class="ty">PhantomData</span>&lt;<span class="ty">T</span>&gt;,  <span class="cm">// owns T — drop check knows we might drop T</span>
 }</code></pre>
 
       <p>
@@ -638,8 +677,9 @@
       <p>
         <strong>I need to mutate through a shared reference
         (single-threaded).</strong> Use <code>RefCell&lt;T&gt;</code> for
-        full borrow checking at runtime, or <code>Cell&lt;T&gt;</code> for
-        small <code>Copy</code> types where you just need get/set.
+        full borrow checking at runtime, or <code>Cell&lt;T&gt;</code> when
+        you only need get/set (where <code>get</code> requires
+        <code>T: Copy</code>).
       </p>
 
       <p>
