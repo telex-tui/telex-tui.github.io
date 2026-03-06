@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rust's Smart Pointer Patterns — Part 2: The Specialists - Telex</title>
-  <meta name="description" content="Cow, OnceCell, OnceLock, LazyLock, Pin, and PhantomData — the specialist wrapper types that solve specific problems the core ownership system doesn't address.">
+  <meta name="description" content="Cow, OnceCell, OnceLock, LazyLock, LazyCell, Pin, and PhantomData — the specialist wrapper types that solve specific problems the core ownership system doesn't address.">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
 </head>
@@ -320,9 +320,10 @@
 
       <ul>
         <li><strong>OnceLock:</strong> You provide the initialization closure at
-          the call site. The cell can be initialized differently depending on
-          who calls <code>get_or_init</code> first (though in practice you'd
-          always pass the same closure).</li>
+          the call site via <code>get_or_init</code>. This means initialization
+          can depend on runtime data -- a port number from a config file, a
+          connection string from an environment variable, anything you can't
+          express as a <code>static</code> closure.</li>
         <li><strong>LazyLock:</strong> The initialization closure is baked in at
           declaration time. Every access gets the same initialization logic.
           You can't change your mind later.</li>
@@ -333,8 +334,22 @@
         the most common case -- <code>LazyLock</code> is the cleaner choice.
         The initialization is right there with the declaration, and you don't
         have to worry about passing the right closure everywhere. For struct
-        fields or situations where the initialization depends on runtime data,
-        <code>OnceLock</code> gives you more flexibility.
+        fields or situations where the initialization depends on runtime data
+        that isn't available at declaration time, <code>OnceLock</code> is
+        the right tool.
+      </p>
+
+      <h3>LazyCell: the single-threaded equivalent</h3>
+
+      <p>
+        Just as <code>OnceLock</code> has a single-threaded counterpart in
+        <code>OnceCell</code>, <code>LazyLock</code> has
+        <code>LazyCell</code> (in <code>std::cell</code>). It works the
+        same way -- closure baked in at construction, value computed on first
+        access -- but without the thread-safety overhead. Use it for lazy
+        fields inside structs that aren't shared across threads.
+        Both <code>LazyLock</code> and <code>LazyCell</code> were stabilized
+        in Rust 1.80.
       </p>
 
       <h3>When you reach for it</h3>
@@ -345,7 +360,8 @@
         tables, parsed configuration, constant data loaded from embedded
         files. If you're typing <code>static FOO: ... = ...</code> and the
         right-hand side can't be a <code>const</code>, <code>LazyLock</code>
-        is probably what you want.
+        is probably what you want. For lazy fields inside single-threaded
+        structs, use <code>LazyCell</code>.
       </p>
 
       <h2>4. Pin&lt;T&gt; — Promise This Won't Move</h2>
@@ -360,7 +376,7 @@
       <h3>The problem: self-referential structs</h3>
 
       <p>
-        Most values in Rust can move freely in memory. When you push a value
+        By default, all values in Rust can be moved to a new memory location. When you push a value
         into a <code>Vec</code> or return it from a function, the bytes get
         copied to a new location. This is fine for most types -- an
         <code>i32</code> is an <code>i32</code> no matter where it lives, and
@@ -395,11 +411,13 @@
 
       <p>
         You might think self-referential structs are exotic. They're not.
-        Every <code>async fn</code> generates one. When the compiler
-        transforms an <code>async fn</code> into a state machine, the
-        resulting struct holds local variables across <code>.await</code>
-        points. If one of those locals is a reference to another local,
-        you've got a self-referential struct:
+        When the compiler transforms an <code>async fn</code> into a state
+        machine, the resulting struct holds local variables across
+        <code>.await</code> points. If one of those locals is a reference to
+        another local, you've got a self-referential struct. Not every
+        <code>async fn</code> produces one -- only those that hold borrows
+        across suspension points -- but it's common enough that the language
+        needed a general solution:
       </p>
 
       <pre><code><span class="kw">async fn</span> <span class="fn">example</span>() {
@@ -464,14 +482,16 @@
 }</code></pre>
 
       <p>
-        <strong>pin!()</strong> — Pin a value to the stack. Available as
-        <code>std::pin::pin!</code> since Rust 1.68:
+        <strong>pin!()</strong> — Pin a value to the stack without heap
+        allocation. Available as <code>std::pin::pin!</code> since Rust
+        1.68. Unlike <code>Box::pin</code>, this avoids a heap allocation
+        entirely, which matters in hot async paths:
       </p>
 
       <pre><code><span class="kw">use</span> std::pin::<span class="fn">pin</span>;
 
 <span class="kw">let</span> fut = <span class="fn">pin!</span>(<span class="fn">some_async_operation</span>());
-<span class="cm">// fut is Pin&lt;&amp;mut impl Future&gt; — pinned to the stack</span></code></pre>
+<span class="cm">// fut is Pin&lt;&amp;mut impl Future&gt; — pinned to the stack, no heap allocation</span></code></pre>
 
       <p>
         <strong>The Future::poll signature:</strong> If you ever implement
@@ -517,18 +537,30 @@
       <h3>The problem it solves</h3>
 
       <p>
-        You're writing a generic struct that has a type parameter
-        <code>T</code>, but none of the struct's fields actually contain a
-        <code>T</code>. The compiler complains: "parameter <code>T</code> is
-        never used."
+        Sometimes a struct has a type or lifetime parameter that none of
+        its fields directly express. The simplest case: the compiler says
+        "parameter <code>T</code> is never used."
       </p>
 
       <pre><code><span class="cm">// This doesn't compile: T is unused</span>
+<span class="kw">struct</span> <span class="ty">Id</span>&lt;<span class="ty">T</span>&gt; {
+    value: <span class="ty">u64</span>,
+    <span class="cm">// T doesn't appear in any field</span>
+}</code></pre>
+
+      <p>
+        The more subtle case involves raw pointers. Raw pointers use
+        <code>T</code> syntactically, but the compiler can't infer
+        ownership, lifetime, or variance from them:
+      </p>
+
+      <pre><code><span class="cm">// This compiles, but 'a is unused and variance is wrong</span>
 <span class="kw">struct</span> <span class="ty">Slice</span>&lt;<span class="kw">'a</span>, <span class="ty">T</span>&gt; {
     start: *<span class="kw">const</span> <span class="ty">T</span>,
     end: *<span class="kw">const</span> <span class="ty">T</span>,
-    <span class="cm">// The compiler doesn't know this struct "owns" or "borrows" T</span>
-    <span class="cm">// through these raw pointers.</span>
+    <span class="cm">// 'a is declared but never used — won't compile.</span>
+    <span class="cm">// And the compiler can't tell whether this struct</span>
+    <span class="cm">// "owns" or "borrows" T through these raw pointers.</span>
 }</code></pre>
 
       <p>
@@ -559,16 +591,51 @@
         field takes zero bytes.
       </p>
 
+      <p>
+        What you put inside the <code>PhantomData</code> matters. Two common
+        forms serve different purposes:
+      </p>
+
+      <ul>
+        <li><code>PhantomData&lt;&amp;'a T&gt;</code> — "this struct
+          <em>borrows</em> a <code>T</code>." Used for iterators and views
+          over borrowed data. Tells the compiler about lifetime and
+          variance.</li>
+        <li><code>PhantomData&lt;T&gt;</code> — "this struct <em>owns</em> a
+          <code>T</code>." Used for owning raw-pointer types like a custom
+          <code>Vec</code>. Tells the compiler that dropping this struct
+          might drop a <code>T</code>, which is critical for drop check
+          correctness.</li>
+      </ul>
+
+      <p>
+        Getting this wrong doesn't just produce incorrect variance -- it can
+        cause unsound drop behavior. If you're building an owning abstraction
+        over raw pointers, you need <code>PhantomData&lt;T&gt;</code>, not
+        <code>PhantomData&lt;&amp;'a T&gt;</code>.
+      </p>
+
       <h3>Common uses</h3>
 
       <p>
-        <strong>Associating a lifetime with a raw pointer:</strong>
+        <strong>Associating a lifetime with a raw pointer (borrows T):</strong>
       </p>
 
       <pre><code><span class="kw">struct</span> <span class="ty">RawIter</span>&lt;<span class="kw">'a</span>, <span class="ty">T</span>&gt; {
     ptr: *<span class="kw">const</span> <span class="ty">T</span>,
     end: *<span class="kw">const</span> <span class="ty">T</span>,
-    _marker: <span class="ty">PhantomData</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">T</span>&gt;,
+    _marker: <span class="ty">PhantomData</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">T</span>&gt;,  <span class="cm">// borrows T — drop check knows T outlives this</span>
+}</code></pre>
+
+      <p>
+        <strong>Owning raw-pointer abstraction (owns T):</strong>
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">MyVec</span>&lt;<span class="ty">T</span>&gt; {
+    ptr: *<span class="kw">mut</span> <span class="ty">T</span>,
+    len: <span class="ty">usize</span>,
+    cap: <span class="ty">usize</span>,
+    _marker: <span class="ty">PhantomData</span>&lt;<span class="ty">T</span>&gt;,  <span class="cm">// owns T — drop check knows we might drop T</span>
 }</code></pre>
 
       <p>
@@ -639,7 +706,9 @@
         <strong>I need to mutate through a shared reference
         (single-threaded).</strong> Use <code>RefCell&lt;T&gt;</code> for
         full borrow checking at runtime, or <code>Cell&lt;T&gt;</code> for
-        small <code>Copy</code> types where you just need get/set.
+        small values where you only need get/set/replace (note:
+        <code>get</code> requires <code>T: Copy</code>; for non-Copy types
+        use <code>set</code>, <code>take</code>, or <code>replace</code>).
       </p>
 
       <p>
@@ -684,9 +753,11 @@
       </p>
 
       <p>
-        <strong>I have a generic struct with an unused type parameter.</strong>
-        Add a <code>PhantomData&lt;T&gt;</code> field to tell the compiler
-        how the parameter relates to the struct.
+        <strong>I have a generic struct with an unused type parameter, or
+        raw pointers where the compiler can't infer lifetime/variance.</strong>
+        Add a <code>PhantomData</code> field to express the relationship:
+        <code>PhantomData&lt;T&gt;</code> for ownership,
+        <code>PhantomData&lt;&amp;'a T&gt;</code> for borrowing.
       </p>
 
       <h2>Putting It All Together</h2>
@@ -711,12 +782,14 @@
       <p>
         If you've also read
         <a href="40-rust-patterns-that-matter.html">40 Rust Patterns That
-        Matter</a>, you now have a solid intermediate toolkit: the patterns
+        Matter</a> and the companion
+        <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>
+        series, you now have a solid intermediate toolkit: the patterns
         for working with <code>Option</code>, <code>Result</code>, iterators,
         and collections, plus the wrapper types for managing ownership and
-        memory at every scale. The three posts complement each other -- the
-        40 patterns tell you <em>what to do</em> with values, and the smart
-        pointer series tells you <em>how to hold</em> them.
+        memory at every scale. These complement each other -- the patterns
+        tell you <em>what to do</em> with values, and the smart pointer
+        series tells you <em>how to hold</em> them.
       </p>
 
     </article>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rust's Smart Pointer Patterns — Part 1: The Ownership and Sharing System - Telex</title>
-  <meta name="description" content="A practical guide to Box, Rc, Arc, Weak, Cell, RefCell, Mutex, and RwLock -- when you'd actually reach for each one, how they compose, and the six method pairs that make the system livable.">
+  <meta name="description" content="A practical guide to Box, Rc, Arc, Weak, Cell, RefCell, Mutex, and RwLock — when you'd actually reach for each one, how they compose, and the six method pairs that make the system livable.">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
 </head>
@@ -25,7 +25,7 @@
 
   <main class="container">
     <article class="post">
-      <h1>Rust's Smart Pointer Patterns -- Part 1: The Ownership and Sharing System</h1>
+      <h1>Rust's Smart Pointer Patterns — Part 1: The Ownership and Sharing System</h1>
       <div class="post-meta">February 2026</div>
       <p class="series-nav">Part 1 of 2 in <a href="#series-index">Rust's Smart Pointer Patterns</a>.
         Companion series: <a href="rust-patterns-newtype.html">Rust Patterns That Matter</a>.</p>
@@ -97,7 +97,9 @@
       <p>
         <strong>Large values you don't want on the stack.</strong> If you have a
         <code>[u8; 1_000_000]</code> and you're passing it between functions, that's
-        a megabyte of stack copying on each move. Box it and you're passing eight bytes.
+        a megabyte of stack pressure -- and while the compiler can often elide
+        copies on move, it's not guaranteed. Box it and you're passing eight bytes
+        with a predictable layout.
       </p>
 
       <pre><code><span class="kw">let</span> buffer = <span class="ty">Box</span>::<span class="fn">new</span>([<span class="num">0u8</span>; <span class="num">1_000_000</span>]);
@@ -281,15 +283,14 @@ parent.children.<span class="fn">borrow_mut</span>().<span class="fn">push</span
         deal with.
       </p>
 
-      <h3>5. Cell&lt;T&gt; -- "Interior mutability for Copy types"</h3>
+      <h3>5. Cell&lt;T&gt; -- "Interior mutability without borrowing"</h3>
 
       <p>
         <code>Cell&lt;T&gt;</code> lets you mutate a value through a shared
-        (<code>&amp;</code>) reference. Normally, Rust's borrow rules say: shared
-        references are read-only. <code>Cell</code> breaks that rule -- safely -- by
-        never giving you a reference to the inner value. You can only <code>get</code>
-        (copy the value out) and <code>set</code> (replace it). No borrowing, no
-        aliasing problems.
+        (<code>&amp;</code>) reference -- which looks like it should violate Rust's
+        borrow rules. It doesn't, because it never hands out a reference to the
+        inner value. <code>set</code> replaces the value, <code>get</code> copies
+        it out. No reference to the inner value, no aliasing, no problem.
       </p>
 
       <pre><code><span class="kw">use</span> std::cell::<span class="ty">Cell</span>;
@@ -310,12 +311,14 @@ c.<span class="fn">increment</span>();
 <span class="fn">assert_eq!</span>(c.count.<span class="fn">get</span>(), <span class="num">2</span>);</code></pre>
 
       <p>
-        The restriction is that <code>T</code> must be <code>Copy</code>. Because
-        <code>get</code> returns a copy of the value, the types you use with
-        <code>Cell</code> are small: integers, booleans, enums, character types. You
-        can't put a <code>String</code> or <code>Vec</code> in a <code>Cell</code>
-        (well, you can, but you'd only be able to <code>set</code> and
-        <code>replace</code>, not <code>get</code>).
+        <code>Cell&lt;T&gt;</code> itself works with any <code>T</code>, but
+        <code>get</code> requires <code>T: Copy</code> -- it returns a copy of the
+        value. For non-<code>Copy</code> types like <code>String</code> or
+        <code>Vec</code>, you use <code>set</code>, <code>take</code> (which
+        swaps in the default), or <code>replace</code> (which swaps in a value
+        you provide). In practice, <code>get</code> is what you'll use most, so
+        <code>Cell</code> is mostly seen with small <code>Copy</code> types:
+        integers, booleans, enums, character types.
       </p>
 
       <p>
@@ -327,8 +330,8 @@ c.<span class="fn">increment</span>();
 
       <p>
         When you need it: counters behind shared references, dirty flags, caches of
-        small computed values. Anywhere you'd use a <code>volatile</code> local in C,
-        except <code>Cell</code> is actually safe.
+        small computed values. Anywhere you need a mutable local that's reachable
+        through shared references.
       </p>
 
       <h3>6. RefCell&lt;T&gt; -- "Interior mutability with runtime borrow checking"</h3>
@@ -651,8 +654,10 @@ cache.<span class="fn">write</span>().<span class="fn">unwrap</span>().<span cla
         can use <code>?</code> to propagate it. <code>ok()</code> goes the other
         direction: it discards the error and gives you an <code>Option</code>. You'll
         use <code>ok_or</code> when the absence is a real failure, and <code>ok()</code>
-        when it's not -- a poisoned mutex you want to silently skip, a parse that might
-        not work.
+        when it's not -- a parse that might not work, or a cache lookup where
+        failure is tolerable. Be careful with <code>lock().ok()</code> on a
+        poisoned mutex: silently ignoring poisoning means you might read
+        inconsistent data, which is exactly what poisoning warns you about.
       </p>
 
       <h3>2. The Iterator Gatekeepers: filter / filter_map</h3>
@@ -732,7 +737,7 @@ cache.<span class="fn">write</span>().<span class="fn">unwrap</span>().<span cla
 <span class="cm">// Or with Option: take the value out</span>
 <span class="kw">let</span> pending = <span class="ty">Mutex</span>::<span class="fn">new</span>(<span class="ty">Some</span>(<span class="ty">Message</span>::<span class="fn">new</span>(<span class="str">"hello"</span>)));
 <span class="kw">let</span> <span class="kw">mut</span> guard = pending.<span class="fn">lock</span>().<span class="fn">unwrap</span>();
-<span class="kw">let</span> msg = guard.<span class="fn">take</span>();
+<span class="kw">let</span> msg = guard.<span class="fn">take</span>();  <span class="cm">// Option::take — no mem import needed</span>
 <span class="cm">// guard now holds None, msg holds Some(Message)</span></code></pre>
 
       <p>
@@ -767,7 +772,7 @@ cache.<span class="fn">write</span>().<span class="fn">unwrap</span>().<span cla
         an item in a <code>Vec</code>.
       </p>
 
-      <h3>6. The Heap Signalers: copied / cloned</h3>
+      <h3>6. The Cost Signalers: copied / cloned</h3>
 
       <p>
         When iterating over references to values inside smart pointers, you often need
@@ -789,12 +794,12 @@ cache.<span class="fn">write</span>().<span class="fn">unwrap</span>().<span cla
         you know it's trivial -- a few bytes of stack copying. When you see
         <code>cloned()</code>, you know heap allocation might be involved. And
         <code>Arc::clone()</code> is a special case: it looks like <code>cloned</code>
-        but it's cheap (just bumps a counter). That's why the convention is to write
-        <code>Arc::clone(&amp;x)</code> instead of <code>x.clone()</code> -- so readers
-        can tell the difference at a glance.
+        but it's cheap (just bumps a counter).
       </p>
 
-      <pre><code><span class="cm">// These two do the same thing, but one communicates cost:</span>
+      <pre><code><span class="kw">let</span> x = <span class="ty">Arc</span>::<span class="fn">new</span>(<span class="num">42</span>);
+
+<span class="cm">// These two do the same thing, but one communicates cost:</span>
 <span class="kw">let</span> a = x.<span class="fn">clone</span>();          <span class="cm">// Could be expensive. Reader has to check the type.</span>
 <span class="kw">let</span> b = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;x);    <span class="cm">// Cheap. Just a reference count bump.</span></code></pre>
 
