@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>The caller shouldn't know what concrete type this is — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #22 of 27</p>
+  <h1>The caller shouldn't know what concrete type this is — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Return <span class="inline-code">impl Database</span>.</p>
+
+  <p><span class="inline-code">impl Trait</span> in return position means: "I'm returning a specific concrete type, but I'm not telling you which one. All you know is that it implements this trait." The caller can call <span class="inline-code">.query()</span> but can't name <span class="inline-code">PostgresDb</span> or access Postgres-specific methods.</p>
+
+  <p>This gives you static dispatch — no heap allocation, no vtable. The compiler knows the concrete type and can inline method calls. The abstraction is purely at the API level, not at the runtime level.</p>
+
+  <p>Use <span class="inline-code">impl Trait</span> when the function always returns the same concrete type. If the function might return different types based on runtime logic (e.g., Postgres in production, SQLite in tests), you need <span class="inline-code">Box&lt;dyn Trait&gt;</span> instead. But when there's only one possible return type, <span class="inline-code">impl Trait</span> is the cleaner choice.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>trait Database {
+    fn query(&amp;self, sql: &amp;str) -&gt; Vec&lt;String&gt;;
+}
+
+struct PostgresDb {
+    connection_string: String,
+}
+
+impl PostgresDb {
+    fn new(conn: &amp;str) -&gt; Self {
+        PostgresDb { connection_string: conn.into() }
+    }
+}
+
+impl Database for PostgresDb {
+    fn query(&amp;self, sql: &amp;str) -&gt; Vec&lt;String&gt; {
+        vec![format!("result from: {}", sql)]
+    }
+}
+
+// Caller sees: "something that implements Database"
+// Caller cannot see: it's PostgresDb
+fn create_db() -&gt; impl Database {
+    PostgresDb::new("host=localhost dbname=app")
+}
+
+fn main() {
+    let db = create_db();
+    let results = db.query("SELECT * FROM users");
+    for r in results {
+        println!("{}", r);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Box&lt;dyn Database&gt;</strong> — works, but adds a heap allocation and virtual dispatch that aren't needed here. Use <span class="inline-code">dyn</span> when you need runtime polymorphism (different concrete types at different call sites). For a single concrete type, <span class="inline-code">impl Trait</span> is strictly better.</p>
+
+  <p><strong>C. Generic parameter on function</strong> — with generics, the caller chooses the type: <span class="inline-code">create_db::&lt;PostgresDb&gt;()</span>. But the whole point is that the callee chooses. Generics flow from caller to callee; <span class="inline-code">impl Trait</span> flows from callee to caller.</p>
+
+  <p><strong>D. Return trait directly</strong> — <span class="inline-code">-&gt; Database</span> doesn't compile. Traits aren't sized — the compiler doesn't know how many bytes to allocate on the stack. You need either <span class="inline-code">impl Trait</span> (compiler knows the size) or <span class="inline-code">Box&lt;dyn Trait&gt;</span> (pointer with known size).</p>
+
+  <p><strong>impl Trait in return position: the callee picks the type, the caller sees only the interface.</strong></p>
+
+  <div class="nav">
+    <a href="draft31a.html">← Challenge</a>
+    <a href="draft32a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This type needs to be both printable and sortable — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #27 of 27</p>
+  <h1>This type needs to be both printable and sortable — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Implement <span class="inline-code">fmt::Display</span> for printing. Derive (or implement) <span class="inline-code">Ord</span> for sorting.</p>
+
+  <p>Printing and sorting are separate concerns handled by separate traits. <span class="inline-code">Display</span> controls how a value looks when you write <span class="inline-code">println!("{}", score)</span>. <span class="inline-code">Ord</span> controls how values compare when you call <span class="inline-code">.sort()</span>. There's no reason to couple them.</p>
+
+  <p>For sorting, you need four traits: <span class="inline-code">PartialEq</span>, <span class="inline-code">Eq</span>, <span class="inline-code">PartialOrd</span>, and <span class="inline-code">Ord</span>. For simple structs, you can derive all four. If you want custom ordering (e.g., sort by points descending), implement <span class="inline-code">Ord</span> manually and derive the rest.</p>
+
+  <p><span class="inline-code">Display</span> can't be derived — you always implement it manually. That's by design: how a value is displayed to users is a deliberate choice, not something the compiler should guess.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::fmt;
+use std::cmp::Ordering;
+
+#[derive(Eq, PartialEq)]
+struct Score {
+    name: String,
+    points: u32,
+}
+
+// Custom Display for user-facing output
+impl fmt::Display for Score {
+    fn fmt(&amp;self, f: &amp;mut fmt::Formatter&lt;'_&gt;) -&gt; fmt::Result {
+        write!(f, "{}: {} pts", self.name, self.points)
+    }
+}
+
+// Sort by points descending (highest first)
+impl Ord for Score {
+    fn cmp(&amp;self, other: &amp;Self) -&gt; Ordering {
+        other.points.cmp(&amp;self.points)
+    }
+}
+
+impl PartialOrd for Score {
+    fn partial_cmp(&amp;self, other: &amp;Self) -&gt; Option&lt;Ordering&gt; {
+        Some(self.cmp(other))
+    }
+}
+
+fn main() {
+    let mut scores = vec![
+        Score { name: "Alice".into(), points: 150 },
+        Score { name: "Bob".into(), points: 230 },
+        Score { name: "Carol".into(), points: 180 },
+    ];
+
+    scores.sort();
+
+    for (rank, score) in scores.iter().enumerate() {
+        println!("#{}: {}", rank + 1, score);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Implement ToString directly</strong> — the standard library says: "implement <span class="inline-code">Display</span>, and you get <span class="inline-code">ToString</span> for free." Implementing <span class="inline-code">ToString</span> directly bypasses <span class="inline-code">Display</span>, so <span class="inline-code">println!("{}", score)</span> won't work. And a custom <span class="inline-code">compare</span> method doesn't integrate with <span class="inline-code">.sort()</span> — the standard library expects <span class="inline-code">Ord</span>.</p>
+
+  <p><strong>C. Debug for both</strong> — <span class="inline-code">Debug</span> output is for developers, not users. It prints things like <span class="inline-code">Score { name: "Alice", points: 150 }</span>. And you can't sort by debug output — that's comparing string representations instead of semantic values.</p>
+
+  <p><strong>D. Single to_comparable_string method</strong> — conflates two independent concerns into one function. Sorting by string representation is fragile (is "9" greater than "10"?) and slow (allocating strings for every comparison). Keep display and ordering separate.</p>
+
+  <p><strong>Separate concerns, separate traits: Display for humans, Ord for ordering.</strong></p>
+
+  <p>This is the final challenge in the series.</p>
+
+  <div class="nav">
+    <a href="draft36a.html">← Challenge</a>
+  </div>
+</body>
+</html>

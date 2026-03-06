@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Three types share behaviour. Trait or enum? — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #20 of 27</p>
+  <h1>Three types share behaviour. Trait or enum? — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use an enum. The set of message types is closed.</p>
+
+  <p>You know all three types at compile time. No one outside your codebase will add a fourth. This is exactly what Rust enums are designed for. An enum with three variants is simpler, faster, and more powerful than a trait hierarchy.</p>
+
+  <p>Simpler: no vtable indirection, no <span class="inline-code">Box</span> allocation, no trait object. The enum lives on the stack. Faster: pattern matching is a direct jump, not a virtual dispatch. More powerful: <span class="inline-code">match</span> is exhaustive — if you add a fourth variant later, the compiler tells you every place that needs updating. With a trait, you'd silently miss call sites.</p>
+
+  <p>Traits are for when you need extensibility — when other crates or modules will add new types that implement the same interface. If you control all the variants, use an enum.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>enum Message {
+    Text { sender: String, body: String },
+    Image { sender: String, url: String },
+    System { text: String },
+}
+
+impl Message {
+    fn format_for_log(&amp;self) -&gt; String {
+        match self {
+            Message::Text { sender, body } =&gt; format!("[{}] {}", sender, body),
+            Message::Image { sender, url } =&gt; format!("[{}] (image: {})", sender, url),
+            Message::System { text } =&gt; format!("*** {} ***", text),
+        }
+    }
+}
+
+fn main() {
+    let log: Vec&lt;Message&gt; = vec![
+        Message::Text { sender: "Alice".into(), body: "hello".into() },
+        Message::Image { sender: "Bob".into(), url: "cat.png".into() },
+        Message::System { text: "Alice joined".into() },
+    ];
+
+    for msg in &amp;log {
+        println!("{}", msg.format_for_log());
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Trait with Box&lt;dyn&gt;</strong> — adds heap allocation for every message, virtual dispatch for every method call, and loses exhaustive checking. Use this when you need extensibility. You don't here.</p>
+
+  <p><strong>C. Generics with trait bounds</strong> — generics are monomorphised: <span class="inline-code">Vec&lt;T&gt;</span> can only hold one concrete type. You can't put a <span class="inline-code">TextMessage</span> and an <span class="inline-code">ImageMessage</span> in the same <span class="inline-code">Vec&lt;T&gt;</span>. Generics solve "same operation on different types" but not "different types in the same collection."</p>
+
+  <p><strong>D. "Always use traits" (OOP mindset)</strong> — Rust is not Java. Enums with pattern matching replace most uses of inheritance hierarchies. Reaching for traits by default is bringing OOP habits into a language that has better tools.</p>
+
+  <p><strong>Closed set of types? Enum. Open set? Trait. Default to enum.</strong></p>
+
+  <div class="nav">
+    <a href="draft29a.html">← Challenge</a>
+    <a href="draft30a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

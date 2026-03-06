@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Two places read this data. A third place writes it. Structure that — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #14 of 27</p>
+  <h1>Two places read this data. A third place writes it. Structure that — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">Arc&lt;RwLock&lt;Settings&gt;&gt;</span>.</p>
+
+  <p><span class="inline-code">RwLock</span> mirrors Rust's borrow rules at runtime: many readers or one writer, never both. When two threads call <span class="inline-code">.read()</span>, they both get access simultaneously — no blocking. When the writer calls <span class="inline-code">.write()</span>, it waits for all readers to finish, then gets exclusive access.</p>
+
+  <p>This matches the access pattern perfectly: reads are frequent and concurrent, writes are rare and exclusive. A <span class="inline-code">Mutex</span> would force readers to queue behind each other, which is unnecessary when all they're doing is reading. <span class="inline-code">RwLock</span> gives you the concurrency the problem demands.</p>
+
+  <p><span class="inline-code">Arc</span> is needed because the <span class="inline-code">RwLock</span> is shared across threads. <span class="inline-code">Arc</span> provides thread-safe shared ownership; <span class="inline-code">RwLock</span> provides thread-safe reader/writer access. Together, they give you exactly the semantics of "many readers, one writer, across threads."</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use std::thread;
+
+struct Settings {
+    values: HashMap&lt;String, String&gt;,
+}
+
+impl Settings {
+    fn new() -&gt; Self {
+        Settings { values: HashMap::new() }
+    }
+
+    fn get(&amp;self, key: &amp;str) -&gt; Option&lt;String&gt; {
+        self.values.get(key).cloned()
+    }
+
+    fn set(&amp;mut self, key: &amp;str, value: &amp;str) {
+        self.values.insert(key.into(), value.into());
+    }
+}
+
+fn main() {
+    let settings = Arc::new(RwLock::new(Settings::new()));
+
+    // Writer thread
+    {
+        let s = Arc::clone(&amp;settings);
+        thread::spawn(move || {
+            s.write().unwrap().set("theme", "dark");
+        });
+    }
+
+    // Two reader threads — can read concurrently
+    let mut handles = vec![];
+    for i in 0..2 {
+        let s = Arc::clone(&amp;settings);
+        handles.push(thread::spawn(move || {
+            let guard = s.read().unwrap();
+            println!("reader {}: theme={:?}", i, guard.get("theme"));
+        }));
+    }
+
+    for h in handles {
+        h.join().unwrap();
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Arc&lt;Mutex&lt;&gt;&gt;</strong> — works, but readers block each other. If two threads both want to read settings, one waits for the other to release the lock. With a read-heavy workload, this kills concurrency.</p>
+
+  <p><strong>C. Clone for each reader</strong> — each reader gets a snapshot, which goes stale immediately. Changes from the writer never reach the readers. If you need readers to see updates, cloning is the wrong answer.</p>
+
+  <p><strong>D. Cell</strong> — <span class="inline-code">Cell</span> is for <span class="inline-code">Copy</span> types only, and it's not <span class="inline-code">Sync</span> — you can't share it across threads. <span class="inline-code">Settings</span> contains a <span class="inline-code">HashMap</span>, which isn't <span class="inline-code">Copy</span>.</p>
+
+  <p><strong>Many readers, one writer, across threads: that's RwLock's exact job.</strong></p>
+
+  <div class="nav">
+    <a href="draft23a.html">← Challenge</a>
+    <a href="draft24a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

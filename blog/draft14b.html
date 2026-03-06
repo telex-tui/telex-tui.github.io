@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Two components need to mutate shared config. No threads — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #5 of 27</p>
+  <h1>Two components need to mutate shared config. No threads — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: B</h2>
+
+  <p>Use <span class="inline-code">Rc&lt;RefCell&lt;Config&gt;&gt;</span>.</p>
+
+  <p><span class="inline-code">Rc</span> gives you shared ownership — both <span class="inline-code">Renderer</span> and <span class="inline-code">PluginManager</span> hold a handle to the same config, and the config lives until both are dropped. <span class="inline-code">RefCell</span> moves the borrow checking to runtime — you call <span class="inline-code">.borrow()</span> for read access and <span class="inline-code">.borrow_mut()</span> for write access. If you violate the rules (e.g., borrow mutably while someone else is borrowing), it panics instead of refusing to compile.</p>
+
+  <p>This is the standard single-threaded shared-mutable-state pattern in Rust. The compiler can't prove at compile time that the borrows don't overlap, because both components could theoretically access the config at the same time. <span class="inline-code">RefCell</span> defers that check to runtime, where it can see that the borrows actually happen at different times.</p>
+
+  <p>It's a trade-off: you lose compile-time borrow checking for flexibility. But in single-threaded code, the runtime cost is close to zero — it's just a counter bump.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::cell::RefCell;
+use std::rc::Rc;
+
+struct Config {
+    theme: String,
+    font_size: u32,
+}
+
+struct Renderer {
+    config: Rc&lt;RefCell&lt;Config&gt;&gt;,
+}
+
+struct PluginManager {
+    config: Rc&lt;RefCell&lt;Config&gt;&gt;,
+}
+
+impl Renderer {
+    fn draw(&amp;self) {
+        let cfg = self.config.borrow();
+        println!("Drawing with theme: {}, size: {}", cfg.theme, cfg.font_size);
+    }
+}
+
+impl PluginManager {
+    fn apply_plugin_settings(&amp;self) {
+        // borrow_mut gives us write access through a shared reference
+        self.config.borrow_mut().font_size = 16;
+    }
+}
+
+fn main() {
+    let config = Rc::new(RefCell::new(Config {
+        theme: "dark".into(),
+        font_size: 14,
+    }));
+
+    let renderer = Renderer { config: Rc::clone(&amp;config) };
+    let plugins = PluginManager { config: Rc::clone(&amp;config) };
+
+    plugins.apply_plugin_settings();
+    renderer.draw(); // sees font_size = 16
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>A. &amp;mut Config for both</strong> — Rust's fundamental rule: you can't have two mutable references to the same data at the same time. The compiler will reject this.</p>
+
+  <p><strong>C. Arc&lt;Mutex&lt;&gt;&gt;</strong> — works, but <span class="inline-code">Mutex</span> has locking overhead designed for thread safety. In single-threaded code, <span class="inline-code">RefCell</span> does the same job with a simple counter instead of an OS-level lock.</p>
+
+  <p><strong>D. Raw pointer</strong> — throws away all of Rust's safety guarantees. You'd need <span class="inline-code">unsafe</span> for every access, and you'd be responsible for ensuring no aliasing violations. There's no reason to do this when <span class="inline-code">RefCell</span> exists.</p>
+
+  <p><strong>Rc for shared ownership, RefCell for shared mutation — that's the single-threaded pair.</strong></p>
+
+  <div class="nav">
+    <a href="draft14a.html">← Challenge</a>
+    <a href="draft15a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

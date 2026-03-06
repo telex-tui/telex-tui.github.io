@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Make this generic — but only for types that can fail — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #21 of 27</p>
+  <h1>Make this generic — but only for types that can fail — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use a <span class="inline-code">FromStr</span> trait bound.</p>
+
+  <p><span class="inline-code">str::parse()</span> already does exactly this — it's generic over any type that implements <span class="inline-code">FromStr</span>. The trait has an associated <span class="inline-code">Err</span> type, so each implementation defines its own error. Your generic function just needs to forward that constraint.</p>
+
+  <p>The bound <span class="inline-code">T: FromStr</span> says: "I accept any type that knows how to parse itself from a string, and my error type is whatever that type's parse error is." The compiler monomorphises this — for <span class="inline-code">u16</span> it generates one version, for <span class="inline-code">f64</span> another. Full type safety, zero runtime cost.</p>
+
+  <p>This is the core pattern of Rust generics: constrain, don't erase. You don't need to know the concrete type. You just need to know it has the capability you need.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::str::FromStr;
+use std::fmt;
+
+// Generic: works for any type that implements FromStr
+fn parse_value&lt;T: FromStr&gt;(input: &amp;str) -&gt; Result&lt;T, T::Err&gt;
+where
+    T::Err: fmt::Debug,
+{
+    input.parse::&lt;T&gt;()
+}
+
+fn main() {
+    let port: u16 = parse_value("8080").unwrap();
+    let ratio: f64 = parse_value("3.14").unwrap();
+    let flag: bool = parse_value("true").unwrap();
+
+    println!("port={}, ratio={}, flag={}", port, ratio, flag);
+
+    // This correctly fails at runtime
+    let bad: Result&lt;u16, _&gt; = parse_value("not_a_number");
+    println!("bad parse: {:?}", bad);
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Box&lt;dyn Any&gt; with downcast</strong> — throws away compile-time type checking. The caller has to downcast at runtime and handle the case where the type is wrong. This is the Java <span class="inline-code">Object</span> pattern. Rust generics exist to avoid it.</p>
+
+  <p><strong>C. Return impl Error</strong> — <span class="inline-code">impl Error</span> as a return type hides the concrete error type but doesn't help with the input generic. The challenge is about generalising the input type, not the error type.</p>
+
+  <p><strong>D. Macro for each type</strong> — generates near-identical code for each type with no type-safety benefit over generics. Macros are a code generation tool, not an abstraction tool. Generics give you the same monomorphisation with better error messages and IDE support.</p>
+
+  <p><strong>Trait bounds constrain generics to types with the right capabilities — that's the whole point of bounded generics.</strong></p>
+
+  <div class="nav">
+    <a href="draft30a.html">← Challenge</a>
+    <a href="draft31a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

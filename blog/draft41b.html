@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>You need the raw bytes of a String. Borrow or consume? — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .pattern-tag { display: inline-block; background: #1a2035; border: 1px solid #6366f1; color: #818cf8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 1rem; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Idioms Challenges — #5 of 14</p>
+  <span class="pattern-tag">as_ / to_ / into_</span>
+  <h1>You need the raw bytes of a String. Borrow or consume? — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">payload.as_bytes()</span>.</p>
+
+  <p><span class="inline-code">as_bytes()</span> returns <span class="inline-code">&amp;[u8]</span> — a borrowed view of the String's internal buffer. Zero cost. No allocation, no copy, no ownership change. The <span class="inline-code">as_</span> prefix tells you: this is just a peek at the same data through a different lens.</p>
+
+  <p>The original code clones the String (heap allocation), then consumes the clone with <span class="inline-code">into_bytes()</span> to get a <span class="inline-code">Vec&lt;u8&gt;</span>. But <span class="inline-code">checksum</span> takes <span class="inline-code">&amp;[u8]</span> — a borrowed slice. There was never any need for owned bytes. When a function only needs to read, borrow with <span class="inline-code">as_</span>.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>fn checksum(data: &amp;[u8]) -&gt; u32 {
+    data.iter().map(|&amp;b| b as u32).sum()
+}
+
+fn main() {
+    let payload = String::from("hello world");
+    println!("checksum: {}", checksum(payload.as_bytes()));  // zero-cost borrow
+    println!("original: {}", payload);                       // still available
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Keep the clone</strong> — consuming is not the only way to get bytes. <span class="inline-code">as_bytes()</span> borrows them. The clone exists because <span class="inline-code">into_bytes()</span> consumes the String, but that's the wrong tool when you only need to read. Choose <span class="inline-code">as_</span> (borrow) over <span class="inline-code">into_</span> (consume) when you still need the original.</p>
+
+  <p><strong>C. as_bytes().to_vec()</strong> — <span class="inline-code">as_bytes()</span> borrows for free, then <span class="inline-code">to_vec()</span> copies all the bytes into a new <span class="inline-code">Vec</span>. <span class="inline-code">checksum</span> takes <span class="inline-code">&amp;[u8]</span>, so owned bytes aren't needed. The <span class="inline-code">to_</span> prefix warns you: this allocates. Don't upgrade from borrow to owned unless the API demands it.</p>
+
+  <p><strong>D. into_bytes() without clone</strong> — <span class="inline-code">into_bytes()</span> consumes the String. The second <span class="inline-code">println!</span> uses <span class="inline-code">payload</span> — it won't compile because <span class="inline-code">payload</span> has been moved. The <span class="inline-code">into_</span> prefix means: the original is gone.</p>
+
+  <p><strong><span class="inline-code">as_</span> borrows for free. <span class="inline-code">to_</span> copies and allocates. <span class="inline-code">into_</span> consumes the original. Always start with <span class="inline-code">as_</span> and only escalate when ownership demands it.</strong></p>
+
+  <p class="meta" style="margin-top:2rem; font-size:0.8rem;">Part of the Rust Idioms series. See also the <a href="draft10a.html" style="color:#6366f1;">Rust Design Challenges</a> series.</p>
+
+  <div class="nav">
+    <a href="draft41a.html">← Challenge</a>
+    <a href="draft42a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

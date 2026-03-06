@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Walk this tree without cloning the nodes — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #15 of 27</p>
+  <h1>Walk this tree without cloning the nodes — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Take <span class="inline-code">&amp;FileNode</span> and iterate with <span class="inline-code">.iter()</span>.</p>
+
+  <p>The original function takes <span class="inline-code">FileNode</span> by value — it consumes the node. That's why the caller has to clone: to keep a copy for itself. The fix is to take a reference. The function only needs to read the nodes, so a shared <span class="inline-code">&amp;</span> reference is enough.</p>
+
+  <p>When you call <span class="inline-code">.iter()</span> on <span class="inline-code">Vec&lt;Box&lt;FileNode&gt;&gt;</span>, you get <span class="inline-code">&amp;Box&lt;FileNode&gt;</span> for each element. Rust auto-derefs that to <span class="inline-code">&amp;FileNode</span> when you pass it to the recursive call. No explicit dereferencing needed.</p>
+
+  <p>This is one of the most common Rust corrections: you wrote a function that takes ownership when it only needed a reference. The compiler told you with a move error. The fix is almost always to add <span class="inline-code">&amp;</span>.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>struct FileNode {
+    name: String,
+    children: Vec&lt;Box&lt;FileNode&gt;&gt;,
+}
+
+// Takes &amp;FileNode — borrows, doesn't consume
+fn print_tree(node: &amp;FileNode, depth: usize) {
+    println!("{}{}", "  ".repeat(depth), node.name);
+    for child in &amp;node.children {
+        print_tree(child, depth + 1);
+    }
+}
+
+fn main() {
+    let tree = FileNode {
+        name: "src".into(),
+        children: vec![
+            Box::new(FileNode { name: "main.rs".into(), children: vec![] }),
+            Box::new(FileNode { name: "lib.rs".into(), children: vec![] }),
+        ],
+    };
+
+    print_tree(&amp;tree, 0);
+    // tree is still fully owned here — no clone needed
+    println!("tree still has {} children", tree.children.len());
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Flatten into a Vec with indices</strong> — restructures the entire data model to solve a problem that just needs <span class="inline-code">&amp;</span>. The arena pattern is great for graphs, but overkill for a simple read-only traversal of a tree you already have.</p>
+
+  <p><strong>C. Rc&lt;FileNode&gt;</strong> — adds reference counting overhead to every node. Shared ownership is for when multiple parts of the program need to own the same data simultaneously. A read-only walk doesn't need shared ownership — it needs a reference.</p>
+
+  <p><strong>D. Explicit stack with owned nodes</strong> — popping nodes off a stack moves them out of the tree, destroying the original structure. The caller loses the tree after traversal, which is the same problem as the original code.</p>
+
+  <p><strong>If you're just reading, take a reference — don't clone, don't share, don't restructure.</strong></p>
+
+  <div class="nav">
+    <a href="draft24a.html">← Challenge</a>
+    <a href="draft25a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

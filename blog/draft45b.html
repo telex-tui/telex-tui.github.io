@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>You have Option&lt;Option&lt;T&gt;&gt;. Flatten it without matching — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .pattern-tag { display: inline-block; background: #1a2035; border: 1px solid #6366f1; color: #818cf8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 1rem; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Idioms Challenges — #9 of 14</p>
+  <span class="pattern-tag">_map combiners</span>
+  <h1>You have Option&lt;Option&lt;T&gt;&gt;. Flatten it without matching — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">.flatten()</span>.</p>
+
+  <p><span class="inline-code">Option::flatten()</span> collapses <span class="inline-code">Option&lt;Option&lt;T&gt;&gt;</span> into <span class="inline-code">Option&lt;T&gt;</span>. <span class="inline-code">Some(Some(v))</span> becomes <span class="inline-code">Some(v)</span>. Both <span class="inline-code">Some(None)</span> and <span class="inline-code">None</span> become <span class="inline-code">None</span>. One method call replaces the entire nested match.</p>
+
+  <p>This connects to the <span class="inline-code">_map</span> combiner pattern: on iterators, <span class="inline-code">flat_map</span> = <span class="inline-code">map</span> + <span class="inline-code">flatten</span>. On Option, <span class="inline-code">and_then</span> = <span class="inline-code">map</span> + <span class="inline-code">flatten</span>. When you already have the nested structure and just need to collapse it, skip the map — call <span class="inline-code">flatten</span> directly.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>fn lookup(key: &amp;str) -&gt; Option&lt;Option&lt;i32&gt;&gt; {
+    match key {
+        "a" =&gt; Some(Some(1)),
+        "b" =&gt; Some(None),
+        _ =&gt; None,
+    }
+}
+
+fn main() {
+    let value = lookup("a").flatten();
+    println!("{:?}", value);  // Some(1)
+
+    let missing = lookup("b").flatten();
+    println!("{:?}", missing);  // None
+
+    let unknown = lookup("z").flatten();
+    println!("{:?}", unknown);  // None
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. and_then(|x| x)</strong> — this works. <span class="inline-code">and_then</span> maps the inner value and flattens, so <span class="inline-code">.and_then(|x| x)</span> is equivalent to <span class="inline-code">.flatten()</span>. But it's the long way around. <span class="inline-code">flatten()</span> exists precisely for this case. Use <span class="inline-code">and_then</span> when you need to transform the inner value, not when you just need to collapse a layer.</p>
+
+  <p><strong>C. map(|x| x.unwrap_or_default())</strong> — this changes the semantics. <span class="inline-code">Some(None)</span> becomes <span class="inline-code">Some(0)</span> instead of <span class="inline-code">None</span>. "Key exists but has no value" and "key doesn't exist" should both be <span class="inline-code">None</span>, not <span class="inline-code">Some(0)</span>. <span class="inline-code">unwrap_or_default</span> invents a value where there shouldn't be one.</p>
+
+  <p><strong>D. unwrap().unwrap()</strong> — panics. <span class="inline-code">lookup("b")</span> returns <span class="inline-code">Some(None)</span>. First <span class="inline-code">unwrap()</span> gives <span class="inline-code">None</span>. Second <span class="inline-code">unwrap()</span> panics. <span class="inline-code">lookup("z")</span> returns <span class="inline-code">None</span>. First <span class="inline-code">unwrap()</span> panics. The nested match exists specifically to handle these cases safely.</p>
+
+  <p><strong><span class="inline-code">flatten</span> collapses nested wrappers. On iterators: <span class="inline-code">Vec&lt;Vec&lt;T&gt;&gt;</span> → <span class="inline-code">Vec&lt;T&gt;</span>. On Option: <span class="inline-code">Option&lt;Option&lt;T&gt;&gt;</span> → <span class="inline-code">Option&lt;T&gt;</span>. Same concept, same name.</strong></p>
+
+  <p class="meta" style="margin-top:2rem; font-size:0.8rem;">Part of the Rust Idioms series. See also the <a href="draft10a.html" style="color:#6366f1;">Rust Design Challenges</a> series.</p>
+
+  <div class="nav">
+    <a href="draft45a.html">← Challenge</a>
+    <a href="draft46a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

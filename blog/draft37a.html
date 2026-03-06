@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This fallback allocates a String every call. It shouldn't — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .pattern-tag { display: inline-block; background: #1a2035; border: 1px solid #6366f1; color: #818cf8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 1rem; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Idioms Challenges — #1 of 14</p>
+  <span class="pattern-tag">_or vs _or_else</span>
+  <h1>This fallback allocates a String every call. It shouldn't</h1>
+  <p class="meta">March 2026 · Part A: The Challenge</p>
+
+  <p>A function that reads a config value with a fallback.</p>
+
+<pre><code>use std::collections::HashMap;
+
+fn get_config_value(config: &amp;HashMap&lt;String, String&gt;, key: &amp;str) -&gt; String {
+    config.get(key)
+        .cloned()
+        .unwrap_or(String::from("default_value"))
+}
+
+fn main() {
+    let mut config = HashMap::new();
+    config.insert("host".into(), "localhost".into());
+    config.insert("port".into(), "8080".into());
+
+    // This key exists — but the fallback String is still allocated
+    println!("{}", get_config_value(&amp;config, "host"));
+    println!("{}", get_config_value(&amp;config, "missing"));
+}</code></pre>
+
+  <div class="challenge-box">
+    <p>The <span class="inline-code">String::from("default_value")</span> runs on every call, even when the key exists. Fix the unnecessary allocation.</p>
+  </div>
+
+  <h2>Your options</h2>
+  <ul class="options">
+    <li data-label="A">Switch to <span class="inline-code">unwrap_or_else</span> with a closure that builds the String only when needed</li>
+    <li data-label="B">Use <span class="inline-code">match</span> instead — pattern matching avoids this problem entirely</li>
+    <li data-label="C">Keep <span class="inline-code">unwrap_or</span> but pass a string literal <span class="inline-code">&amp;str</span> instead of a <span class="inline-code">String</span></li>
+    <li data-label="D">Use <span class="inline-code">unwrap_or_default()</span> since it always avoids allocation</li>
+  </ul>
+
+  <p>Pick one before reading the solution.</p>
+
+  <p class="meta" style="margin-top:2rem; font-size:0.8rem;">Part of the Rust Idioms series. See also the <a href="draft10a.html" style="color:#6366f1;">Rust Design Challenges</a> series.</p>
+
+  <div class="nav">
+    <a href="draft37b.html">→ Solution</a>
+  </div>
+</body>
+</html>

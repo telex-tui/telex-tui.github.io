@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Filter a Vec of strings, parse the survivors, discard parse errors — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .pattern-tag { display: inline-block; background: #1a2035; border: 1px solid #6366f1; color: #818cf8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 1rem; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Idioms Challenges — #7 of 14</p>
+  <span class="pattern-tag">_map combiners</span>
+  <h1>Filter a Vec of strings, parse the survivors, discard parse errors — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">filter_map</span>.</p>
+
+  <p><span class="inline-code">filter_map</span> combines filter and map in a single pass. The closure returns <span class="inline-code">Option&lt;T&gt;</span>: <span class="inline-code">Some(value)</span> keeps the element (and transforms it), <span class="inline-code">None</span> discards it. One parse per element instead of two.</p>
+
+  <p>The <span class="inline-code">_map</span> suffix is the naming convention for combiners: the first word says what operation is combined with mapping. <span class="inline-code">filter_map</span> = filter + map. The pattern appears across the standard library — <span class="inline-code">find_map</span>, <span class="inline-code">flat_map</span> — always meaning "two operations in one pass."</p>
+
+  <h2>The solution</h2>
+
+<pre><code>fn main() {
+    let inputs = vec!["42", "not_a_number", "7", "abc", "13"];
+
+    let numbers: Vec&lt;i32&gt; = inputs.iter()
+        .filter_map(|s| s.parse::&lt;i32&gt;().ok())  // parse once: Some(n) or None
+        .collect();
+
+    println!("{:?}", numbers);  // [42, 7, 13]
+}</code></pre>
+
+  <p><span class="inline-code">parse().ok()</span> converts <span class="inline-code">Result&lt;i32, _&gt;</span> to <span class="inline-code">Option&lt;i32&gt;</span>. Successful parses become <span class="inline-code">Some(n)</span> and are kept. Failures become <span class="inline-code">None</span> and are discarded. One operation, one pass.</p>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. flat_map</strong> — <span class="inline-code">flat_map</span> maps each element to an iterator and flattens the results. You could make it work (<span class="inline-code">parse().ok()</span> returns an <span class="inline-code">Option</span>, which is iterable), but the intent is wrong. <span class="inline-code">flat_map</span> says "each element produces multiple items." <span class="inline-code">filter_map</span> says "each element produces zero or one item." Use the name that matches your intent.</p>
+
+  <p><strong>C. Reorder to map then filter</strong> — <span class="inline-code">map</span> would produce <span class="inline-code">Result</span> values. Then <span class="inline-code">filter</span> would check them. Then you'd need another <span class="inline-code">map</span> to unwrap. Three steps, and the double-handling problem remains. <span class="inline-code">filter_map</span> is one step.</p>
+
+  <p><strong>D. find_map</strong> — <span class="inline-code">find_map</span> stops at the first match. It returns a single <span class="inline-code">Option&lt;T&gt;</span>, not an iterator. You want all valid numbers, not just the first one.</p>
+
+  <p><strong>When you need to test-and-transform in one pass, reach for <span class="inline-code">filter_map</span>. Return <span class="inline-code">Some</span> to keep, <span class="inline-code">None</span> to discard.</strong></p>
+
+  <p class="meta" style="margin-top:2rem; font-size:0.8rem;">Part of the Rust Idioms series. See also the <a href="draft10a.html" style="color:#6366f1;">Rust Design Challenges</a> series.</p>
+
+  <div class="nav">
+    <a href="draft43a.html">← Challenge</a>
+    <a href="draft44a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

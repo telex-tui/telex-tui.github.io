@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>You clone everywhere to make it compile. What's the real fix? — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #12 of 27</p>
+  <h1>You clone everywhere to make it compile. What's the real fix? — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Scope the borrow. Extract what you need, then mutate.</p>
+
+  <p>The problem is that <span class="inline-code">items.iter()</span> borrows the vec immutably, and <span class="inline-code">items.push()</span> borrows it mutably. The borrow checker won't let both coexist. But they don't need to coexist — you finish reading before you start writing.</p>
+
+  <p>The fix is to extract the data you need from the immutable borrow into a local variable that doesn't reference the vec at all. Once you have the length (a <span class="inline-code">usize</span>, which is <span class="inline-code">Copy</span>) and the formatted string, the borrow on <span class="inline-code">items</span> is released, and you're free to push.</p>
+
+  <p>This is the "split the read phase from the write phase" pattern. Almost every "borrow checker fight" involving collections comes down to this: you're reading and writing the same thing in overlapping scopes. Separate them and the conflict disappears.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>fn main() {
+    let mut items = vec![
+        String::from("apple"),
+        String::from("banana"),
+        String::from("cherry"),
+    ];
+
+    // Read phase: find the longest, build the new string
+    // The borrow of `items` ends when this statement completes
+    let new_entry = {
+        let longest = items.iter()
+            .max_by_key(|s| s.len())
+            .unwrap();
+        format!("best: {}", longest)
+    };
+
+    // Write phase: borrow is gone, safe to mutate
+    items.push(new_entry);
+
+    for item in &amp;items {
+        println!("{}", item);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Rc&lt;String&gt;</strong> — adds heap allocation and reference counting overhead to every string in the collection, just to share one reference. The underlying problem isn't ownership — it's borrow scope. Using <span class="inline-code">Rc</span> here is like buying a crane to move a chair.</p>
+
+  <p><strong>C. Cow&lt;str&gt;</strong> — <span class="inline-code">Cow</span> helps when you sometimes borrow and sometimes own. That's not the problem here. The problem is overlapping borrows, and <span class="inline-code">Cow</span> doesn't solve that.</p>
+
+  <p><strong>D. Accept the clone</strong> — cloning works, but it's a workaround, not a solution. The clone allocates a new heap string when you don't need to. Learning to scope borrows is the skill; reaching for <span class="inline-code">.clone()</span> is the crutch.</p>
+
+  <p><strong>When the borrow checker blocks you, separate the read phase from the write phase.</strong></p>
+
+  <div class="nav">
+    <a href="draft21a.html">← Challenge</a>
+    <a href="draft22a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

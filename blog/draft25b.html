@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This tree needs an iterator. Write one — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #16 of 27</p>
+  <h1>This tree needs an iterator. Write one — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use an explicit stack of references in an iterator struct.</p>
+
+  <p>Recursion is the natural way to walk a tree, but iterators need to pause and resume. Rust doesn't have stable generators or <span class="inline-code">yield</span>, so you convert the recursive algorithm into an iterative one using an explicit stack. Each call to <span class="inline-code">next()</span> pops from the stack, processes the node, pushes children, and returns when it finds a leaf.</p>
+
+  <p>The iterator struct holds <span class="inline-code">Vec&lt;&amp;'a Expr&gt;</span> — a stack of references into the tree. The lifetime <span class="inline-code">'a</span> ties the iterator to the tree it borrows from, ensuring the tree isn't dropped while iteration is in progress.</p>
+
+  <p>This is the standard way to write tree iterators in Rust: stack-based, borrowing, lazy. Each <span class="inline-code">next()</span> call does only the work needed to find the next value.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>enum Expr {
+    Num(i64),
+    Add(Box&lt;Expr&gt;, Box&lt;Expr&gt;),
+    Mul(Box&lt;Expr&gt;, Box&lt;Expr&gt;),
+}
+
+struct LeafIter&lt;'a&gt; {
+    stack: Vec&lt;&amp;'a Expr&gt;,
+}
+
+impl&lt;'a&gt; LeafIter&lt;'a&gt; {
+    fn new(root: &amp;'a Expr) -&gt; Self {
+        LeafIter { stack: vec![root] }
+    }
+}
+
+impl&lt;'a&gt; Iterator for LeafIter&lt;'a&gt; {
+    type Item = i64;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        while let Some(node) = self.stack.pop() {
+            match node {
+                Expr::Num(n) =&gt; return Some(*n),
+                Expr::Add(a, b) | Expr::Mul(a, b) =&gt; {
+                    // Push right first so left is processed first (stack is LIFO)
+                    self.stack.push(b);
+                    self.stack.push(a);
+                }
+            }
+        }
+        None
+    }
+}
+
+fn main() {
+    // (2 + 3) * 4
+    let tree = Expr::Mul(
+        Box::new(Expr::Add(
+            Box::new(Expr::Num(2)),
+            Box::new(Expr::Num(3)),
+        )),
+        Box::new(Expr::Num(4)),
+    );
+
+    let leaves: Vec&lt;i64&gt; = LeafIter::new(&amp;tree).collect();
+    println!("leaves: {:?}", leaves); // [2, 3, 4]
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Collect into Vec first</strong> — works but isn't lazy. It traverses the entire tree upfront and allocates a Vec to hold all values. If you only need the first two leaves, you've done unnecessary work. An iterator should be pay-as-you-go.</p>
+
+  <p><strong>C. Recursion with yield</strong> — Rust has no stable <span class="inline-code">yield</span>. Generators are experimental. The stack-based approach is the stable equivalent of what generators would give you.</p>
+
+  <p><strong>D. Consuming IntoIterator</strong> — moves nodes out of the tree during iteration. After iterating, the tree is gone. If you want to iterate and then do something else with the tree, you can't. Borrowing preserves the tree.</p>
+
+  <p><strong>To iterate a tree in Rust: convert recursion to an explicit stack of references.</strong></p>
+
+  <div class="nav">
+    <a href="draft25a.html">← Challenge</a>
+    <a href="draft26a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

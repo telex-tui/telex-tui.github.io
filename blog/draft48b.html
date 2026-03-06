@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Find the process using the most memory — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .pattern-tag { display: inline-block; background: #1a2035; border: 1px solid #6366f1; color: #818cf8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 1rem; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Idioms Challenges — #12 of 14</p>
+  <span class="pattern-tag">_by / _by_key</span>
+  <h1>Find the process using the most memory — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">max_by_key</span>.</p>
+
+  <p><span class="inline-code">max_by_key</span> extracts a comparable value from each element and returns the element with the maximum key. One pass, no mutation, no manual tracking. The <span class="inline-code">_by_key</span> suffix means "compare by this extracted property" — you point at the field and the adapter handles the comparison.</p>
+
+  <p>This is the same <span class="inline-code">_by</span> / <span class="inline-code">_by_key</span> pattern from sorting. <span class="inline-code">sort_by_key</span>, <span class="inline-code">min_by_key</span>, <span class="inline-code">max_by_key</span> — all work the same way. Extract a key, compare by it.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>struct Process {
+    name: String,
+    memory_mb: u64,
+}
+
+fn main() {
+    let procs = vec![
+        Process { name: "nginx".into(), memory_mb: 120 },
+        Process { name: "postgres".into(), memory_mb: 450 },
+        Process { name: "redis".into(), memory_mb: 85 },
+    ];
+
+    let heaviest = procs.iter()
+        .max_by_key(|p| p.memory_mb)
+        .unwrap();
+
+    println!("{}: {} MB", heaviest.name, heaviest.memory_mb);
+    // postgres: 450 MB
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. max_by with a full comparator</strong> — <span class="inline-code">max_by(|a, b| a.memory_mb.cmp(&amp;b.memory_mb))</span> works but is verbose for a single field. You're writing the comparison logic that <span class="inline-code">_by_key</span> handles for you. Use <span class="inline-code">max_by</span> when the comparison involves multiple fields or custom logic. For one field, <span class="inline-code">_by_key</span> is cleaner.</p>
+
+  <p><strong>C. max()</strong> — <span class="inline-code">max()</span> requires <span class="inline-code">Process: Ord</span>. Custom types don't implement <span class="inline-code">Ord</span> by default, and deriving it would compare all fields in declaration order — not what you want. <span class="inline-code">_by_key</span> lets you pick exactly which property to compare without implementing traits.</p>
+
+  <p><strong>D. sort_by_key then take last</strong> — sorting is O(n log n). Finding the maximum is O(n). Don't sort when you only need the extremum. <span class="inline-code">max_by_key</span> makes a single linear pass — the right tool for "find the biggest."</p>
+
+  <p><strong><span class="inline-code">_by_key</span> extracts and compares in one step. Use it for <span class="inline-code">sort</span>, <span class="inline-code">min</span>, <span class="inline-code">max</span> — anywhere you need "by this field."</strong></p>
+
+  <p class="meta" style="margin-top:2rem; font-size:0.8rem;">Part of the Rust Idioms series. See also the <a href="draft10a.html" style="color:#6366f1;">Rust Design Challenges</a> series.</p>
+
+  <div class="nav">
+    <a href="draft48a.html">← Challenge</a>
+    <a href="draft49a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

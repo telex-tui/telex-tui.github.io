@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>A cache shared across tasks. It needs to initialise exactly once — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #17 of 27</p>
+  <h1>A cache shared across tasks. It needs to initialise exactly once — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">tokio::sync::OnceCell</span>.</p>
+
+  <p><span class="inline-code">OnceCell</span> guarantees exactly-once initialization, even when multiple tasks call <span class="inline-code">get_or_init</span> concurrently. The first caller runs the init closure. All other callers wait for it to complete and then get the result. No double-initialization, no race conditions, no manual locking.</p>
+
+  <p>The tokio version (as opposed to <span class="inline-code">std::sync::OnceLock</span>) is specifically designed for async contexts. The init closure can be async — you could do I/O, make network calls, or read from disk during initialization, and it integrates cleanly with the async runtime.</p>
+
+  <p>After initialization, <span class="inline-code">get_or_init</span> returns a reference to the stored value with no locking overhead. It's effectively free after the first call.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+
+fn build_lookup() -&gt; HashMap&lt;String, u64&gt; {
+    println!("building lookup (expensive)...");
+    let mut map = HashMap::new();
+    map.insert("alpha".into(), 1);
+    map.insert("beta".into(), 2);
+    map.insert("gamma".into(), 3);
+    map
+}
+
+// Shared across tasks, initialised exactly once
+static LOOKUP: OnceCell&lt;HashMap&lt;String, u64&gt;&gt; = OnceCell::const_new();
+
+async fn get_lookup() -&gt; &amp;'static HashMap&lt;String, u64&gt; {
+    LOOKUP.get_or_init(|| async { build_lookup() }).await
+}
+
+#[tokio::main]
+async fn main() {
+    let mut handles = vec![];
+
+    for i in 0..3 {
+        handles.push(tokio::spawn(async move {
+            let table = get_lookup().await;
+            println!("task {}: alpha = {:?}", i, table.get("alpha"));
+        }));
+    }
+
+    for h in handles {
+        h.await.unwrap();
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Mutex&lt;Option&lt;&gt;&gt;</strong> — requires holding the lock during the entire init, blocking all other tasks. And you have to write the check-and-init logic yourself, getting the locking scope right. <span class="inline-code">OnceCell</span> does this correctly by design.</p>
+
+  <p><strong>C. lazy_static!</strong> — works for synchronous initialization, but the init closure can't be async. If building the lookup requires I/O, you're blocking the async runtime.</p>
+
+  <p><strong>D. Build in each task</strong> — duplicates expensive work. If three tasks race to build it, you pay the cost three times and use three times the memory. The whole point is to build once.</p>
+
+  <p><strong>For once-only async initialization shared across tasks, OnceCell is the right primitive.</strong></p>
+
+  <div class="nav">
+    <a href="draft26a.html">← Challenge</a>
+    <a href="draft27a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

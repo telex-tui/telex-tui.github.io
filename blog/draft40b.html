@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This function takes &str but you have a String. Which conversion? — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .pattern-tag { display: inline-block; background: #1a2035; border: 1px solid #6366f1; color: #818cf8; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 1rem; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Idioms Challenges — #4 of 14</p>
+  <span class="pattern-tag">as_ / to_ / into_</span>
+  <h1>This function takes &amp;str but you have a String. Which conversion? — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">message.as_str()</span>.</p>
+
+  <p><span class="inline-code">as_str()</span> returns a <span class="inline-code">&amp;str</span> view of the String's contents. Zero cost — no allocation, no copy. The <span class="inline-code">as_</span> prefix is the naming convention for cheap borrows: a different view of the same data, nothing new created.</p>
+
+  <p>The original code calls <span class="inline-code">.to_string()</span> on a value that's already a <span class="inline-code">String</span>. That allocates a second String on the heap, copies the bytes, then immediately borrows the copy and drops it. Pure waste. When you just need to look at the data, use <span class="inline-code">as_</span>. When you need a new copy, use <span class="inline-code">to_</span>.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>fn log_event(msg: &amp;str) {
+    println!("[EVENT] {}", msg);
+}
+
+fn main() {
+    let message = format!("user {} logged in", 42);
+    log_event(message.as_str());  // free borrow, no allocation
+}</code></pre>
+
+  <p>Note: <span class="inline-code">&amp;message</span> also works via Deref coercion (<span class="inline-code">&amp;String</span> → <span class="inline-code">&amp;str</span>). Both are zero-cost. <span class="inline-code">as_str()</span> makes the intent explicit and demonstrates the <span class="inline-code">as_</span> naming convention.</p>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. to_owned()</strong> — <span class="inline-code">to_owned()</span> creates a new owned copy. For a String, that means cloning the entire heap allocation. Then you'd borrow the clone. Same waste as the original bug, different method name.</p>
+
+  <p><strong>C. into()</strong> — <span class="inline-code">into()</span> consumes the original value. <span class="inline-code">String</span> doesn't implement <span class="inline-code">Into&lt;&amp;str&gt;</span> — you can't produce a borrow by consuming the owner, because the borrow would outlive the consumed value. The <span class="inline-code">into_</span> prefix means "the original is gone." That's not what you want here.</p>
+
+  <p><strong>D. to_str()</strong> — <span class="inline-code">to_str()</span> doesn't exist on <span class="inline-code">String</span>. And even if it did, the <span class="inline-code">to_</span> prefix signals "create something new." For a free borrow, the convention is <span class="inline-code">as_</span>.</p>
+
+  <p><strong><span class="inline-code">as_</span> = free peek. <span class="inline-code">to_</span> = allocating copy. <span class="inline-code">into_</span> = consuming transformation. Start with <span class="inline-code">as_</span> and only upgrade when you need to.</strong></p>
+
+  <p class="meta" style="margin-top:2rem; font-size:0.8rem;">Part of the Rust Idioms series. See also the <a href="draft10a.html" style="color:#6366f1;">Rust Design Challenges</a> series.</p>
+
+  <div class="nav">
+    <a href="draft40a.html">← Challenge</a>
+    <a href="draft41a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

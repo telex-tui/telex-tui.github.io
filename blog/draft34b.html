@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Two async tasks need to coordinate on a single result — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #25 of 27</p>
+  <h1>Two async tasks need to coordinate on a single result — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">tokio::sync::oneshot</span>.</p>
+
+  <p>A oneshot channel is purpose-built for this pattern: one sender, one receiver, one message. The producer sends the result. The consumer <span class="inline-code">.await</span>s the receiver. The consumer is suspended until the value arrives — no polling, no wasted CPU cycles.</p>
+
+  <p>The types enforce the constraint: <span class="inline-code">Sender</span> can only be used once (it's consumed by <span class="inline-code">send()</span>), and <span class="inline-code">Receiver</span> yields exactly one value. You can't accidentally send twice or forget to send — the compiler catches both.</p>
+
+  <p>This is the async equivalent of a promise/future in other languages. One task produces a value, another task awaits it. Clean, zero-overhead when the value is available, and integrates naturally with the async runtime.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use tokio::sync::oneshot;
+
+async fn compute_answer() -&gt; u64 {
+    // Simulate expensive async work
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    42
+}
+
+#[tokio::main]
+async fn main() {
+    let (tx, rx) = oneshot::channel();
+
+    // Producer task
+    tokio::spawn(async move {
+        let answer = compute_answer().await;
+        // Send the result (tx is consumed here — can only send once)
+        let _ = tx.send(answer);
+    });
+
+    // Consumer awaits the result — no polling, no busy-waiting
+    match rx.await {
+        Ok(answer) =&gt; println!("answer: {}", answer),
+        Err(_) =&gt; println!("producer dropped without sending"),
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. mpsc channel</strong> — designed for multiple producers and a stream of messages. For a single one-time result, it's over-specified. It allocates a buffer, supports multiple sends, and the receiver is a stream, not a single future. <span class="inline-code">oneshot</span> models the constraint exactly.</p>
+
+  <p><strong>C. Mutex with polling loop</strong> — busy-waiting burns CPU cycles checking the lock every 10ms. It doesn't integrate with the async runtime — the task isn't suspended, it's actively looping. This defeats the purpose of async.</p>
+
+  <p><strong>D. std::sync::Condvar</strong> — a synchronous primitive. Calling <span class="inline-code">condvar.wait()</span> blocks the thread, starving other async tasks. It doesn't yield to the async executor. Use <span class="inline-code">tokio::sync</span> primitives in async code.</p>
+
+  <p><strong>One producer, one consumer, one value: that's a oneshot channel.</strong></p>
+
+  <div class="nav">
+    <a href="draft34a.html">← Challenge</a>
+    <a href="draft35a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

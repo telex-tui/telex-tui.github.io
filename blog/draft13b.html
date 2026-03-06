@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Make this cache lazy — only compute on first access — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #4 of 27</p>
+  <h1>Make this cache lazy — only compute on first access — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">OnceCell&lt;String&gt;</span> to store the summary.</p>
+
+  <p><span class="inline-code">OnceCell</span> is purpose-built for this pattern: a value that starts empty and gets initialized exactly once. You call <span class="inline-code">get_or_init</span> with a closure, and it either returns the already-computed value or runs the closure, stores the result, and returns it. Every subsequent call just returns the cached value. No flags, no option-checking, no interior mutability gymnastics.</p>
+
+  <p>The key insight is that <span class="inline-code">OnceCell</span> gives you interior mutability behind a <span class="inline-code">&amp;self</span> reference — the <span class="inline-code">summary()</span> method takes <span class="inline-code">&amp;self</span>, not <span class="inline-code">&amp;mut self</span>, even though it might write the cached value on first call. That's the whole point. Callers don't need to know or care whether the value is computed yet.</p>
+
+  <p>For thread-safe code, use <span class="inline-code">OnceLock</span> (the thread-safe version). For single-threaded code, <span class="inline-code">OnceCell</span> from <span class="inline-code">std::cell</span> is enough.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::cell::OnceCell;
+use std::collections::HashMap;
+
+struct Config {
+    raw: HashMap&lt;String, String&gt;,
+    summary: OnceCell&lt;String&gt;,
+}
+
+impl Config {
+    fn new(raw: HashMap&lt;String, String&gt;) -&gt; Self {
+        Config {
+            raw,
+            summary: OnceCell::new(), // starts empty
+        }
+    }
+
+    fn build_summary(raw: &amp;HashMap&lt;String, String&gt;) -&gt; String {
+        raw.iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::&lt;Vec&lt;_&gt;&gt;()
+            .join("; ")
+    }
+
+    fn summary(&amp;self) -&gt; &amp;str {
+        // Computed on first call, cached for all subsequent calls
+        self.summary.get_or_init(|| Self::build_summary(&amp;self.raw))
+    }
+}
+
+fn main() {
+    let mut data = HashMap::new();
+    data.insert("host".into(), "localhost".into());
+    data.insert("port".into(), "8080".into());
+    let config = Config::new(data);
+    // summary is only computed here, on first access
+    println!("{}", config.summary());
+    println!("{}", config.summary()); // second call uses cached value
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Option with boolean flag</strong> — works, but you're reinventing what <span class="inline-code">OnceCell</span> already does. You also need <span class="inline-code">&amp;mut self</span> to set the Option, which means your <span class="inline-code">summary()</span> method can't take <span class="inline-code">&amp;self</span> without additional interior mutability.</p>
+
+  <p><strong>C. lazy_static!</strong> — that's for global statics, not struct fields. Your summary depends on instance data (the specific <span class="inline-code">raw</span> map), so a global doesn't work.</p>
+
+  <p><strong>D. RefCell&lt;Option&lt;&gt;&gt;</strong> — works but is more complex than necessary. You'd need to borrow, check, and set manually. <span class="inline-code">OnceCell</span> wraps this exact pattern with a clean API and zero overhead after initialization.</p>
+
+  <p><strong>OnceCell is the standard tool for lazy, compute-once fields.</strong></p>
+
+  <div class="nav">
+    <a href="draft13a.html">← Challenge</a>
+    <a href="draft14a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

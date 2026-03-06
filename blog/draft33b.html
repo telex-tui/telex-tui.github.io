@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This blocking call is inside an async function. Fix it — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #24 of 27</p>
+  <h1>This blocking call is inside an async function. Fix it — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Use <span class="inline-code">tokio::task::spawn_blocking</span>.</p>
+
+  <p>Async runtimes like tokio use a small number of threads (usually one per CPU core) to run many tasks cooperatively. When a task calls a blocking function — one that takes milliseconds or more without yielding — it holds that thread hostage. No other task on that thread can make progress.</p>
+
+  <p><span class="inline-code">spawn_blocking</span> moves the blocking work to a separate thread pool designed for exactly this. The async task awaits the result without blocking the executor. The blocking thread does the I/O. When it's done, the result is sent back to the async task.</p>
+
+  <p>The alternative is <span class="inline-code">tokio::fs::read_to_string</span>, which internally does the same thing — it uses <span class="inline-code">spawn_blocking</span> under the hood. Either approach works. The principle is the same: keep blocking work off the async executor threads.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::fs;
+
+async fn load_template(path: String) -&gt; String {
+    // Move the blocking I/O to a thread that's allowed to block
+    tokio::task::spawn_blocking(move || {
+        fs::read_to_string(&amp;path).unwrap_or_else(|_| "default".into())
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::main]
+async fn main() {
+    let content = load_template("template.html".into()).await;
+    println!("loaded: {} bytes", content.len());
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Wrap in async {}</strong> — putting blocking code inside an <span class="inline-code">async {}</span> block doesn't make it non-blocking. The code still runs synchronously when polled. <span class="inline-code">async</span> is about structure, not magic — it doesn't change how the inner code executes.</p>
+
+  <p><strong>C. .await the blocking call</strong> — <span class="inline-code">std::fs::read_to_string</span> doesn't return a Future. You can't <span class="inline-code">.await</span> it. It's a regular synchronous function. <span class="inline-code">.await</span> only works on types that implement <span class="inline-code">Future</span>.</p>
+
+  <p><strong>D. std::thread::spawn with polling</strong> — <span class="inline-code">std::thread::spawn</span> returns a <span class="inline-code">JoinHandle</span>, not a <span class="inline-code">Future</span>. You can't <span class="inline-code">.await</span> it. You'd have to poll in a loop, which is busy-waiting — defeating the purpose of async. <span class="inline-code">spawn_blocking</span> returns a future that integrates properly with the async runtime.</p>
+
+  <p><strong>Blocking code in async context: move it to spawn_blocking so the executor stays free.</strong></p>
+
+  <div class="nav">
+    <a href="draft33a.html">← Challenge</a>
+    <a href="draft34a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

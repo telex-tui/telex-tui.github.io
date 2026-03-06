@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This function returns a reference. Why won't it compile? — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #11 of 27</p>
+  <h1>This function returns a reference. Why won't it compile? — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Return an owned <span class="inline-code">String</span>. Accept the allocation.</p>
+
+  <p>The formatted name doesn't exist before the function runs. <span class="inline-code">format!</span> creates a new <span class="inline-code">String</span> on the heap, owned by the local variable. When the function returns, that local is dropped. A reference to it would dangle. There is no way to return a reference to something the function just created — the thing won't exist after the return.</p>
+
+  <p>This is a fundamental constraint, not a limitation you can work around with annotations. A reference is a borrow of something that already exists. If no one else owns the data, you must return it by value.</p>
+
+  <p>The desire to "avoid allocation" is reasonable, but in this case the allocation is inherent to the operation. Combining two strings into one requires new memory. The right answer is to return the owned <span class="inline-code">String</span> and let the caller decide what to do with it. If the caller needs a <span class="inline-code">&amp;str</span>, they can borrow the result after receiving it.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>struct User {
+    first: String,
+    last: String,
+}
+
+impl User {
+    fn new(first: &amp;str, last: &amp;str) -&gt; Self {
+        User { first: first.into(), last: last.into() }
+    }
+}
+
+// Returns owned String — the formatted name is new data
+fn display_name(user: &amp;User) -&gt; String {
+    format!("{} {}", user.first, user.last)
+}
+
+fn main() {
+    let user = User::new("Alice", "Smith");
+    let name = display_name(&amp;user);
+    // Caller owns the String, can borrow it as &amp;str
+    println!("{}", &amp;name);
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Lifetime parameter with &amp;'a str</strong> — the lifetime parameter connects the output to the input. But the formatted string isn't part of the input — it's newly created. There's nothing in the <span class="inline-code">User</span> to point to. A lifetime annotation can't create ownership; it can only describe existing relationships.</p>
+
+  <p><strong>C. Box::leak</strong> — turns the <span class="inline-code">String</span> into a <span class="inline-code">&amp;'static str</span> by leaking the memory permanently. The memory is never freed. Do this in a loop and you've got an unbounded memory leak.</p>
+
+  <p><strong>D. Store as a field on User</strong> — precomputing and caching the name is a valid optimisation if you call this frequently. But it changes the data model — now <span class="inline-code">User</span> has to be updated whenever <span class="inline-code">first</span> or <span class="inline-code">last</span> changes. The question is about the function return, and the direct answer is: return the owned value.</p>
+
+  <p><strong>If a function creates new data, it must return it by value — you can't return a reference to something that won't exist after the return.</strong></p>
+
+  <div class="nav">
+    <a href="draft20a.html">← Challenge</a>
+    <a href="draft21a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

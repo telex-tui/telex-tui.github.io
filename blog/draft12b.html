@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This counter needs to be visible to three threads — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #3 of 27</p>
+  <h1>This counter needs to be visible to three threads — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: B</h2>
+
+  <p>Wrap it in <span class="inline-code">Arc&lt;Mutex&lt;HitCounter&gt;&gt;</span>.</p>
+
+  <p>Two problems need solving here. First, multiple threads need to own the counter — you can't just hand a reference to a spawned thread because the thread might outlive the scope that created the counter. <span class="inline-code">Arc</span> (atomic reference counting) gives you shared ownership across threads. Each thread gets its own <span class="inline-code">Arc</span> handle, and the counter lives until the last handle is dropped.</p>
+
+  <p>Second, the counter needs mutation. Multiple threads can't all hold <span class="inline-code">&amp;mut</span> at once — that's a data race, and Rust won't allow it. <span class="inline-code">Mutex</span> provides interior mutability with runtime exclusion: one thread locks, increments, unlocks. The others wait their turn.</p>
+
+  <p><span class="inline-code">Arc</span> solves the ownership problem. <span class="inline-code">Mutex</span> solves the mutation problem. You almost always need both when sharing mutable state across threads.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::sync::{Arc, Mutex};
+use std::thread;
+
+struct HitCounter {
+    count: u64,
+}
+
+impl HitCounter {
+    fn new() -&gt; Self {
+        HitCounter { count: 0 }
+    }
+
+    fn increment(&amp;mut self) {
+        self.count += 1;
+    }
+
+    fn get(&amp;self) -&gt; u64 {
+        self.count
+    }
+}
+
+fn main() {
+    let counter = Arc::new(Mutex::new(HitCounter::new()));
+    let mut handles = vec![];
+
+    for _ in 0..3 {
+        let counter = Arc::clone(&amp;counter);
+        handles.push(thread::spawn(move || {
+            for _ in 0..100 {
+                counter.lock().unwrap().increment();
+            }
+        }));
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    println!("hits: {}", counter.lock().unwrap().get());
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>A. Rc&lt;RefCell&lt;&gt;&gt;</strong> — <span class="inline-code">Rc</span> is not <span class="inline-code">Send</span>. The compiler will refuse to move it into a spawned thread. <span class="inline-code">Rc</span> uses non-atomic reference counting, which would be a data race if shared across threads.</p>
+
+  <p><strong>C. Mutex without Arc</strong> — you can't pass a reference to a <span class="inline-code">Mutex</span> into a spawned thread because the thread might outlive the <span class="inline-code">Mutex</span>. Spawned threads require <span class="inline-code">'static</span> data unless you use scoped threads.</p>
+
+  <p><strong>D. static mut</strong> — every access to <span class="inline-code">static mut</span> requires <span class="inline-code">unsafe</span>, and concurrent mutation without synchronisation is undefined behaviour. This is exactly the kind of bug Rust exists to prevent.</p>
+
+  <p><strong>Arc for sharing across threads, Mutex for mutating shared data — they're a pair.</strong></p>
+
+  <div class="nav">
+    <a href="draft12a.html">← Challenge</a>
+    <a href="draft13a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

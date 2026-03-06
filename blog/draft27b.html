@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This struct holds a reference. Now give it a method — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #18 of 27</p>
+  <h1>This struct holds a reference. Now give it a method — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Write <span class="inline-code">fn next_word(&amp;mut self) -&gt; Option&lt;&amp;str&gt;</span> and let lifetime elision handle it.</p>
+
+  <p>Here's the trick: the returned <span class="inline-code">&amp;str</span> points into <span class="inline-code">self.input</span>, which has lifetime <span class="inline-code">'a</span>. But you don't need to spell that out. Rust's lifetime elision rule for methods says: if there's a <span class="inline-code">&amp;self</span> or <span class="inline-code">&amp;mut self</span>, the output lifetime defaults to the lifetime of <span class="inline-code">self</span>. Since the returned slice comes from data inside <span class="inline-code">self</span>, this default is correct.</p>
+
+  <p>The method takes <span class="inline-code">&amp;mut self</span> because it advances <span class="inline-code">self.pos</span>. But the returned <span class="inline-code">&amp;str</span> borrows from the input, not from the parser's mutable state. The borrow checker sees that the returned slice points into the immutable <span class="inline-code">input</span> field and is fine with it.</p>
+
+  <p>Don't overthink lifetimes on methods. Write the obvious signature first. If the compiler complains, add annotations. Most of the time, elision gets it right.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>struct Parser&lt;'a&gt; {
+    input: &amp;'a str,
+    pos: usize,
+}
+
+impl&lt;'a&gt; Parser&lt;'a&gt; {
+    fn new(input: &amp;'a str) -&gt; Self {
+        Parser { input, pos: 0 }
+    }
+
+    // Elision assigns the return lifetime to &amp;self's lifetime,
+    // which is connected to 'a through the struct
+    fn next_word(&amp;mut self) -&gt; Option&lt;&amp;str&gt; {
+        let remaining = &amp;self.input[self.pos..];
+        let trimmed = remaining.trim_start();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let start = self.input.len() - trimmed.len();
+        let end = trimmed.find(' ').map(|i| start + i).unwrap_or(self.input.len());
+        self.pos = end;
+        Some(&amp;self.input[start..end])
+    }
+}
+
+fn main() {
+    let source = String::from("hello world rust");
+    let mut parser = Parser::new(&amp;source);
+
+    while let Some(word) = parser.next_word() {
+        println!("word: {}", word);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. fn next_word(&amp;'a mut self)</strong> — this ties the mutable borrow of <span class="inline-code">self</span> to the lifetime <span class="inline-code">'a</span> (the input's lifetime). That means you can't call <span class="inline-code">next_word</span> again while a previous result is alive — the mutable borrow of the parser lasts as long as the input. You'd only be able to call the method once.</p>
+
+  <p><strong>C. Clone the input</strong> — throws away the zero-copy parsing advantage. If the input is a 10MB string, you've just allocated 10MB to avoid writing a lifetime.</p>
+
+  <p><strong>D. Second lifetime parameter</strong> — unnecessary complexity. Two lifetimes are needed when the method's borrow and the data's borrow are genuinely independent. Here they're not — elision handles the relationship correctly.</p>
+
+  <p><strong>Trust lifetime elision on methods — write the obvious signature first, annotate only when the compiler asks.</strong></p>
+
+  <div class="nav">
+    <a href="draft27a.html">← Challenge</a>
+    <a href="draft28a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

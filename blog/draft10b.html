@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Two functions need the same string. Who owns it? — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #1 of 27</p>
+  <h1>Two functions need the same string — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: B</h2>
+
+  <p>Change both functions to accept <span class="inline-code">&amp;str</span> and pass references.</p>
+
+  <p>Neither function needs to own the string. They read it, print it, and move on. When a function only needs to read data, it should borrow it. That's the whole point of references — they let you share access without transferring ownership.</p>
+
+  <p>The borrow checker sees this clearly: <span class="inline-code">greeting</span> lives in <span class="inline-code">main</span>, and both function calls borrow it for the duration of their execution. The borrows don't overlap. No conflict.</p>
+
+  <p>This is the default instinct you want to build. When a function just reads a value, take <span class="inline-code">&amp;str</span> instead of <span class="inline-code">String</span>, take <span class="inline-code">&amp;[T]</span> instead of <span class="inline-code">Vec&lt;T&gt;</span>, take <span class="inline-code">&amp;T</span> instead of <span class="inline-code">T</span>. Only take ownership when you need to store the value or move it somewhere else.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>fn main() {
+    let name = String::from("Alice");
+    let greeting = format!("Hello, {}!", name);
+
+    // Both functions borrow greeting — no move, no clone
+    log_message(&amp;greeting);
+    send_to_client(&amp;greeting);
+}
+
+fn log_message(msg: &amp;str) {
+    println!("[LOG] {}", msg);
+}
+
+fn send_to_client(msg: &amp;str) {
+    println!("[SEND] {}", msg);
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>A. Clone the string</strong> — works, but allocates a second copy of the data on the heap for no reason. Cloning is a code smell when borrowing solves the problem.</p>
+
+  <p><strong>C. Wrap in Rc</strong> — reference counting is for shared ownership across complex lifetimes. Two sequential function calls don't need shared ownership. This is using a sledgehammer to hang a picture frame.</p>
+
+  <p><strong>D. Return the string back</strong> — technically works but makes the API awkward and fragile. Every consumer becomes part of an ownership relay chain. It doesn't scale past two functions.</p>
+
+  <p><strong>If you don't need to own it, borrow it.</strong></p>
+
+  <div class="nav">
+    <a href="draft10a.html">← Challenge</a>
+    <a href="draft11a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

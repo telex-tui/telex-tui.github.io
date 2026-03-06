@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This counter needs to be visible to three threads — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #3 of 27</p>
+  <h1>This counter needs to be visible to three threads</h1>
+  <p class="meta">March 2026 · Part A: The Challenge</p>
+
+  <p>A simple hit counter. Works fine on one thread.</p>
+
+<pre><code>struct HitCounter {
+    count: u64,
+}
+
+impl HitCounter {
+    fn new() -&gt; Self {
+        HitCounter { count: 0 }
+    }
+
+    fn increment(&amp;mut self) {
+        self.count += 1;
+    }
+
+    fn get(&amp;self) -&gt; u64 {
+        self.count
+    }
+}
+
+fn main() {
+    let mut counter = HitCounter::new();
+    counter.increment();
+    counter.increment();
+    println!("hits: {}", counter.get());
+}</code></pre>
+
+  <div class="challenge-box">
+    <p>Make this counter usable from three separate threads that all increment it concurrently.</p>
+  </div>
+
+  <h2>Your options</h2>
+  <ul class="options">
+    <li data-label="A">Wrap it in <span class="inline-code">Rc&lt;RefCell&lt;HitCounter&gt;&gt;</span> and share the <span class="inline-code">Rc</span> across threads</li>
+    <li data-label="B">Wrap it in <span class="inline-code">Arc&lt;Mutex&lt;HitCounter&gt;&gt;</span> and clone the <span class="inline-code">Arc</span> for each thread</li>
+    <li data-label="C">Use a <span class="inline-code">Mutex&lt;HitCounter&gt;</span> without Arc, passing a reference to each thread</li>
+    <li data-label="D">Declare it as <span class="inline-code">static mut</span> so all threads can access it directly</li>
+  </ul>
+
+  <p>Pick one before reading the solution.</p>
+
+  <div class="nav">
+    <a href="draft12b.html">→ Solution</a>
+  </div>
+</body>
+</html>

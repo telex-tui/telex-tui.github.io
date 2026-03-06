@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Add a parent pointer to this tree node — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #2 of 27</p>
+  <h1>Add a parent pointer to this tree node — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Store all nodes in a flat <span class="inline-code">Vec</span> and use indices instead of pointers. This is the arena pattern.</p>
+
+  <p>Parent pointers create a cycle: the parent owns the child, and the child points back to the parent. Rust's ownership model is a tree — one owner per value, no cycles. You can't express "A owns B, and B borrows A" without running into the borrow checker, because mutating the parent would invalidate the child's reference.</p>
+
+  <p>The arena pattern sidesteps this entirely. All nodes live in a <span class="inline-code">Vec</span>. Relationships are expressed as indices — plain <span class="inline-code">usize</span> values. No references, no lifetimes, no reference counting. You look up a node's parent by indexing into the same vec. It's the same strategy that ECS game engines, compilers, and graph libraries use in Rust.</p>
+
+  <p>This is a fundamental Rust pattern: when your data structure has cycles or shared references, flatten it into an arena and use IDs.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>struct Node {
+    value: String,
+    parent: Option&lt;usize&gt;,    // index into the arena
+    children: Vec&lt;usize&gt;,     // indices into the arena
+}
+
+struct Tree {
+    nodes: Vec&lt;Node&gt;,
+}
+
+impl Tree {
+    fn new(root_value: &amp;str) -&gt; Self {
+        Tree {
+            nodes: vec![Node {
+                value: root_value.into(),
+                parent: None,
+                children: vec![],
+            }],
+        }
+    }
+
+    fn add_child(&amp;mut self, parent: usize, value: &amp;str) -&gt; usize {
+        let child_idx = self.nodes.len();
+        self.nodes.push(Node {
+            value: value.into(),
+            parent: Some(parent),
+            children: vec![],
+        });
+        self.nodes[parent].children.push(child_idx);
+        child_idx
+    }
+}
+
+fn main() {
+    let mut tree = Tree::new("root");
+    let c1 = tree.add_child(0, "child-1");
+    let c2 = tree.add_child(0, "child-2");
+
+    // Navigate from child back to parent
+    if let Some(parent_idx) = tree.nodes[c1].parent {
+        println!("{}'s parent is {}", tree.nodes[c1].value, tree.nodes[parent_idx].value);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Box&lt;Node&gt; for parent</strong> — this means each child owns a copy of its parent, which owns copies of all its children, which each own copies of the parent… infinite recursion. It's not a pointer, it's a copy.</p>
+
+  <p><strong>C. &amp;Node reference</strong> — you can't store a reference to the parent because the parent is being mutated (adding children). The borrow checker won't allow a shared reference to exist while you hold a mutable one, and the lifetimes get impossible to satisfy when the tree structure changes.</p>
+
+  <p><strong>D. Rc&lt;RefCell&lt;Node&gt;&gt; everywhere</strong> — this creates a reference cycle between parent and child. Both hold strong <span class="inline-code">Rc</span> pointers to each other, so neither's reference count ever reaches zero. Memory leak. You'd need <span class="inline-code">Weak</span> for at least one direction, adding complexity that the arena pattern avoids entirely.</p>
+
+  <p><strong>When your data has cycles, flatten it into an arena and use indices as pointers.</strong></p>
+
+  <div class="nav">
+    <a href="draft11a.html">← Challenge</a>
+    <a href="draft12a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

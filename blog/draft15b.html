@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>This iterator needs to yield borrowed data. Make it compile — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #6 of 27</p>
+  <h1>This iterator needs to yield borrowed data. Make it compile — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Create an iterator struct with a lifetime parameter that borrows the word list.</p>
+
+  <p>When an iterator yields references, those references point into data owned by something else. The compiler needs to know that the data won't be dropped while the iterator is alive. That's what the lifetime parameter does — it ties the iterator's lifetime to the lifetime of the data it borrows.</p>
+
+  <p>The iterator struct holds a <span class="inline-code">&amp;'a [String]</span> — a slice borrowed from the <span class="inline-code">WordList</span>. Each call to <span class="inline-code">next()</span> returns an <span class="inline-code">Option&lt;&amp;'a str&gt;</span>. The lifetime <span class="inline-code">'a</span> tells the compiler: "these references are valid as long as the <span class="inline-code">WordList</span> they came from is alive."</p>
+
+  <p>This is exactly how the standard library's slice iterator works. You're not inventing a pattern — you're applying the one Rust is built around.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>struct WordList {
+    words: Vec&lt;String&gt;,
+}
+
+impl WordList {
+    fn new(words: Vec&lt;String&gt;) -&gt; Self {
+        WordList { words }
+    }
+
+    fn iter(&amp;self) -&gt; WordIter {
+        WordIter {
+            words: &amp;self.words,
+            pos: 0,
+        }
+    }
+}
+
+// The lifetime 'a ties this iterator to the WordList it borrows from
+struct WordIter&lt;'a&gt; {
+    words: &amp;'a [String],
+    pos: usize,
+}
+
+impl&lt;'a&gt; Iterator for WordIter&lt;'a&gt; {
+    type Item = &amp;'a str;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        if self.pos &lt; self.words.len() {
+            let word = &amp;self.words[self.pos];
+            self.pos += 1;
+            Some(word.as_str())
+        } else {
+            None
+        }
+    }
+}
+
+fn main() {
+    let list = WordList::new(vec![
+        "hello".into(),
+        "world".into(),
+        "rust".into(),
+    ]);
+
+    for word in list.iter() {
+        println!("{}", word);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Clone each string</strong> — compiles, but defeats the purpose of an iterator over borrowed data. You're allocating on every iteration for no reason. If the caller wanted owned strings, they could call <span class="inline-code">.cloned()</span> on the iterator.</p>
+
+  <p><strong>C. Leak with 'static</strong> — <span class="inline-code">Box::leak</span> gives you <span class="inline-code">&amp;'static str</span> but permanently leaks the memory. This isn't lazy iteration — it's a memory leak pretending to be an API.</p>
+
+  <p><strong>D. No lifetime parameter</strong> — the compiler can't verify that the returned <span class="inline-code">&amp;str</span> references are valid without knowing their lifetime. The struct holds a reference, and references on structs always need a lifetime parameter. No lifetime, no compilation.</p>
+
+  <p><strong>An iterator that borrows data needs a lifetime parameter tying it to the data's owner.</strong></p>
+
+  <div class="nav">
+    <a href="draft15a.html">← Challenge</a>
+    <a href="draft16a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

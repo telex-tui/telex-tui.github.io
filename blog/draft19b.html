@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>You need a graph. Some nodes have two parents — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #10 of 27</p>
+  <h1>You need a graph. Some nodes have two parents — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Store all packages in a <span class="inline-code">Vec</span> and use indices.</p>
+
+  <p>Graphs have shared ownership by definition — a node can be reachable from multiple other nodes. Rust's ownership model is a tree: one owner, no sharing. These two models conflict. The arena-and-indices pattern resolves the conflict by making the <span class="inline-code">Vec</span> the single owner of all nodes, and using plain integers as edges.</p>
+
+  <p>An index is just a number. It doesn't borrow anything. It doesn't create lifetime constraints. Two nodes can both store the index <span class="inline-code">3</span> to point to the same package, and there's no ownership conflict because neither of them owns the package — the arena does.</p>
+
+  <p>This is the standard pattern for graphs in Rust. The <span class="inline-code">petgraph</span> crate uses it. Compilers use it for ASTs. ECS game engines use it for entity relationships. It works because it separates storage (the arena owns everything) from structure (indices describe relationships).</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::collections::HashMap;
+
+type PackageId = usize;
+
+struct Package {
+    name: String,
+    deps: Vec&lt;PackageId&gt;,
+}
+
+struct Graph {
+    packages: Vec&lt;Package&gt;,
+    by_name: HashMap&lt;String, PackageId&gt;,
+}
+
+impl Graph {
+    fn new() -&gt; Self {
+        Graph { packages: vec![], by_name: HashMap::new() }
+    }
+
+    fn add(&amp;mut self, name: &amp;str) -&gt; PackageId {
+        if let Some(&amp;id) = self.by_name.get(name) {
+            return id;
+        }
+        let id = self.packages.len();
+        self.packages.push(Package { name: name.into(), deps: vec![] });
+        self.by_name.insert(name.into(), id);
+        id
+    }
+
+    fn add_dep(&amp;mut self, from: PackageId, to: PackageId) {
+        self.packages[from].deps.push(to);
+    }
+}
+
+fn main() {
+    let mut g = Graph::new();
+    let serde = g.add("serde");
+    let web = g.add("web-framework");
+    let app = g.add("my-app");
+
+    // Both app and web-framework depend on serde
+    g.add_dep(app, serde);
+    g.add_dep(web, serde);
+    g.add_dep(app, web);
+
+    for pkg in &amp;g.packages {
+        println!("{} depends on {:?}", pkg.name, pkg.deps);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Rc&lt;RefCell&lt;&gt;&gt; everywhere</strong> — works for DAGs, but if your graph has cycles (A depends on B, B depends on A), neither node's reference count reaches zero. Memory leak. Also adds runtime overhead for borrow checking you don't need if you're just reading the graph.</p>
+
+  <p><strong>C. Raw pointers</strong> — requires <span class="inline-code">unsafe</span> for every access. You become responsible for ensuring pointers aren't dangling. One mistake and you have use-after-free. The arena pattern gives you the same flexibility with zero <span class="inline-code">unsafe</span>.</p>
+
+  <p><strong>D. References with lifetimes</strong> — you can't express "node A points to node B, and node B points to node A" with lifetimes. Each reference needs to outlive what it points to, creating a circular dependency that lifetimes can't represent.</p>
+
+  <p><strong>Graphs in Rust: store nodes in a Vec, use indices as edges.</strong></p>
+
+  <div class="nav">
+    <a href="draft19a.html">← Challenge</a>
+    <a href="draft20a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Two structs reference each other. Model that without cycles — Solution — Telex Blog</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    h1 { color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { color: #cbd5e1; font-size: 1.2rem; margin-top: 2rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    p { margin: 1rem 0; }
+    pre { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.5rem 0; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88rem; color: #e2e8f0; }
+    .inline-code { background: #1e2433; padding: 0.15rem 0.4rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
+    .challenge-box { background: #1a2035; border-left: 3px solid #6366f1; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 6px 6px 0; }
+    .options { list-style: none; padding: 0; }
+    .options li { background: #1e2433; border: 1px solid #2d3748; border-radius: 6px; padding: 0.75rem 1rem; margin: 0.5rem 0; cursor: default; }
+    .options li::before { content: attr(data-label) ". "; color: #6366f1; font-weight: bold; }
+    .nav { display: flex; gap: 1rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #2d3748; }
+    .nav a { color: #6366f1; text-decoration: none; }
+    .nav a:hover { text-decoration: underline; }
+    .series-label { color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p class="series-label">Rust Design Challenges — #19 of 27</p>
+  <h1>Two structs reference each other. Model that without cycles — Solution</h1>
+  <p class="meta">March 2026 · Part B: The Solution</p>
+
+  <h2>The answer: A</h2>
+
+  <p>Store connections in a <span class="inline-code">HashMap</span> on the Server. Give each connection a server name (or ID) rather than a pointer back.</p>
+
+  <p>The bidirectional reference is an ownership cycle: Server owns Connections, Connections point to Server. In Rust, you break cycles by removing one direction of ownership. The server owns the connections (natural — it manages them). The connections don't own or borrow the server — they just know its name.</p>
+
+  <p>If a connection needs to do something with the server, the code that has access to both passes the server reference in. This is the "pass context at the call site" pattern rather than "store context in every struct." It's more explicit, but it avoids all the lifetime and cycle problems.</p>
+
+  <p>This is the same idea as the arena pattern, but applied to a two-type relationship. Ownership flows one direction; cross-references are IDs or keys, not pointers.</p>
+
+  <h2>The solution</h2>
+
+<pre><code>use std::collections::HashMap;
+
+type ConnectionId = u64;
+
+struct Server {
+    name: String,
+    max_connections: usize,
+    connections: HashMap&lt;ConnectionId, Connection&gt;,
+}
+
+struct Connection {
+    id: ConnectionId,
+    remote_addr: String,
+    server_name: String, // just the name, not a reference
+}
+
+impl Server {
+    fn new(name: &amp;str, max: usize) -&gt; Self {
+        Server {
+            name: name.into(),
+            max_connections: max,
+            connections: HashMap::new(),
+        }
+    }
+
+    fn accept(&amp;mut self, id: ConnectionId, addr: &amp;str) {
+        let conn = Connection {
+            id,
+            remote_addr: addr.into(),
+            server_name: self.name.clone(),
+        };
+        self.connections.insert(id, conn);
+    }
+}
+
+fn main() {
+    let mut server = Server::new("web-01", 100);
+    server.accept(1, "192.168.1.5:4321");
+    server.accept(2, "10.0.0.3:9999");
+
+    for (id, conn) in &amp;server.connections {
+        println!("conn {} on {} from {}", id, conn.server_name, conn.remote_addr);
+    }
+}</code></pre>
+
+  <h2>Why the other options fail</h2>
+
+  <p><strong>B. Rc in both directions</strong> — Server holds <span class="inline-code">Rc&lt;Connection&gt;</span>, Connection holds <span class="inline-code">Rc&lt;Server&gt;</span>. Neither reference count reaches zero. Memory leak. You'd need <span class="inline-code">Weak</span> for one direction, adding complexity and runtime checks.</p>
+
+  <p><strong>C. Raw pointers</strong> — requires <span class="inline-code">unsafe</span> everywhere. One mismanaged pointer and you have use-after-free or dangling references. No reason to accept this risk when ID-based lookup is simple and safe.</p>
+
+  <p><strong>D. &amp;Server with lifetime</strong> — the Connection can't outlive the borrow of Server, and you can't mutate the Server while any Connection borrows it. Adding or removing connections becomes impossible while any connection holds a reference to the server.</p>
+
+  <p><strong>Break bidirectional ownership by storing IDs instead of pointers in one direction.</strong></p>
+
+  <div class="nav">
+    <a href="draft28a.html">← Challenge</a>
+    <a href="draft29a.html">→ Next Challenge</a>
+  </div>
+</body>
+</html>
