@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STM32 From First Principles - Telex</title>
+  <meta name="description" content="A lesson series that actually explains things: the STM32 memory map, clock tree, GPIO registers, interrupts, timers, UART, DMA, SPI, I2C, startup code, power modes, and debugging.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>STM32 From First Principles</h1>
+      <div class="post-meta">March 2026</div>
+      <p style="background:#2d1a00;border:1px solid #d29922;border-radius:6px;padding:0.6rem 1rem;font-size:0.85rem;color:#d29922;">
+        Draft — work in progress, not for publication.
+      </p>
+
+      <p><em>A Lesson Series That Actually Explains Things</em></p>
+
+      <h2>Part 1 — The Machine Before the Code</h2>
+
+      <p>
+        Before you write a single line, you need a mental map of what you're talking to.
+        The STM32 is not a magic box that runs C. It's a Cortex-M core — an ARM design
+        licensed to ST — attached to a bus matrix, and hanging off that bus matrix is a
+        collection of peripherals: timers, GPIO ports, UARTs, ADCs, and so on. Each
+        peripheral is a block of silicon with a set of registers mapped to a fixed address
+        in the address space. The CPU doesn't "call" a peripheral — it reads and writes
+        memory addresses, and the silicon responds.
+      </p>
+
+      <p>
+        The reference manual (RM) for your specific part is the document you will spend
+        the most time in. Not the datasheet — that's pinout and electrical characteristics.
+        The RM describes every register, every bit, every legal state transition. It's dense
+        and dry and exactly right. Learning to navigate it is the actual skill this series is
+        teaching. Everything else is application of that skill.
+      </p>
+
+      <p>
+        The memory map is your starting point. The RM will have a chapter showing you what
+        lives at what address: FLASH at <code>0x08000000</code>, SRAM at
+        <code>0x20000000</code>, and the peripheral registers scattered through
+        <code>0x40000000</code> and up. The AHB and APB buses are the highways connecting
+        the CPU to those peripherals, and they run at different speeds. When you write
+        <code>RCC-&gt;AHB1ENR |= ...</code>, you are writing to a register at a specific
+        address on a specific bus, and the silicon on the other end is changing its behaviour
+        in response.
+      </p>
+
+      <p>
+        Get comfortable with the idea that the chip is a collection of state machines. Each
+        peripheral has its own state, controlled by its registers. The CPU's job is to
+        configure those state machines and then get out of the way — or to respond when they
+        ask for attention.
+      </p>
+
+      <h2>Part 2 — Clocks Are Not Free</h2>
+
+      <p>
+        The STM32 does nothing without a clock. This sounds obvious but the implications run
+        deep. Every peripheral on the chip is gated — it receives no clock signal until you
+        explicitly enable it, which means it draws no power, but it also means its registers
+        do nothing and reads return undefined values. Writing to a peripheral before enabling
+        its clock is one of the most common silent failures for beginners.
+      </p>
+
+      <p>
+        The clock tree starts at an oscillator. You have choices: the internal HSI (typically
+        8 or 16 MHz, less accurate), the external HSE (whatever crystal you've fitted,
+        accurate), or for USB and precise timing, a PLL. The PLL takes an input clock, divides
+        it down to a reference frequency, multiplies it back up, and divides again to produce
+        output clocks for the system and the buses. The RCC (Reset and Clock Control)
+        peripheral is what you configure to set all of this up.
+      </p>
+
+      <p>
+        The RCC chapter of the RM will have a clock tree diagram — find it and print it. Every
+        arrow on that diagram is a mux or divider that you control with RCC registers. The AHB
+        prescaler, APB1 prescaler, APB2 prescaler — these determine the clock rates seen by
+        each group of peripherals. Timers, in particular, have special rules about their clock
+        source when the APB prescaler is not 1: the timer clock doubles. The RM documents this,
+        but you have to read it.
+      </p>
+
+      <p>
+        When you set a baud rate for UART, or a PWM frequency for a timer, you are doing
+        arithmetic against this clock tree. If you don't know what clock your peripheral is
+        actually running from, your calculation is fiction. Always trace from the oscillator to
+        the peripheral before you commit a frequency to code.
+      </p>
+
+      <h2>Part 3 — GPIO Is Just a Register</h2>
+
+      <p>
+        GPIO tutorials treat the LED blink as an incantation. It isn't. The GPIO peripheral has
+        a small set of registers and once you understand them, everything else is obvious.
+      </p>
+
+      <p>
+        <code>MODER</code> — two bits per pin, setting the pin as input, output, alternate
+        function, or analog. <code>OTYPER</code> — one bit per pin, push-pull or open-drain.
+        <code>OSPEEDR</code> — two bits per pin, slew rate. <code>PUPDR</code> — two bits per
+        pin, pull-up, pull-down, or none. <code>ODR</code> — one bit per pin, the output state.
+        <code>IDR</code> — one bit per pin, the input state. <code>BSRR</code> — the atomic
+        set/reset register: write a 1 to the low half to set a pin high, write a 1 to the high
+        half to set it low. This is the register to use in interrupt contexts because the
+        operation is atomic — no read-modify-write, no race.
+      </p>
+
+      <p>
+        The LED blink without HAL, for a pin on GPIOA bit 5, looks like this: enable GPIOA's
+        clock in RCC, write the <code>MODER</code> to set pin 5 as output, write
+        <code>BSRR</code> to toggle it. That's it. You are doing three register writes to real
+        addresses and the LED lights up. There is no magic. When CubeMX generates ten function
+        calls to achieve this, it's not wrong, it's just solving the wrong problem — code that
+        configures everything generically and defensively at the cost of legibility.
+      </p>
+
+      <p>
+        Alternate function mode is worth understanding early. Every physical pin can be routed
+        to a peripheral — a UART TX, a SPI clock, a timer output — depending on which alternate
+        function you select in the <code>AFRL</code> or <code>AFRH</code> register. The
+        datasheet's alternate function table tells you which AF number maps to which peripheral
+        for each pin. When a peripheral "takes over" a pin, it's just the hardware mux switching.
+        There is no magic there either.
+      </p>
+
+      <h2>Part 4 — Interrupts: The CPU's Trapdoor</h2>
+
+      <p>
+        The CPU is executing instructions sequentially. An interrupt is an asynchronous event
+        that forces the CPU to abandon its current execution context, save enough state to
+        resume later (the hardware does this automatically for the Cortex-M: it pushes a fixed
+        set of registers onto the stack), and jump to a handler. When the handler returns, the
+        CPU resumes where it left off.
+      </p>
+
+      <p>
+        The vector table is a table of function pointers sitting at the start of FLASH (or
+        wherever the <code>VTOR</code> register points). Entry 0 is the initial stack pointer
+        value. Entry 1 is the reset handler. Beyond that come the exception and interrupt
+        vectors — one per source. When a particular interrupt fires, the hardware reads the
+        corresponding entry from this table and jumps to it.
+      </p>
+
+      <p>
+        The NVIC (Nested Vectored Interrupt Controller) is the Cortex-M peripheral that manages
+        interrupt enables and priorities. Before an interrupt source can fire, two things must be
+        true: the peripheral must be configured to generate the interrupt (e.g.,
+        <code>USART_CR1</code>'s <code>RXNEIE</code> bit), and the corresponding line in the
+        NVIC must be enabled. Both gates must be open. Priority determines which interrupt wins
+        when two fire simultaneously, and whether one interrupt can preempt another that's
+        already running.
+      </p>
+
+      <p>
+        For GPIO interrupts, there's an extra layer: EXTI (External Interrupt/Event Controller).
+        GPIO pins don't connect directly to NVIC lines. Instead, you configure which GPIO port's
+        pin connects to an EXTI line (via <code>SYSCFG</code>), configure the edge trigger
+        (rising, falling, both) in EXTI, and then enable the EXTI line in NVIC. When you
+        understand this chain, the register configuration is mechanical.
+      </p>
+
+      <p>
+        The mistake people make in interrupt handlers is doing too much. A handler should record
+        that an event occurred — set a flag, write to a ring buffer — and return. Heavy processing
+        belongs in main-loop context. The moment you add blocking delays or complex logic to an
+        interrupt handler, you've started building a disaster.
+      </p>
+
+      <h2>Part 5 — Timers Are Not Delays</h2>
+
+      <p>
+        The beginner's use of timers is <code>HAL_Delay()</code>, which spins on the SysTick
+        counter and wastes CPU cycles. A timer is nothing like that. A timer is an independent
+        counter peripheral that counts up (or down), compares its value against programmable
+        thresholds, and generates events. The CPU can be asleep while this happens.
+      </p>
+
+      <p>
+        The core registers of a general-purpose timer are: <code>PSC</code> (prescaler —
+        divides the input clock down before the counter sees it), <code>ARR</code> (auto-reload
+        register — when the counter hits this value it resets to zero and optionally fires an
+        interrupt), and <code>CNT</code> (the current count value). If your timer clock is
+        72 MHz, <code>PSC=71</code> gives you a 1 MHz count rate, and <code>ARR=999</code>
+        gives you an event every millisecond. The timer does this on its own, indefinitely,
+        without involving the CPU.
+      </p>
+
+      <p>
+        PWM is a natural consequence of this architecture, not a magic mode. Each timer has
+        capture/compare channels. Each channel has a <code>CCR</code> register. When the
+        counter value equals <code>CCR</code>, the output pin changes state. When the counter
+        resets (<code>ARR</code>), it changes back. The duty cycle is <code>CCR/ARR</code>.
+        Changing duty cycle means writing one register. The timer doesn't stop; the output just
+        changes on the next cycle. This is why you can do smooth motor control or LED dimming
+        with no CPU involvement after setup.
+      </p>
+
+      <p>
+        Input capture is the reverse: the timer records the value of <code>CNT</code> when a
+        pin changes state. Period measurement and pulse width measurement fall out immediately.
+        Output compare can trigger a DMA request rather than an interrupt, connecting the timer
+        directly to the DMA engine without the CPU ever waking up. The timer is really a small
+        state machine with several output modes — once you see it that way, the register names
+        start to make sense.
+      </p>
+
+      <h2>Part 6 — UART From First Principles</h2>
+
+      <p>
+        UART is the simplest serial protocol and the right one to understand first because
+        everything you learn here transfers to SPI and I2C.
+      </p>
+
+      <p>
+        The baud rate is the number of bits per second. To configure the STM32 UART, you write
+        a value to <code>BRR</code> (Baud Rate Register). This value is derived from the
+        peripheral clock divided by the desired baud rate. The RM gives you the formula; the key
+        point is that if you have the wrong peripheral clock assumption, your baud rate will be
+        wrong and your characters will be garbage. Trace the clock tree before you configure baud.
+      </p>
+
+      <p>
+        The status register (<code>SR</code> or <code>ISR</code> depending on the family) tells
+        you what state the peripheral is in: <code>TXE</code> (transmit data register empty —
+        safe to write another byte), <code>RXNE</code> (receive data register not empty — a byte
+        has arrived), <code>TC</code> (transmission complete — the shift register is empty). The
+        data register (<code>DR</code> or <code>TDR</code>/<code>RDR</code>) is what you read
+        from and write to. Polling UART is a loop that checks <code>TXE</code>, writes a byte,
+        repeats. It works. It also blocks the CPU for the duration of the transmission.
+      </p>
+
+      <p>
+        Interrupt-driven UART is the step up: enable <code>RXNEIE</code> in <code>CR1</code>,
+        enable the UART interrupt in NVIC, and your handler fires whenever a byte arrives. You
+        never poll. The transmit side is more subtle: you write the first byte to kick off
+        transmission, then in the handler, write the next byte when <code>TXE</code> fires, and
+        disable the <code>TXE</code> interrupt when you've sent the last one (otherwise it fires
+        continuously because <code>TXE</code> is always true when the buffer is empty).
+      </p>
+
+      <p>
+        DMA-driven UART is the final form: you point a DMA channel at your buffer and the UART,
+        specify the byte count, and the peripheral empties or fills the buffer with zero CPU
+        involvement. The transfer-complete interrupt fires when it's done. This is how you do
+        high-throughput serial without burning CPU cycles.
+      </p>
+
+      <h2>Part 7 — DMA: The CPU's Delegate</h2>
+
+      <p>
+        The CPU is one bus master on the AHB matrix. DMA is another. When DMA is active, it can
+        move data between memory and peripheral registers — or between two memory locations —
+        without involving the CPU at all. The CPU sets up the transfer and moves on.
+      </p>
+
+      <p>
+        A DMA channel (or stream, depending on the family) is configured with: the source
+        address, the destination address, the transfer count, the direction
+        (peripheral-to-memory or memory-to-peripheral), the data width (byte, halfword, word),
+        and whether the address should auto-increment after each transfer. You enable the
+        channel, and it runs. When the count reaches zero, a transfer-complete interrupt fires
+        if you've enabled it.
+      </p>
+
+      <p>
+        The "request mapping" matters: each DMA channel can only serve certain peripherals. The
+        RM has a table showing which request connects which peripheral to which DMA channel. In
+        some STM32 families (F4 and later), you also select a "stream" and a "channel" within
+        that stream. This is a source of legitimate confusion because the terms overload badly.
+        Read the DMA chapter's request mapping table for your specific part.
+      </p>
+
+      <p>
+        Where DMA breaks: if the source and destination are in the same bus domain and both need
+        the bus simultaneously, one will stall. If you're moving data into SRAM from a peripheral
+        on APB1, and the CPU is simultaneously doing heavy work from SRAM, you'll see contention.
+        The memory architecture chapter of the RM will tell you which buses can operate in
+        parallel. Double-buffering (using DMA's circular mode or manually flipping between two
+        buffers) is the standard answer for continuous streaming.
+      </p>
+
+      <p>
+        Cache coherency becomes a problem on higher-end parts (F7, H7) that have data caches. If
+        DMA writes to memory that's cached from the CPU's perspective, the CPU may read stale
+        data. You have to explicitly invalidate or clean cache lines around DMA transfers. This
+        is a real source of hard-to-diagnose bugs.
+      </p>
+
+      <h2>Part 8 — SPI and I2C: Protocol Before Peripheral</h2>
+
+      <p>
+        The mistake is to start with the peripheral. Start with the electrical contract.
+      </p>
+
+      <p>
+        SPI has four wires: SCLK (clock, driven by master), MOSI (master out slave in), MISO
+        (master in slave out), and CS (chip select, active low, driven by master). Data is
+        exchanged simultaneously in both directions on every clock edge — one bit out, one bit
+        in. The clock polarity (<code>CPOL</code>) and phase (<code>CPHA</code>) determine
+        whether data is sampled on the rising or falling edge. These two bits define the four
+        SPI modes (0–3); your device's datasheet will tell you which mode it needs. Get this
+        wrong and every byte is garbage.
+      </p>
+
+      <p>
+        The STM32 SPI peripheral is a shift register. You write a byte to <code>DR</code>, it
+        clocks out while simultaneously clocking in, and when done, the received byte is in
+        <code>DR</code>. In polling mode you wait for <code>TXE</code> to write and
+        <code>RXNE</code> to read. The peripheral handles the clock and the bit-banging. CS is
+        typically controlled manually (write a GPIO low, do the transfer, write it high), though
+        the NSS pin can be hardware-controlled with caveats.
+      </p>
+
+      <p>
+        I2C is more complex. It's a two-wire bus (SDA, SCL) with open-drain outputs — multiple
+        devices share the bus, any device can pull a line low, nobody drives it high directly
+        (the pull-up resistor does that). Every transaction begins with a START condition (SDA
+        falls while SCL is high), then an address byte (7 or 10 bit) with a direction bit, then
+        data bytes each acknowledged by the receiver, then a STOP. Address collisions and clock
+        stretching are part of the protocol.
+      </p>
+
+      <p>
+        The STM32 I2C peripheral on F1/L1 families is notoriously awkward to drive correctly —
+        the state machine has timing-sensitive sequences that are easy to miss. The F3/F4 and
+        later families use a revised peripheral (I2C v2) with a much cleaner
+        <code>NBYTES</code>/<code>AUTOEND</code> model that makes the driver significantly less
+        fragile. Know which one you have. In both cases, the principle holds: if you understand
+        what the wire is supposed to look like, you can read the register documentation with a
+        clear goal in mind and verify your implementation with a logic analyser.
+      </p>
+
+      <h2>Part 9 — The HAL Is a Map, Not the Territory</h2>
+
+      <p>
+        HAL (Hardware Abstraction Layer) exists for a real reason: it lets ST write middleware
+        (USB stacks, FAT filesystems, protocol implementations) that runs on any supported part
+        without changes. It also makes CubeMX-generated initialisation code portable. These are
+        legitimate goals.
+      </p>
+
+      <p>
+        The problem is that HAL is often presented as <em>the</em> way to program STM32,
+        obscuring what's actually happening. <code>HAL_GPIO_WritePin()</code> is three or four
+        register writes and a function call overhead. That overhead is irrelevant in most
+        contexts, but it's also irrelevant in the other direction — once you know what the
+        function does, there's nothing mystical about it. The function is a map to the territory.
+        The territory is the register.
+      </p>
+
+      <p>
+        Reading CubeMX-generated code is a useful exercise not to copy it, but to decode it.
+        When you see <code>__HAL_RCC_GPIOA_CLK_ENABLE()</code>, expand that macro. It's setting
+        a bit in <code>RCC-&gt;AHB1ENR</code>. When you see <code>HAL_UART_Init()</code>, trace
+        it into the HAL source (ST ships it) and find the register writes. You are building a
+        translation table between HAL names and RM concepts. After doing this a few times, HAL
+        code becomes legible rather than opaque.
+      </p>
+
+      <p>
+        Where HAL genuinely saves time: USB, Ethernet, and complex protocol drivers where the
+        state machine is large and correctness matters more than the last few cycles. Where it
+        costs you: timing-critical paths, interrupt latency analysis, power optimisation, and any
+        situation where you need to know exactly what the silicon is doing and when. The engineers
+        who use HAL effectively are the ones who don't need it — they could write the registers
+        directly, they just choose not to for certain tasks.
+      </p>
+
+      <p>
+        LL (Low-Layer) drivers are the middle ground: thin inline functions that map almost
+        directly to registers, with ST's naming and bit definitions, but without the state
+        machine overhead of HAL. Worth knowing they exist.
+      </p>
+
+      <h2>Part 10 — Startup, Linker Scripts, and the World Before main()</h2>
+
+      <p>
+        Your C program doesn't start at <code>main()</code>. It starts at the reset handler — a
+        function specified in the vector table that runs before anything else. What it does:
+      </p>
+
+      <ol>
+        <li>Sets the stack pointer (the hardware loads this from the vector table's first entry,
+        but the startup code may verify it).</li>
+        <li>Copies the <code>.data</code> section from FLASH to SRAM. Initialised global
+        variables live in FLASH as their initial values; at startup they must be copied to SRAM
+        where the CPU can write them.</li>
+        <li>Zeroes the <code>.bss</code> section. Uninitialised globals are required by C to be
+        zero; the startup code writes zeros across that memory range.</li>
+        <li>Calls static constructors if using C++ (<code>__libc_init_array</code>).</li>
+        <li>Calls <code>main()</code>.</li>
+      </ol>
+
+      <p>
+        The linker script is what defines where <code>.data</code>, <code>.bss</code>,
+        <code>.text</code>, and the vector table live in the address space. It specifies FLASH
+        and SRAM regions and assigns output sections to them. It also defines the symbols that
+        the startup code uses to know where <code>.data</code> starts in FLASH and where it
+        should be copied to in SRAM. If you've ever wondered why a global variable initialised
+        to zero works differently from one explicitly initialised to <code>0</code> in terms of
+        binary size — the linker script is why.
+      </p>
+
+      <p>
+        Understanding this matters when you use sections other than the defaults: putting a
+        function in SRAM for execution-from-RAM (because SRAM is faster or because you need to
+        reprogram FLASH while running), using CCM (Core Coupled Memory) on F4 parts for
+        latency-critical buffers, or setting up a bootloader that must leave a defined region of
+        SRAM intact across a reset. The linker script is a programming language for memory
+        layout, not a configuration file you import blindly.
+      </p>
+
+      <h2>Part 11 — Power, Sleep, and the Real-Time Budget</h2>
+
+      <p>
+        Battery-powered embedded systems live and die on sleep modes. The STM32 has several:
+        Sleep (CPU stopped, peripherals running), Stop (most clocks stopped, SRAM retained, some
+        peripherals like RTC and EXTI can still wake), and Standby (almost everything off, only
+        the backup domain alive). Each mode trades current draw against wake latency and which
+        wakeup sources are available.
+      </p>
+
+      <p>
+        The SysTick timer is the Cortex-M's built-in periodic interrupt — conventionally ticking
+        every 1ms to drive HAL's timebase. In Sleep mode, SysTick still runs and wakes the CPU
+        every millisecond. If your application spends most of its time waiting for an external
+        event, this is wasteful. You either stop SysTick and use an RTC or LPTIM as the wakeup
+        source, or you run tickless idle (FreeRTOS supports this) where the OS programs the timer
+        for the next scheduled wakeup and enters sleep until then.
+      </p>
+
+      <p>
+        Power budgeting is arithmetic. Your peripheral draws X &mu;A. Your MCU in Stop mode
+        draws Y &mu;A. Your wake interval is Z milliseconds and each wake takes W milliseconds to
+        do useful work. Average current is
+        <code>(X+MCU_active)*W/Z + Y*(1-W/Z)</code>. If Z is 1 second and W is 1 millisecond,
+        you're asleep 99.9% of the time. The ratio of active to sleep current determines whether
+        you can run for months on a coin cell or need a battery pack.
+      </p>
+
+      <p>
+        Clock selection interacts with power. Starting from Stop mode with HSI is fast (a few
+        microseconds) but HSI is less accurate and lower frequency than your full PLL. Starting
+        from HSE and locking the PLL takes longer and costs current during the lock time. Knowing
+        your application's timing tolerance determines which tradeoff is correct. This is
+        engineering, not configuration.
+      </p>
+
+      <h2>Part 12 — Debugging Without Guessing</h2>
+
+      <p>
+        The STM32 connects to a debugger via SWD (Serial Wire Debug) — a two-wire protocol
+        (SWDIO + SWCLK) plus reset. OpenOCD is the open-source host-side interface; GDB connects
+        to OpenOCD and gives you breakpoints, watchpoints, memory inspection, and register reads.
+        A cheap ST-LINK V2 clone is sufficient for most work. If you're using a Nucleo board,
+        there's an onboard ST-LINK that enumerates as a debugger over USB.
+      </p>
+
+      <p>
+        The first thing to learn in GDB is <code>info registers</code> and how to read
+        <code>PC</code> (program counter), <code>SP</code> (stack pointer), and <code>LR</code>
+        (link register) when something has crashed. The second is
+        <code>x/32xw 0x20000000</code> to dump memory. The third is setting hardware breakpoints
+        (<code>hbreak</code>) which work in FLASH without modifying the code, unlike software
+        breakpoints which patch instructions.
+      </p>
+
+      <p>
+        When the CPU takes a fault — HardFault, BusFault, MemManageFault, UsageFault — it
+        doesn't just stop. It jumps to the corresponding handler. The default handler in most
+        startup files is an infinite loop, which is useless. Write your own. In a real fault
+        handler, you have access to the stacked register frame (the CPU pushed it before
+        jumping), which gives you the PC at the time of the fault, the LR, and the offending
+        address for memory faults. The SCB (System Control Block) has fault status registers:
+        <code>CFSR</code>, <code>HFSR</code>, <code>MMAR</code>, <code>BFAR</code>. These tell
+        you whether the fault was an undefined instruction, an unaligned access, a bus error on a
+        specific address, or something else. Reading these registers from the fault handler turns
+        a hard crash into a specific diagnosis.
+      </p>
+
+      <p>
+        A fault handler that prints to UART or toggles an LED in a pattern is a crutch. A fault
+        handler that records the registers and calls a breakpoint instruction
+        (<code>BKPT 0</code>) if a debugger is attached, or resets and logs to FLASH if not, is
+        a tool. The difference between guessing and debugging is whether you have data.
+      </p>
+
+      <h2>Coda: The Reference Manual Is the Source of Truth</h2>
+
+      <p>
+        Every one of these lessons points at the same document: the RM for your part. ST produces
+        one for each family — RM0008 for F1, RM0090 for F4, and so on. They are hundreds or
+        thousands of pages. You don't read them cover to cover. You read the chapter for the
+        peripheral you're working on, follow its cross-references to the clock chapter, and look
+        up the register definitions when you're writing code.
+      </p>
+
+      <p>
+        The habit to build is: when something doesn't work, go to the RM before you go to Stack
+        Overflow. Stack Overflow will tell you what code to paste. The RM will tell you
+        <em>why</em> it works, which is the only knowledge that transfers to the next problem.
+      </p>
+
+      <p>
+        Everything in this series is the RM, translated.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
