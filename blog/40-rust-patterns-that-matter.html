@@ -66,7 +66,9 @@
         <code>Ok(vec_of_results)</code>.
       </p>
 
-      <pre><code><span class="kw">let</span> results: <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;_&gt;, _&gt; = items.<span class="fn">iter</span>().<span class="fn">map</span>(|x| x.<span class="fn">try_into</span>()).<span class="fn">collect</span>();</code></pre>
+      <pre><code><span class="kw">let</span> results: <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;_&gt;, _&gt; = items.<span class="fn">iter</span>().<span class="fn">map</span>(|x| x.<span class="fn">try_into</span>()).<span class="fn">collect</span>();
+<span class="cm">// [Ok(1), Ok(2), Ok(3)] -&gt; Ok([1, 2, 3])</span>
+<span class="cm">// [Ok(1), Err(e), Ok(3)] -&gt; Err(e)</span></code></pre>
 
       <p>
         This replaces the loop-with-early-return pattern you'd write in C. The
@@ -82,7 +84,9 @@
         so you can use <code>?</code> to propagate it.
       </p>
 
-      <pre><code><span class="kw">let</span> val = maybe_user.<span class="fn">ok_or</span>(<span class="ty">Error</span>::NotFound)?;</code></pre>
+      <pre><code><span class="kw">let</span> val = maybe_user.<span class="fn">ok_or</span>(<span class="ty">Error</span>::NotFound)?;
+<span class="cm">// Some(user) -&gt; Ok(user)</span>
+<span class="cm">// None       -&gt; Err(NotFound)</span></code></pre>
 
       <p>
         <code>ok_or</code> bridges the two types: <code>Some(x)</code> becomes
@@ -131,7 +135,9 @@
       </p>
 
       <pre><code><span class="kw">let</span> config = <span class="fn">load_file</span>(path)
-    .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::ConfigLoad { path: path.<span class="fn">into</span>(), source: e })?;</code></pre>
+    .<span class="fn">map_err</span>(|e| <span class="ty">AppError</span>::ConfigLoad { path: path.<span class="fn">into</span>(), source: e })?;
+<span class="cm">// Ok(cfg)        -&gt; Ok(cfg)</span>
+<span class="cm">// Err(io_error)  -&gt; Err(AppError::ConfigLoad { path, source: io_error })</span></code></pre>
 
       <p>
         <code>map_err</code> transforms only the error side and leaves <code>Ok</code>
@@ -148,7 +154,9 @@
 
       <pre><code><span class="kw">let</span> color = user_preference
     .<span class="fn">or</span>(theme_default)
-    .<span class="fn">or</span>(<span class="ty">Some</span>(<span class="ty">Color</span>::Black));</code></pre>
+    .<span class="fn">or</span>(<span class="ty">Some</span>(<span class="ty">Color</span>::Black));
+<span class="cm">// Some(Red).or(Some(Blue)).or(Some(Black)) -&gt; Some(Red)</span>
+<span class="cm">// None.or(None).or(Some(Black))            -&gt; Some(Black)</span></code></pre>
 
       <p>
         <code>or</code> on <code>Option</code> returns the first <code>Some</code>
@@ -262,7 +270,11 @@
       </p>
 
       <pre><code><span class="kw">let</span> maybe_len: <span class="ty">Option</span>&lt;<span class="ty">usize</span>&gt; = maybe_name.<span class="fn">map</span>(|s| s.<span class="fn">len</span>());
-<span class="kw">let</span> parsed: <span class="ty">Result</span>&lt;<span class="ty">i32</span>, _&gt; = line.<span class="fn">map</span>(|s| s.<span class="fn">trim</span>().<span class="fn">len</span>() <span class="kw">as</span> <span class="ty">i32</span>);</code></pre>
+<span class="cm">// Some("Alice") -&gt; Some(5)</span>
+<span class="cm">// None          -&gt; None</span>
+<span class="kw">let</span> parsed: <span class="ty">Result</span>&lt;<span class="ty">i32</span>, _&gt; = line.<span class="fn">map</span>(|s| s.<span class="fn">trim</span>().<span class="fn">len</span>() <span class="kw">as</span> <span class="ty">i32</span>);
+<span class="cm">// Ok(" hello ") -&gt; Ok(5)</span>
+<span class="cm">// Err(e)        -&gt; Err(e)</span></code></pre>
 
       <p>
         <code>map</code> on <code>Option</code> transforms <code>Some(x)</code> to
@@ -289,7 +301,9 @@
       </p>
 
       <pre><code><span class="kw">let</span> sum: <span class="ty">i32</span> = numbers.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">sum</span>();
-<span class="kw">let</span> flags: <span class="ty">Vec</span>&lt;<span class="ty">bool</span>&gt; = bits.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">collect</span>();</code></pre>
+<span class="cm">// [1, 2, 3].iter() -&gt; &amp;1, &amp;2, &amp;3 -&gt; .copied() -&gt; 1, 2, 3 -&gt; .sum() -&gt; 6</span>
+<span class="kw">let</span> flags: <span class="ty">Vec</span>&lt;<span class="ty">bool</span>&gt; = bits.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">collect</span>();
+<span class="cm">// [true, false].iter() -&gt; &amp;true, &amp;false -&gt; .copied() -&gt; true, false</span></code></pre>
 
       <p>
         <code>copied()</code> turns <code>&amp;T</code> into <code>T</code> for any
@@ -306,7 +320,8 @@
         owned versions. You accept the cost.
       </p>
 
-      <pre><code><span class="kw">let</span> owned_names: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = name_refs.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>();</code></pre>
+      <pre><code><span class="kw">let</span> owned_names: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = name_refs.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>();
+<span class="cm">// [&amp;"Alice", &amp;"Bob"] -&gt; ["Alice".clone(), "Bob".clone()] -&gt; heap allocations</span></code></pre>
 
       <p>
         <code>cloned()</code> calls <code>.clone()</code> on each element. It
@@ -445,7 +460,9 @@
     } <span class="kw">else</span> {
         <span class="ty">Cow</span>::<span class="fn">Borrowed</span>(input) <span class="cm">// No allocation needed</span>
     }
-}</code></pre>
+}
+<span class="cm">// normalize("hello")     -&gt; Cow::Borrowed("hello")       -- zero-cost</span>
+<span class="cm">// normalize("he\tllo")   -&gt; Cow::Owned("he    llo")       -- allocates</span></code></pre>
 
       <p>
         <code>Cow</code> -- "clone on write" -- is either a reference or an owned
@@ -471,7 +488,8 @@
       </p>
 
       <pre><code><span class="kw">let</span> first_admin_email = users.<span class="fn">iter</span>()
-    .<span class="fn">find_map</span>(|u| <span class="kw">if</span> u.is_admin { <span class="ty">Some</span>(&amp;u.email) } <span class="kw">else</span> { <span class="ty">None</span> });</code></pre>
+    .<span class="fn">find_map</span>(|u| <span class="kw">if</span> u.is_admin { <span class="ty">Some</span>(&amp;u.email) } <span class="kw">else</span> { <span class="ty">None</span> });
+<span class="cm">// [{admin: false}, {admin: true, email: "a@b.com"}, ...] -&gt; Some("a@b.com")</span></code></pre>
 
       <p>
         <code>find_map</code> combines <code>find</code> and <code>map</code> into
@@ -491,7 +509,8 @@
       <pre><code><span class="cm">// Read header lines until the first blank line</span>
 <span class="kw">let</span> headers: <span class="ty">Vec</span>&lt;_&gt; = lines.<span class="fn">iter</span>()
     .<span class="fn">take_while</span>(|l| !l.<span class="fn">is_empty</span>())
-    .<span class="fn">collect</span>();</code></pre>
+    .<span class="fn">collect</span>();
+<span class="cm">// ["Host: x", "Accept: y", "", "body"] -&gt; ["Host: x", "Accept: y"]</span></code></pre>
 
       <p>
         <code>take_while</code> is a fence, not a filter. Once the predicate returns
@@ -528,7 +547,8 @@
 
       <pre><code><span class="kw">let</span> all_tags: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = posts.<span class="fn">iter</span>()
     .<span class="fn">flat_map</span>(|p| &amp;p.tags)
-    .<span class="fn">collect</span>();</code></pre>
+    .<span class="fn">collect</span>();
+<span class="cm">// [{tags: ["rust", "cli"]}, {tags: ["wasm"]}] -&gt; ["rust", "cli", "wasm"]</span></code></pre>
 
       <p>
         <code>flat_map</code> is <code>map</code> followed by <code>flatten</code>.
@@ -553,7 +573,8 @@
 <span class="kw">let</span> numbered: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = items.<span class="fn">iter</span>()
     .<span class="fn">enumerate</span>()
     .<span class="fn">map</span>(|(i, item)| <span class="fn">format!</span>(<span class="str">"{}. {}"</span>, i + <span class="num">1</span>, item))
-    .<span class="fn">collect</span>();</code></pre>
+    .<span class="fn">collect</span>();
+<span class="cm">// ["apple", "banana"] -&gt; ["1. apple", "2. banana"]</span></code></pre>
 
       <p>
         <code>enumerate()</code> wraps each element in a <code>(index, element)</code>
@@ -569,7 +590,8 @@
       </p>
 
       <pre><code><span class="kw">let</span> (passing, failing): (<span class="ty">Vec</span>&lt;_&gt;, <span class="ty">Vec</span>&lt;_&gt;) = tests.<span class="fn">iter</span>()
-    .<span class="fn">partition</span>(|t| t.score &gt;= <span class="num">70</span>);</code></pre>
+    .<span class="fn">partition</span>(|t| t.score &gt;= <span class="num">70</span>);
+<span class="cm">// scores [95, 40, 70, 55] -&gt; passing: [95, 70], failing: [40, 55]</span></code></pre>
 
       <p>
         <code>partition</code> takes a predicate and returns a tuple of two
@@ -585,9 +607,9 @@
         -- the actual first and last by position.
       </p>
 
-      <pre><code><span class="kw">let</span> <span class="kw">mut</span> it = items.<span class="fn">iter</span>();
-<span class="kw">let</span> first = it.<span class="fn">next</span>();
-<span class="kw">let</span> last = it.<span class="fn">next_back</span>();</code></pre>
+      <pre><code><span class="kw">let</span> <span class="kw">mut</span> it = items.<span class="fn">iter</span>();      <span class="cm">// items = [10, 20, 30]</span>
+<span class="kw">let</span> first = it.<span class="fn">next</span>();         <span class="cm">// Some(&amp;10)</span>
+<span class="kw">let</span> last = it.<span class="fn">next_back</span>();     <span class="cm">// Some(&amp;30)</span></code></pre>
 
       <p>
         This works because <code>slice::Iter</code> implements
@@ -610,7 +632,8 @@
 <span class="kw">let</span> report: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = names.<span class="fn">iter</span>()
     .<span class="fn">zip</span>(scores.<span class="fn">iter</span>())
     .<span class="fn">map</span>(|(name, score)| <span class="fn">format!</span>(<span class="str">"{name}: {score}"</span>))
-    .<span class="fn">collect</span>();</code></pre>
+    .<span class="fn">collect</span>();
+<span class="cm">// -&gt; ["Alice: 95", "Bob: 87", "Carol: 92"]</span></code></pre>
 
       <p>
         <code>zip</code> pairs up elements from two iterators, producing
@@ -650,7 +673,9 @@
       </p>
 
       <pre><code><span class="kw">let</span> has_errors = results.<span class="fn">iter</span>().<span class="fn">any</span>(|r| r.<span class="fn">is_err</span>());
-<span class="kw">let</span> all_positive = numbers.<span class="fn">iter</span>().<span class="fn">all</span>(|&amp;n| n &gt; <span class="num">0</span>);</code></pre>
+<span class="cm">// [Ok(1), Err(e), Ok(3)] -&gt; true   (stops at Err)</span>
+<span class="kw">let</span> all_positive = numbers.<span class="fn">iter</span>().<span class="fn">all</span>(|&amp;n| n &gt; <span class="num">0</span>);
+<span class="cm">// [3, -1, 5] -&gt; false              (stops at -1)</span></code></pre>
 
       <p>
         Both <code>any</code> and <code>all</code> short-circuit. <code>any</code>
@@ -779,7 +804,9 @@ words.<span class="fn">dedup_by_key</span>(|s| s.<span class="fn">to_lowercase</
       </p>
 
       <pre><code><span class="kw">let</span> content = <span class="fn">find_file</span>(name)
-    .<span class="fn">and_then</span>(|path| <span class="fn">read_to_string</span>(path))?;</code></pre>
+    .<span class="fn">and_then</span>(|path| <span class="fn">read_to_string</span>(path))?;
+<span class="cm">// Ok("config.toml") -&gt; read_to_string("config.toml") -&gt; Ok("key = val")</span>
+<span class="cm">// Err(e)            -&gt; Err(e)   (skips read_to_string entirely)</span></code></pre>
 
       <p>
         <code>and_then</code> is the monadic bind for <code>Result</code> (and
@@ -926,9 +953,9 @@ words.<span class="fn">dedup_by_key</span>(|s| s.<span class="fn">to_lowercase</
         <code>::&lt;Type&gt;</code>.
       </p>
 
-      <pre><code><span class="kw">let</span> x = <span class="str">"42"</span>.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;()?;
-<span class="kw">let</span> nums = <span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>].<span class="fn">into_iter</span>().<span class="fn">collect</span>::&lt;<span class="ty">HashSet</span>&lt;_&gt;&gt;();
-<span class="kw">let</span> total = values.<span class="fn">iter</span>().<span class="fn">sum</span>::&lt;<span class="ty">f64</span>&gt;();</code></pre>
+      <pre><code><span class="kw">let</span> x = <span class="str">"42"</span>.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;()?;                                    <span class="cm">// Ok(42)</span>
+<span class="kw">let</span> nums = <span class="fn">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>].<span class="fn">into_iter</span>().<span class="fn">collect</span>::&lt;<span class="ty">HashSet</span>&lt;_&gt;&gt;();  <span class="cm">// {1, 2, 3}</span>
+<span class="kw">let</span> total = values.<span class="fn">iter</span>().<span class="fn">sum</span>::&lt;<span class="ty">f64</span>&gt;();                           <span class="cm">// e.g. 10.5</span></code></pre>
 
       <p>
         The turbofish appears when a method is generic and the return type isn't
@@ -997,8 +1024,9 @@ words.<span class="fn">dedup_by_key</span>(|s| s.<span class="fn">to_lowercase</
       <pre><code><span class="kw">let</span> valid: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = raw_inputs.<span class="fn">iter</span>()
     .<span class="fn">filter_map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>())  <span class="cm">// #3: Silent Discard</span>
     .<span class="fn">collect</span>();
+<span class="cm">// ["10", "abc", "20", ""] -&gt; [10, 20]</span>
 
-<span class="kw">let</span> kept = valid.<span class="fn">len</span>();</code></pre>
+<span class="kw">let</span> kept = valid.<span class="fn">len</span>(); <span class="cm">// 2</span></code></pre>
 
       <p>
         Two patterns. The Silent Discard (#3) does the filtering and parsing in one
@@ -1031,7 +1059,8 @@ words.<span class="fn">dedup_by_key</span>(|s| s.<span class="fn">to_lowercase</
 
       <pre><code><span class="kw">let</span> top_name = users.<span class="fn">iter</span>()
     .<span class="fn">max_by_key</span>(|u| u.score)    <span class="cm">// #21: Custom Rank</span>
-    .<span class="fn">map</span>(|u| u.name.<span class="fn">as_str</span>());  <span class="cm">// #10: Map the Wrapper + borrowing</span></code></pre>
+    .<span class="fn">map</span>(|u| u.name.<span class="fn">as_str</span>());  <span class="cm">// #10: Map the Wrapper + borrowing</span>
+<span class="cm">// [{name: "Alice", score: 90}, {name: "Bob", score: 95}] -&gt; Some("Bob")</span></code></pre>
 
       <p>
         Custom Rank (#21) finds the winner. Map the Wrapper (#10) reaches inside
