@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20 Rules of Thumb in Rust - Telex</title>
+  <meta name="description" content="Twenty rules of thumb for writing idiomatic Rust — the lessons most developers learn through trial and error, handed over early.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>20 Rules of Thumb in Rust</h1>
+      <div class="post-meta">April 2026</div>
+
+      <p>
+        Rust has a reputation for a steep learning curve, but a lot of that friction
+        comes from fighting the language instead of working with it. After enough time
+        writing Rust, certain patterns start to feel obvious — not because you memorised
+        a spec, but because you got burned enough times to learn the lesson.
+      </p>
+
+      <p>
+        Here are 20 rules of thumb I wish someone had handed me early on.
+      </p>
+
+      <h2>1. Use <code>String</code> in structs, use <code>&amp;str</code> in function parameters</h2>
+
+      <p>
+        If a struct holds a string, it should own it — use <code>String</code>. If a
+        function just needs to read a string temporarily, accept <code>&amp;str</code>.
+        This way your struct is self-contained with no lifetime headaches, and your
+        functions stay flexible since both <code>String</code> and <code>&amp;str</code>
+        can be passed as <code>&amp;str</code>.
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Config</span> {
+    host: <span class="ty">String</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">print_host</span>(host: &amp;<span class="ty">str</span>) {
+    <span class="mac">println!</span>(<span class="str">"Host: {}"</span>, host);
+}</code></pre>
+
+      <h2>2. Prefer borrowing in function parameters over taking ownership</h2>
+
+      <p>
+        Unless your function actually needs to own the value, take a reference. Taking
+        ownership forces the caller to give up their value or clone it — an unnecessary
+        cost when you only need to read or temporarily modify something.
+      </p>
+
+      <pre><code><span class="cm">// Prefer this</span>
+<span class="kw">fn</span> <span class="fn">get_length</span>(s: &amp;<span class="ty">String</span>) -&gt; <span class="ty">usize</span> {
+    s.<span class="fn">len</span>()
+}
+
+<span class="cm">// Even better — accept &amp;str to be more flexible</span>
+<span class="kw">fn</span> <span class="fn">get_length</span>(s: &amp;<span class="ty">str</span>) -&gt; <span class="ty">usize</span> {
+    s.<span class="fn">len</span>()
+}</code></pre>
+
+      <h2>3. If you're cloning frequently to fight the borrow checker, rethink your design</h2>
+
+      <p>
+        Cloning is a band-aid, not a solution. If you find yourself cloning everywhere
+        to make the compiler happy, it's a sign your ownership structure needs rethinking.
+        Usually the fix is restructuring data flow so one owner is clear, rather than
+        making cheap copies of everything.
+      </p>
+
+      <h2>4. Don't take <code>&amp;mut T</code> unless you need to mutate</h2>
+
+      <p>
+        Taking a mutable reference when you only need to read is misleading to callers
+        and unnecessarily restrictive — only one mutable reference can exist at a time.
+        Take <code>&amp;T</code> by default, and only reach for <code>&amp;mut T</code>
+        when mutation is genuinely required.
+      </p>
+
+      <h2>5. Prefer <code>Vec&lt;T&gt;</code> over arrays unless the size is known and small</h2>
+
+      <p>
+        Arrays in Rust are fixed-size and live on the stack. That's great for small,
+        known-at-compile-time sizes — but for anything dynamic, <code>Vec&lt;T&gt;</code>
+        is the right tool. When in doubt, start with <code>Vec</code>.
+      </p>
+
+      <h2>6. Use <code>HashMap</code> by default; switch to <code>BTreeMap</code> only when you need sorted keys</h2>
+
+      <p>
+        <code>HashMap</code> is faster for most use cases. <code>BTreeMap</code> keeps
+        keys in sorted order and is useful when you need deterministic iteration order
+        or range queries. Don't pay the performance cost of <code>BTreeMap</code> unless
+        ordering is actually a requirement.
+      </p>
+
+      <h2>7. Wrap primitives in newtypes to prevent mixing up semantically different values</h2>
+
+      <p>
+        Two <code>f64</code> values might both represent distance, but one is in metres
+        and the other in miles. The compiler can't catch that bug — but a newtype can.
+      </p>
+
+      <pre><code><span class="kw">struct</span> <span class="ty">Metres</span>(<span class="ty">f64</span>);
+<span class="kw">struct</span> <span class="ty">Miles</span>(<span class="ty">f64</span>);
+
+<span class="kw">fn</span> <span class="fn">travel</span>(distance: <span class="ty">Metres</span>) { <span class="cm">/* ... */</span> }</code></pre>
+
+      <p>
+        Now passing a <code>Miles</code> value is a compile-time error. The cost is
+        near-zero; the safety benefit is real.
+      </p>
+
+      <h2>8. Prefer <code>enum</code> over <code>bool</code> parameters</h2>
+
+      <p>
+        A function like <code>render(true)</code> tells you nothing at the call site.
+        A function like <code>render(Visibility::Visible)</code> is self-documenting.
+        Booleans are fine for simple flags inside a function, but as parameters they
+        hurt readability.
+      </p>
+
+      <pre><code><span class="cm">// Unclear</span>
+<span class="kw">fn</span> <span class="fn">render</span>(visible: <span class="ty">bool</span>) {}
+
+<span class="cm">// Clear</span>
+<span class="kw">enum</span> <span class="ty">Visibility</span> { <span class="ty">Visible</span>, <span class="ty">Hidden</span> }
+<span class="kw">fn</span> <span class="fn">render</span>(visibility: <span class="ty">Visibility</span>) {}</code></pre>
+
+      <h2>9. Use <code>Option</code> for "value might not exist", <code>Result</code> for "operation might fail"</h2>
+
+      <p>
+        These two types look similar but carry different semantics. <code>Option&lt;T&gt;</code>
+        says "this value is optional — its absence is normal." <code>Result&lt;T, E&gt;</code>
+        says "this operation can fail — here's what went wrong." Mixing them up leads to
+        code that's harder to reason about and error messages that confuse callers.
+      </p>
+
+      <h2>10. Avoid <code>.unwrap()</code> in production code</h2>
+
+      <p>
+        <code>.unwrap()</code> panics on <code>None</code> or <code>Err</code>. It's fine
+        during prototyping, but before shipping use <code>.expect("descriptive message")</code>
+        at minimum, so when it panics you know why. Better still, propagate errors properly
+        with <code>?</code> and a meaningful error type.
+      </p>
+
+      <pre><code><span class="cm">// Avoid in production</span>
+<span class="kw">let</span> val = some_option.<span class="fn">unwrap</span>();
+
+<span class="cm">// Better</span>
+<span class="kw">let</span> val = some_option.<span class="fn">expect</span>(<span class="str">"config value should always be set"</span>);
+
+<span class="cm">// Best — propagate the error</span>
+<span class="kw">let</span> val = some_result?;</code></pre>
+
+      <h2>11. Define a crate-level <code>Result</code> alias</h2>
+
+      <p>
+        Writing <code>std::result::Result&lt;T, MyError&gt;</code> everywhere is tedious.
+        Define a type alias at the top of your crate and use it throughout. It's a small
+        thing that makes error-handling code noticeably cleaner.
+      </p>
+
+      <pre><code><span class="cm">// In lib.rs or error.rs</span>
+<span class="kw">pub type</span> <span class="ty">Result</span>&lt;<span class="ty">T</span>&gt; = std::result::<span class="ty">Result</span>&lt;<span class="ty">T</span>, <span class="ty">MyError</span>&gt;;
+
+<span class="cm">// Now throughout your crate</span>
+<span class="kw">fn</span> <span class="fn">do_thing</span>() -&gt; <span class="ty">Result</span>&lt;<span class="ty">String</span>&gt; { <span class="cm">/* ... */</span> }</code></pre>
+
+      <h2>12. Always derive <code>Debug</code>; implement <code>Display</code> for user-facing messages</h2>
+
+      <p>
+        <code>Debug</code> is for developers — use it in logs, panics, and test output.
+        <code>Display</code> is for end users — use it in error messages and UI output.
+        Derive <code>Debug</code> on nearly everything. Implement <code>Display</code> on
+        types that will be shown to users.
+      </p>
+
+      <pre><code><span class="cm">#[derive(Debug)]</span>
+<span class="kw">struct</span> <span class="ty">MyError</span> {
+    message: <span class="ty">String</span>,
+}
+
+<span class="kw">impl</span> std::fmt::<span class="ty">Display</span> <span class="kw">for</span> <span class="ty">MyError</span> {
+    <span class="kw">fn</span> <span class="fn">fmt</span>(&amp;<span class="kw">self</span>, f: &amp;<span class="kw">mut</span> std::fmt::<span class="ty">Formatter</span>) -&gt; std::fmt::<span class="ty">Result</span> {
+        <span class="mac">write!</span>(f, <span class="str">"Something went wrong: {}"</span>, <span class="kw">self</span>.message)
+    }
+}</code></pre>
+
+      <h2>13. Accept <code>impl Trait</code> in functions instead of concrete types</h2>
+
+      <p>
+        Using <code>impl Trait</code> in function signatures makes your API more flexible
+        without the complexity of generics syntax. It allows callers to pass any type that
+        implements the trait, and the compiler handles the monomorphisation.
+      </p>
+
+      <pre><code><span class="cm">// Flexible and clean</span>
+<span class="kw">fn</span> <span class="fn">print_all</span>(items: <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">String</span>&gt;) {
+    <span class="kw">for</span> item <span class="kw">in</span> items {
+        <span class="mac">println!</span>(<span class="str">"{}"</span>, item);
+    }
+}</code></pre>
+
+      <h2>14. Prefer <code>impl Trait</code> over <code>Box&lt;dyn Trait&gt;</code> unless you need runtime polymorphism</h2>
+
+      <p>
+        <code>Box&lt;dyn Trait&gt;</code> involves heap allocation and dynamic dispatch —
+        there's a runtime cost. <code>impl Trait</code> is resolved at compile time with
+        zero overhead. Only reach for <code>Box&lt;dyn Trait&gt;</code> when you genuinely
+        need to store mixed types in a collection, or return different types from a single
+        function at runtime.
+      </p>
+
+      <h2>15. Don't reach for <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> early</h2>
+
+      <p>
+        <code>Rc&lt;RefCell&lt;T&gt;&gt;</code> is a legitimate tool, but it's often a sign
+        you're trying to work around Rust's ownership model rather than design with it.
+        Before using it, ask whether restructuring your data or rethinking ownership could
+        eliminate the need entirely. Often it can.
+      </p>
+
+      <h2>16. Prefer iterators over manual <code>for</code> loops</h2>
+
+      <p>
+        Iterator chains are often more expressive, more composable, and just as fast as
+        manual loops thanks to LLVM optimisation. They also tend to reduce off-by-one errors.
+      </p>
+
+      <pre><code><span class="cm">// Manual loop</span>
+<span class="kw">let mut</span> doubled = <span class="ty">Vec</span>::<span class="fn">new</span>();
+<span class="kw">for</span> x <span class="kw">in</span> &amp;numbers {
+    <span class="kw">if</span> *x &gt; <span class="num">2</span> {
+        doubled.<span class="fn">push</span>(x * <span class="num">2</span>);
+    }
+}
+
+<span class="cm">// Iterator chain</span>
+<span class="kw">let</span> doubled: <span class="ty">Vec</span>&lt;_&gt; = numbers.<span class="fn">iter</span>()
+    .<span class="fn">filter</span>(|&amp;&amp;x| x &gt; <span class="num">2</span>)
+    .<span class="fn">map</span>(|&amp;x| x * <span class="num">2</span>)
+    .<span class="fn">collect</span>();</code></pre>
+
+      <h2>17. Use <code>#[derive]</code> liberally</h2>
+
+      <p>
+        Rust can auto-generate implementations of common traits for you. There's rarely a
+        reason to hand-write <code>Debug</code>, <code>Clone</code>, <code>PartialEq</code>,
+        or <code>Hash</code> when <code>#[derive]</code> does it correctly and efficiently.
+        Make it a habit to add them upfront.
+      </p>
+
+      <pre><code><span class="cm">#[derive(Debug, Clone, PartialEq, Eq, Hash)]</span>
+<span class="kw">struct</span> <span class="ty">Point</span> {
+    x: <span class="ty">i32</span>,
+    y: <span class="ty">i32</span>,
+}</code></pre>
+
+      <h2>18. Make invalid states unrepresentable</h2>
+
+      <p>
+        This is one of Rust's superpowers. Instead of validating inputs at runtime and
+        hoping you remembered to check everywhere, encode the constraints into your types
+        so invalid states literally cannot be constructed.
+      </p>
+
+      <pre><code><span class="cm">// Runtime validation — easy to forget</span>
+<span class="kw">fn</span> <span class="fn">process</span>(status: &amp;<span class="ty">str</span>) {
+    <span class="kw">if</span> status != <span class="str">"active"</span> &amp;&amp; status != <span class="str">"inactive"</span> {
+        <span class="mac">panic!</span>(<span class="str">"invalid status"</span>);
+    }
+}
+
+<span class="cm">// Type-level constraint — impossible to pass invalid value</span>
+<span class="kw">enum</span> <span class="ty">Status</span> { <span class="ty">Active</span>, <span class="ty">Inactive</span> }
+<span class="kw">fn</span> <span class="fn">process</span>(status: <span class="ty">Status</span>) { <span class="cm">/* always valid */</span> }</code></pre>
+
+      <h2>19. Start with the simplest thing that compiles; optimise only after profiling</h2>
+
+      <p>
+        It's tempting to reach for <code>unsafe</code>, custom allocators, or manual SIMD
+        before you've measured anything. Rust's safe abstractions are highly optimised —
+        idiomatic code is usually fast enough. Write clear code first, profile second, and
+        only optimise the bottlenecks the data shows you.
+      </p>
+
+      <h2>20. If a function takes more than 3–4 parameters, group them into a struct</h2>
+
+      <p>
+        Long parameter lists are hard to read, easy to get wrong, and painful to extend.
+        A well-named struct makes call sites self-documenting and gives you a natural place
+        to add validation logic later.
+      </p>
+
+      <pre><code><span class="cm">// Hard to read and error-prone</span>
+<span class="kw">fn</span> <span class="fn">create_user</span>(name: <span class="ty">String</span>, email: <span class="ty">String</span>, age: <span class="ty">u32</span>, is_admin: <span class="ty">bool</span>) {}
+
+<span class="cm">// Clear and extensible</span>
+<span class="kw">struct</span> <span class="ty">NewUser</span> {
+    name: <span class="ty">String</span>,
+    email: <span class="ty">String</span>,
+    age: <span class="ty">u32</span>,
+    is_admin: <span class="ty">bool</span>,
+}
+<span class="kw">fn</span> <span class="fn">create_user</span>(user: <span class="ty">NewUser</span>) {}</code></pre>
+
+      <h2>Closing thoughts</h2>
+
+      <p>
+        These rules aren't laws — there are legitimate exceptions to all of them. But they
+        encode the most common lessons that Rust developers learn through trial and error.
+        Follow them by default, and when you break one, make sure you know why.
+      </p>
+
+      <p>
+        The goal isn't to write Rust that compiles — it's to write Rust that clearly
+        expresses your intent and is hard to misuse. These rules of thumb point in that
+        direction.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
