@@ -2,6 +2,8 @@
 
 Working notes for maintaining this blog. Not published to the site.
 
+Live site: https://telex-tui.github.io/ · Blog: https://telex-tui.github.io/blog/ · Drafts: https://telex-tui.github.io/blog/drafted-ai-crazies.html
+
 ## Repo structure
 
 ```
