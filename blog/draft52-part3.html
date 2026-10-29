@@ -82,6 +82,7 @@
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -90,42 +91,49 @@
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>struct Buf&lt;const N: usize&gt;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares the const parameter <code>N</code> of type <code>usize</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code> for this impl block. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>impl&lt;const N: usize&gt; Buf&lt;N&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>N</code>: passed on, from <code>impl&lt;const N: usize&gt;</code></td>
 <td>Fills <code>Buf</code>'s <code>N</code> with <code>N</code> from <code>impl&lt;const N: usize&gt;</code>, so the block covers every <code>Buf&lt;…&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>sum</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>sum</code>'s body.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let small: Buf&lt;16&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>16</code>: concrete</td>
 <td>Fills <code>N</code> with <code>16</code>, chosen by the author of the <code>let small</code> line.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>Buf::&lt;SIZE&gt;::new()</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>SIZE</code>: concrete</td>
 <td>Fills <code>N</code> with the const item <code>SIZE</code>, which is <code>4</code>. Chosen by the author of the <code>let sized</code> line.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let doubled: Buf&lt;{ SIZE * 2 }&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>{ SIZE * 2 }</code>: concrete</td>
 <td>Fills <code>N</code> with <code>8</code>. An expression must be wrapped in braces (13.2).</td>
 </tr>
 </tbody>
@@ -165,6 +173,7 @@ help: expressions must be enclosed in braces to be used as const generic argumen
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -173,12 +182,14 @@ help: expressions must be enclosed in braces to be used as const generic argumen
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let b: Buf&lt;SIZE * 2&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>SIZE * 2</code>: concrete</td>
 <td>Tries to fill <code>N</code> with <code>SIZE * 2</code>. After <code>SIZE</code> the parser expects <code>,</code> or <code>&gt;</code>, as the error says. This is the error.</td>
 </tr>
 </tbody>
@@ -222,6 +233,7 @@ help: if this generic argument was intended as a const parameter, surround it wi
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -230,12 +242,14 @@ help: if this generic argument was intended as a const parameter, surround it wi
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let b: Buf&lt;sizes::SIZE&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>sizes::SIZE</code>: concrete</td>
 <td>Tries to fill <code>N</code> with <code>sizes::SIZE</code>. rustc reads the path as a type and finds a constant. This is the error.</td>
 </tr>
 </tbody>
@@ -281,6 +295,7 @@ error: generic parameters may not be used in const operations
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -289,24 +304,28 @@ error: generic parameters may not be used in const operations
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>double</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>double</code>'s body.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>_b: Buf&lt;N&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>N</code>: passed on, from <code>fn double&lt;const N: usize&gt;</code></td>
 <td>Fills the struct's <code>N</code> with <code>N</code> from <code>fn double&lt;const N: usize&gt;</code>. Standalone, so allowed.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the return type</td>
 <td>SUPPLY</td>
+<td><code>{ N * 2 }</code>: built from passed-on <code>N</code></td>
 <td>Tries to fill the struct's <code>N</code> with <code>{ N * 2 }</code>. Stable Rust doesn't allow arithmetic on a const parameter here. This is the first error.</td>
 </tr>
 </tbody>
@@ -341,6 +360,7 @@ error: generic parameters may not be used in const operations
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -349,30 +369,35 @@ error: generic parameters may not be used in const operations
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>double</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code> and <code>M</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>double</code>'s body.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>_b: Buf&lt;N&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>N</code>: passed on, from <code>fn double&lt;const N: usize, const M: usize&gt;</code></td>
 <td>Fills the struct's <code>N</code> with <code>N</code> from <code>fn double&lt;const N: usize, const M: usize&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the return type</td>
 <td>SUPPLY</td>
+<td><code>M</code>: passed on, from <code>fn double&lt;const N: usize, const M: usize&gt;</code></td>
 <td>Fills the struct's <code>N</code> with <code>M</code> from the same DECLARE list.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let b: Buf&lt;6&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>6</code>: concrete</td>
 <td>Fills the struct's <code>N</code> with <code>6</code>, chosen by the author of the <code>let b</code> line.</td>
 </tr>
 </tbody>
@@ -441,6 +466,7 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -449,12 +475,14 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Label</code> in <code>struct Label&lt;const S: &amp;'static str&gt;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Tries to declare a const parameter of type <code>&amp;'static str</code>. This is the error.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Label</code> in <code>let _l: Label&lt;"hi"&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>"hi"</code>: concrete</td>
 <td>Fills <code>S</code> with <code>"hi"</code>.</td>
 </tr>
 </tbody>
@@ -497,6 +525,7 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -505,36 +534,42 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Offset</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares the const parameter <code>D</code> of type <code>i32</code>. Scope: from this <code>&lt;</code> to the end of the struct, the <code>;</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>D</code> for this impl block. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Offset</code> in <code>impl&lt;const D: i32&gt; Offset&lt;D&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>D</code>: passed on, from <code>impl&lt;const D: i32&gt;</code></td>
 <td>Fills <code>Offset</code>'s <code>D</code> with <code>D</code> from <code>impl&lt;const D: i32&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>N</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Offset</code> in <code>let back: Offset&lt;-1&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>-1</code>: concrete</td>
 <td>Fills <code>D</code> with <code>-1</code>, chosen by the author of the <code>let back</code> line. A negative literal needs no braces.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let b: Buf&lt;_&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>_</code>: inferred</td>
 <td><code>_</code> asks inference to fill <code>N</code>. Inference fills it with <code>3</code>, from the array <code>[7; 3]</code>.</td>
 </tr>
 </tbody>
@@ -631,6 +666,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -639,18 +675,21 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>, chosen by the author of <code>struct Windows</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Option</code></td>
 <td>SUPPLY</td>
+<td><code>Self::Item</code>: concrete (<code>Self</code> is <code>Windows</code> here)</td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>Self::Item</code>, which has no SUPPLY list because <code>Iterator</code>'s <code>type Item;</code> has no DECLARE list.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&gt;</code> immediately after <code>2</code></td>
 <td>other: comparison operator</td>
+<td></td>
 <td>Greater-than. Not the end of a bracket.</td>
 </tr>
 </tbody>
@@ -712,6 +751,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -720,60 +760,70 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>type Item&lt;'a&gt; where Self: 'a;</code> in the trait</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares the lifetime parameter <code>'a</code> for the associated type <code>Item</code>. Scope: from this <code>&lt;</code> to the <code>;</code> that ends the line.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>lend</code> in the trait</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> for the method. Scope: from this <code>&lt;</code> to the <code>;</code> that ends <code>lend</code>'s declaration in the trait.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in the trait</td>
 <td>SUPPLY</td>
+<td><code>Self::Item&lt;'a&gt;</code>: built from passed-on <code>Self</code>, <code>'a</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>Self::Item&lt;'a&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>Self::Item&lt;'a&gt;</code> in the trait</td>
 <td>SUPPLY</td>
+<td><code>'a</code>: passed on, from <code>fn lend&lt;'a&gt;</code></td>
 <td>Fills <code>Item</code>'s <code>'a</code> with <code>'a</code> from <code>fn lend&lt;'a&gt;</code>. This is the link between the borrow of <code>self</code> and the returned type.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>, chosen by the author of <code>struct Windows</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>type Item&lt;'a&gt; = &amp;'a mut [u8]</code> in the impl</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> again, for the implementor's definition of <code>Item</code>. Scope: from this <code>&lt;</code> to the <code>;</code> that ends the line. The implementor chose <code>&amp;'a mut [u8]</code>.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>lend</code> in the impl</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> for the method. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>lend</code>'s body.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in the impl</td>
 <td>SUPPLY</td>
+<td><code>Self::Item&lt;'a&gt;</code>: built from passed-on <code>'a</code> (<code>Self</code> is <code>Windows</code> here)</td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>Self::Item&lt;'a&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>Self::Item&lt;'a&gt;</code> in the impl</td>
 <td>SUPPLY</td>
+<td><code>'a</code>: passed on, from <code>fn lend&lt;'a&gt;</code></td>
 <td>Fills <code>Item</code>'s <code>'a</code> with <code>'a</code> from the <code>fn lend&lt;'a&gt;</code> at ⑦. With ⑥, <code>Self::Item&lt;'a&gt;</code> is <code>&amp;'a mut [u8]</code>.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&gt;</code> immediately after <code>2</code></td>
 <td>other: comparison operator</td>
+<td></td>
 <td>Greater-than. Not the end of a bracket.</td>
 </tr>
 </tbody>
@@ -811,6 +861,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -819,24 +870,28 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>type Item&lt;'a&gt;;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> for <code>Item</code>, with no <code>where</code> clause. This is the error.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>lend</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> for the method. Scope: from this <code>&lt;</code> to the <code>;</code> that ends <code>lend</code>'s declaration.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Option</code></td>
 <td>SUPPLY</td>
+<td><code>Self::Item&lt;'a&gt;</code>: built from passed-on <code>Self</code>, <code>'a</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>Self::Item&lt;'a&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>Self::Item&lt;'a&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>'a</code>: passed on, from <code>fn lend&lt;'a&gt;</code></td>
 <td>Fills <code>Item</code>'s <code>'a</code> with <code>'a</code> from <code>fn lend&lt;'a&gt;</code>.</td>
 </tr>
 </tbody>
@@ -893,6 +948,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -901,78 +957,91 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>type Of&lt;T&gt;;</code> in the trait</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares the type parameter <code>T</code> for the associated type <code>Of</code>. Scope: from this <code>&lt;</code> to the <code>;</code> that ends the line.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>wrap</code> in the trait</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for the method. Scope: from this <code>&lt;</code> to the <code>;</code> that ends <code>wrap</code>'s declaration in the trait.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>Self::Of&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn wrap&lt;T&gt;</code></td>
 <td>Fills <code>Of</code>'s <code>T</code> with <code>T</code> from <code>fn wrap&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>type Of&lt;T&gt; = Vec&lt;T&gt;;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for <code>VecFamily</code>'s definition of <code>Of</code>. Scope: from this <code>&lt;</code> to the <code>;</code> that ends the line.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>type Of&lt;T&gt; = Vec&lt;T&gt;;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>type Of&lt;T&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from ④. The implementor chose <code>Vec</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>wrap</code> in <code>impl Container for VecFamily</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for the method. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>wrap</code>'s body.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>-&gt; Vec&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn wrap&lt;T&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from ⑥. <code>Vec&lt;T&gt;</code> is <code>Self::Of&lt;T&gt;</code> for this impl, so the implementor may write either.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>type Of&lt;T&gt; = Option&lt;T&gt;;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for <code>OptionFamily</code>'s definition of <code>Of</code>. Scope: from this <code>&lt;</code> to the <code>;</code> that ends the line.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in <code>type Of&lt;T&gt; = Option&lt;T&gt;;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>type Of&lt;T&gt;</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>T</code> from ⑧. The implementor chose <code>Option</code>.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&lt;</code> immediately after <code>wrap</code> in <code>impl Container for OptionFamily</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for the method. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>wrap</code>'s body.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in <code>-&gt; Option&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn wrap&lt;T&gt;</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>T</code> from ⑩.</td>
 </tr>
 <tr>
 <td>⑫</td>
 <td><code>&lt;</code> immediately after <code>:</code> in <code>let a: &lt;VecFamily as Container&gt;</code></td>
 <td>other: qualified path</td>
+<td></td>
 <td>Names <code>Of</code> from <code>impl Container for VecFamily</code>.</td>
 </tr>
 <tr>
 <td>⑬</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>::Of&lt;u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Of</code>'s <code>T</code> with <code>u8</code>, chosen by the author of the <code>let a</code> line. With ⑤, the type is <code>Vec&lt;u8&gt;</code>.</td>
 </tr>
 </tbody>
@@ -1023,6 +1092,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1031,36 +1101,42 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>① ② ④ ⑥</td>
 <td>as ① ② ④ ⑥ in 14.4</td>
 <td>DECLARE</td>
+<td></td>
 <td>The same lines as in 14.4.</td>
 </tr>
 <tr>
 <td>③ ⑤ ⑦</td>
 <td>as ③ ⑤ ⑦ in 14.4</td>
 <td>SUPPLY</td>
+<td>③ <code>T</code>: passed on, from <code>fn wrap&lt;T&gt;</code>; ⑤ <code>T</code>: passed on, from <code>type Of&lt;T&gt;</code>; ⑦ <code>T</code>: passed on, from <code>fn wrap&lt;T&gt;</code></td>
 <td>The same lines as in 14.4.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>pair_up</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>F</code> with the bound <code>Container</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>pair_up</code>'s body.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>F::Of&lt;u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Of</code>'s <code>T</code> with <code>u8</code>, chosen by the author of <code>pair_up</code>.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&lt;</code> immediately after <code>Of</code> in <code>F::Of&lt;String&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete</td>
 <td>Fills <code>Of</code>'s <code>T</code> with <code>String</code>, chosen by the author of <code>pair_up</code>.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>pair_up::&lt;VecFamily&gt;</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>VecFamily</code>: concrete</td>
 <td>Fills <code>F</code> with <code>VecFamily</code>. The caller chose it.</td>
 </tr>
 </tbody>
@@ -1115,6 +1191,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1123,78 +1200,91 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Container</code> in <code>trait Container&lt;T&gt;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the trait's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for the impl. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Container</code> in <code>impl&lt;T&gt; Container&lt;T&gt; for VecFamily</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T&gt;</code></td>
 <td>Fills the trait's <code>T</code> with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>type Of = Vec&lt;T&gt;;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>-&gt; Vec&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>pair_up</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>F</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>pair_up</code>'s body, including the <code>where</code> clause.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>(</code> in the return type</td>
 <td>other: qualified path</td>
+<td></td>
 <td>Names <code>Of</code> from <code>F</code>'s impl of <code>Container&lt;u8&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>Container</code> inside ⑦</td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills the trait's <code>T</code> with <code>u8</code>, chosen by the author of <code>pair_up</code>.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>,</code> in the return type</td>
 <td>other: qualified path</td>
+<td></td>
 <td>Names <code>Of</code> from <code>F</code>'s impl of <code>Container&lt;String&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&lt;</code> immediately after <code>Container</code> inside ⑨</td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete</td>
 <td>Fills the trait's <code>T</code> with <code>String</code>, chosen by the author of <code>pair_up</code>.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>&lt;</code> immediately after <code>Container</code> in <code>F: Container&lt;u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills the trait's <code>T</code> with <code>u8</code> in the bound.</td>
 </tr>
 <tr>
 <td>⑫</td>
 <td><code>&lt;</code> immediately after <code>Container</code> in <code>Container&lt;String&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete</td>
 <td>Fills the trait's <code>T</code> with <code>String</code> in the bound.</td>
 </tr>
 <tr>
 <td>⑬</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>pair_up::&lt;VecFamily&gt;</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>VecFamily</code>: concrete</td>
 <td>Fills <code>F</code> with <code>VecFamily</code>. The caller chose it.</td>
 </tr>
 </tbody>
@@ -1291,6 +1381,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1299,12 +1390,14 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>show_inline</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bounds <code>Display</code> and <code>Clone</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>show_inline</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>show_where</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with no bound here. The <code>where</code> clause adds <code>Display + Clone</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>show_where</code>'s body, including the <code>where</code> clause.</td>
 </tr>
 </tbody>
@@ -1337,6 +1430,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1345,6 +1439,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>print_all</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>I</code> with the bound <code>Iterator</code>, then tries to bound <code>I::Item</code>, which is not a new name. This is the error.</td>
 </tr>
 </tbody>
@@ -1389,6 +1484,7 @@ b</code></pre>
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1397,18 +1493,21 @@ b</code></pre>
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>print_all</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>I</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>print_all</code>'s body, including the <code>where</code> clause, which bounds both <code>I</code> and <code>I::Item</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>print_all_inline</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>I</code> with the bound <code>Iterator&lt;Item: Display&gt;</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>print_all_inline</code>'s body.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Iterator</code> inside ②</td>
 <td>other: associated type bound</td>
+<td></td>
 <td>Requires <code>I</code>'s <code>Item</code> to implement <code>Display</code> (item 8).</td>
 </tr>
 </tbody>
@@ -1443,6 +1542,7 @@ b</code></pre>
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1451,12 +1551,14 @@ b</code></pre>
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>new</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>S</code> with the bound <code>Into&lt;String&gt;</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>new</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Into</code> inside ①</td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete</td>
 <td>Fills <code>Into</code>'s parameter with <code>String</code>. The author of <code>new</code> chose it, once, when writing the signature.</td>
 </tr>
 </tbody>
@@ -1508,6 +1610,7 @@ note: required by a bound in `User::new`
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1516,12 +1619,14 @@ note: required by a bound in `User::new`
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>new</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>S</code> with the bound <code>Into&lt;String&gt;</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Into</code> inside ①</td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete</td>
 <td>Fills <code>Into</code>'s parameter with <code>String</code>.</td>
 </tr>
 </tbody>
@@ -1553,6 +1658,7 @@ note: required by a bound in `User::new`
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1561,12 +1667,14 @@ note: required by a bound in `User::new`
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>pick</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> with the bound <code>'b</code>, then declares <code>'b</code>. Scope of both: from this <code>&lt;</code> to the closing <code>}</code> of <code>pick</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&gt;</code> immediately after <code>long.len()</code></td>
 <td>other: comparison operator</td>
+<td></td>
 <td>Greater-than. Not the end of a bracket.</td>
 </tr>
 </tbody>
@@ -1602,6 +1710,7 @@ note: required by a bound in `User::new`
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1610,12 +1719,14 @@ note: required by a bound in `User::new`
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>pick</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> and <code>'b</code> with no bound between them.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&gt;</code> immediately after <code>long.len()</code></td>
 <td>other: comparison operator</td>
+<td></td>
 <td>Greater-than.</td>
 </tr>
 </tbody>
@@ -1649,6 +1760,7 @@ note: required by a bound in `User::new`
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1657,24 +1769,28 @@ note: required by a bound in `User::new`
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>keep</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bounds <code>Debug</code> and <code>'static</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>keep</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Box</code> in the return type</td>
 <td>SUPPLY</td>
+<td><code>dyn Debug</code>: concrete</td>
 <td>Fills <code>Box</code>'s first parameter with <code>dyn Debug</code>. Chosen by the author of <code>keep</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>Box&lt;dyn Debug&gt;</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>Box&lt;dyn Debug&gt;</code>, chosen by the author of the <code>let kept</code> line.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Box</code> inside ③</td>
 <td>SUPPLY</td>
+<td><code>dyn Debug</code>: concrete</td>
 <td>Fills <code>Box</code>'s first parameter with <code>dyn Debug</code>.</td>
 </tr>
 </tbody>
@@ -1719,6 +1835,7 @@ note: requirement that the value outlives `'static` introduced here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1727,12 +1844,14 @@ note: requirement that the value outlives `'static` introduced here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>keep</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bounds <code>Debug</code> and <code>'static</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Box</code></td>
 <td>SUPPLY</td>
+<td><code>dyn Debug</code>: concrete</td>
 <td>Fills <code>Box</code>'s first parameter with <code>dyn Debug</code>.</td>
 </tr>
 </tbody>
@@ -1797,6 +1916,7 @@ help: consider restricting type parameter `T` with trait `Ord`
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1805,24 +1925,28 @@ help: consider restricting type parameter `T` with trait `Ord`
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Sorted</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Ord</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>struct Sorted&lt;T: Ord&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>struct Sorted&lt;T: Ord&gt;</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with no bound. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Sorted</code> in <code>impl&lt;T&gt; Sorted&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T&gt;</code></td>
 <td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T&gt;</code>, which might not implement <code>Ord</code>. This is the error.</td>
 </tr>
 </tbody>
@@ -1856,6 +1980,7 @@ help: consider restricting type parameter `T` with trait `Ord`
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1864,24 +1989,28 @@ help: consider restricting type parameter `T` with trait `Ord`
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Sorted</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Ord</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>struct Sorted&lt;T: Ord&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>struct Sorted&lt;T: Ord&gt;</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Ord</code>. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Sorted</code> in <code>impl&lt;T: Ord&gt; Sorted&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T: Ord&gt;</code></td>
 <td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T: Ord&gt;</code>.</td>
 </tr>
 </tbody>
@@ -1962,6 +2091,7 @@ main::Meters&lt;u8&gt; 7</code></pre>
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1970,12 +2100,14 @@ main::Meters&lt;u8&gt; 7</code></pre>
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Meters</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the default <code>f64</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Meters</code> in <code>let b: Meters&lt;u32&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u32</code>: concrete</td>
 <td>Fills <code>T</code> with <code>u32</code>, chosen by the author of the <code>let b</code> line. The default is not used.</td>
 </tr>
 </tbody>
@@ -2023,6 +2155,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2031,12 +2164,14 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Meters</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the default <code>f64</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>zero</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Default</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>zero</code>'s body.</td>
 </tr>
 </tbody>
@@ -2058,6 +2193,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2066,6 +2202,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>HashMap</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>K</code>, <code>V</code>, <code>S</code> with the default <code>RandomState</code>, and <code>A</code> with the bound <code>Allocator</code> and the default <code>Global</code>. <code>A</code> is unstable, as its attribute says. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>, which the excerpt leaves out.</td>
 </tr>
 </tbody>
@@ -2098,6 +2235,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2106,18 +2244,21 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>HashMap</code> in <code>let mut usual: HashMap&lt;String, u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete; <code>u8</code>: concrete</td>
 <td>Fills <code>K</code> with <code>String</code> and <code>V</code> with <code>u8</code>, chosen by the author of the <code>let mut usual</code> line. The defaults fill <code>S</code> with <code>RandomState</code> and <code>A</code> with <code>Global</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>HashMap</code> in <code>let mut custom: HashMap&lt;String, u8, BuildHasherDefault&lt;DefaultHasher&gt;&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete; <code>u8</code>: concrete; <code>BuildHasherDefault&lt;DefaultHasher&gt;</code>: concrete</td>
 <td>Fills <code>K</code> with <code>String</code>, <code>V</code> with <code>u8</code>, and <code>S</code> with <code>BuildHasherDefault&lt;DefaultHasher&gt;</code>, chosen by the author of the <code>let mut custom</code> line. The default for <code>S</code> is not used; <code>A</code> still gets <code>Global</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>BuildHasherDefault</code> inside ②</td>
 <td>SUPPLY</td>
+<td><code>DefaultHasher</code>: concrete</td>
 <td>Fills <code>BuildHasherDefault</code>'s parameter with <code>DefaultHasher</code>.</td>
 </tr>
 </tbody>
@@ -2150,6 +2291,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2158,6 +2300,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>make</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Default</code> and the default <code>i32</code>. The default is the error.</td>
 </tr>
 </tbody>
@@ -2197,6 +2340,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2205,18 +2349,21 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Meters</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the default <code>f64</code>. The default is the error.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Meters</code> in <code>impl&lt;T = f64&gt; Meters&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T = f64&gt;</code></td>
 <td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T = f64&gt;</code>.</td>
 </tr>
 </tbody>
@@ -2247,6 +2394,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2255,12 +2403,14 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Pair</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>A</code> with the default <code>i32</code>, then <code>B</code> with none. This order is the error.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Pair</code> in <code>let p: Pair&lt;u8, u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete; <code>u8</code>: concrete</td>
 <td>Fills <code>A</code> and <code>B</code> with <code>u8</code>.</td>
 </tr>
 </tbody>
@@ -2289,6 +2439,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2297,6 +2448,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Pair</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>A</code> with the default <code>B</code>, then <code>B</code> with the default <code>i32</code>. <code>B</code> is not declared yet where <code>A</code>'s default names it. This is the error.</td>
 </tr>
 </tbody>
@@ -2338,6 +2490,7 @@ main::Either&lt;u8, &amp;str&gt;
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2346,24 +2499,28 @@ main::Either&lt;u8, &amp;str&gt;
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Either</code> in the enum</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>L</code>, then <code>R</code> with the default <code>L</code>. Scope: from this <code>&lt;</code> to the enum's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Either</code> in <code>let same: Either&lt;u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>L</code> with <code>u8</code>. The default fills <code>R</code> with the same type, <code>u8</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Either</code> in <code>let mixed: Either&lt;u8, &amp;str&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete; <code>&amp;str</code>: concrete</td>
 <td>Fills <code>L</code> with <code>u8</code> and <code>R</code> with <code>&amp;str</code>, chosen by the author of the <code>let mixed</code> line.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Either</code> in <code>let same_spelled_out: Either&lt;u8, u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete; <code>u8</code>: concrete</td>
 <td>Fills both with <code>u8</code>. Assigning <code>same</code> to it compiles, which proves <code>Either&lt;u8&gt;</code> is <code>Either&lt;u8, u8&gt;</code>.</td>
 </tr>
 </tbody>
@@ -2390,6 +2547,7 @@ main::Either&lt;u8, &amp;str&gt;
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2398,6 +2556,7 @@ main::Either&lt;u8, &amp;str&gt;
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Holder</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code> with the default <code>'static</code>. Lifetime parameters can't have defaults. This is the error.</td>
 </tr>
 </tbody>
@@ -2455,6 +2614,7 @@ main::Either&lt;u8, &amp;str&gt;
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2463,12 +2623,14 @@ main::Either&lt;u8, &amp;str&gt;
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Combine</code> in the trait</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>Rhs</code> with the default <code>Self</code>. Scope: from this <code>&lt;</code> to the trait's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Combine</code> in <code>impl Combine&lt;i32&gt; for Point</code></td>
 <td>SUPPLY</td>
+<td><code>i32</code>: concrete</td>
 <td>Fills <code>Rhs</code> with <code>i32</code>, chosen by the implementor.</td>
 </tr>
 </tbody>
@@ -2496,6 +2658,7 @@ main::Either&lt;u8, &amp;str&gt;
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2504,24 +2667,28 @@ main::Either&lt;u8, &amp;str&gt;
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Grid</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the default <code>u8</code>. Scope: from this <code>&lt;</code> to the <code>;</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after the first <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>Vec&lt;T&gt;</code>: built from passed-on <code>T</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>Vec&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after the second <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>type Grid&lt;T = u8&gt;</code></td>
 <td>Fills the inner <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>type Grid&lt;T = u8&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Grid</code> in <code>let h: Grid&lt;char&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>char</code>: concrete</td>
 <td>Fills <code>T</code> with <code>char</code>, chosen by the author of the <code>let h</code> line.</td>
 </tr>
 </tbody>
@@ -2549,6 +2716,7 @@ main::Either&lt;u8, &amp;str&gt;
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2557,12 +2725,14 @@ main::Either&lt;u8, &amp;str&gt;
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares the const parameter <code>N</code> with the default <code>8</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let small: Buf&lt;2&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>2</code>: concrete</td>
 <td>Fills <code>N</code> with <code>2</code>, chosen by the author of the <code>let small</code> line.</td>
 </tr>
 </tbody>
@@ -2677,6 +2847,7 @@ main::Either&lt;u8, &amp;str&gt;
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2685,6 +2856,7 @@ main::Either&lt;u8, &amp;str&gt;
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>=</code> in <code>let id = &lt;T&gt;</code></td>
 <td>other: qualified path, as the parser reads it</td>
+<td></td>
 <td>In an expression, a <code>&lt;</code> after <code>=</code> opens a qualified path (item 9), so after <code>&lt;T&gt;</code> the parser expects <code>::</code>. This is the error.</td>
 </tr>
 </tbody>
@@ -2737,6 +2909,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2745,6 +2918,7 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>id</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>id</code>'s body.</td>
 </tr>
 </tbody>
@@ -2772,6 +2946,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2780,12 +2955,14 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>repeat_each</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Clone</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>repeat_each</code>'s body, which includes the closure.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn repeat_each&lt;T: Clone&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>fn repeat_each&lt;T: Clone&gt;</code>.</td>
 </tr>
 </tbody>
@@ -2816,6 +2993,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2824,18 +3002,21 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>EMPTY</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Tries to declare <code>T</code> for a <code>const</code> item. Unstable. This is the error.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in the <code>const</code> line</td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>const EMPTY&lt;T&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from ①.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>let v: Vec&lt;u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>, chosen by the author of the <code>let v</code> line.</td>
 </tr>
 </tbody>
@@ -2874,6 +3055,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2882,12 +3064,14 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>zero_of</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>Zero</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>zero_of</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>zero_of::&lt;f64&gt;()</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>f64</code>: concrete</td>
 <td>Fills <code>T</code> with <code>f64</code>. The caller chose it.</td>
 </tr>
 </tbody>
@@ -2927,6 +3111,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2935,24 +3120,28 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>first</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>first</code>'s body, but not inside nested items such as the <code>static</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn first&lt;T&gt;</code></td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>T</code> from <code>fn first&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in the return type</td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn first&lt;T&gt;</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>T</code> from <code>fn first&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in the <code>static</code> line</td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>fn first&lt;T&gt;</code></td>
 <td>Tries to fill <code>Option</code>'s <code>T</code> with <code>T</code> from <code>fn first&lt;T&gt;</code>, which the <code>static</code> can't see. This is the error.</td>
 </tr>
 </tbody>
@@ -2982,6 +3171,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -2990,6 +3180,7 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>count_calls</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>count_calls</code>'s body.</td>
 </tr>
 </tbody>
@@ -3118,6 +3309,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3126,42 +3318,49 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>run</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bounds <code>Default</code> and <code>std::fmt::Debug</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>run</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Circle</code> in <code>pub struct Circle&lt;T&gt;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> for the struct inside the module. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Holder</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Shape</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code>. Scope: from this <code>&lt;</code> to the enum's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Option</code> in the <code>static</code> line</td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>u8</code>, chosen by the author of the <code>static</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>run::&lt;u8&gt;()</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>run</code>'s <code>T</code> with <code>u8</code>. <code>main</code> chose it.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>let bytes: Vec&lt;u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>, chosen by the author of the <code>let bytes</code> line.</td>
 </tr>
 </tbody>
@@ -3239,6 +3438,7 @@ note: closure parameter defined here
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3247,42 +3447,49 @@ note: closure parameter defined here
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>a</code> in <code>a &lt; b</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td><code>3 &lt; 5</code> is <code>true</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;=</code> immediately after <code>a</code></td>
 <td>other: less-than-or-equal operator</td>
+<td></td>
 <td><code>3 &lt;= 5</code> is <code>true</code>. One token, not <code>&lt;</code> then <code>=</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;&lt;</code> immediately after <code>a</code></td>
 <td>other: left shift operator</td>
+<td></td>
 <td><code>3 &lt;&lt; 2</code> is <code>12</code>. One token.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;&lt;=</code> immediately after <code>flags</code></td>
 <td>other: left shift assignment operator</td>
+<td></td>
 <td>Shifts <code>flags</code> left by 3 and stores the result: <code>1</code> becomes <code>8</code>. One token.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&gt;</code> immediately after <code>a</code></td>
 <td>other: greater-than operator</td>
+<td></td>
 <td><code>3 &gt; 5</code> is <code>false</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&gt;&gt;</code> immediately after <code>b</code></td>
 <td>other: right shift operator</td>
+<td></td>
 <td><code>5 &gt;&gt; 1</code> is <code>2</code>. One token.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>:</code> inside the string <code>"[{:&lt;5}]"</code></td>
 <td>other: inside a string literal</td>
+<td></td>
 <td>Not Rust syntax: <code>println!</code> reads it as "left-align in a width of 5".</td>
 </tr>
 </tbody>
@@ -3313,6 +3520,7 @@ help: use `::&lt;...&gt;` instead of `&lt;...&gt;` to specify lifetime, type, or
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3321,6 +3529,7 @@ help: use `::&lt;...&gt;` instead of `&lt;...&gt;` to specify lifetime, type, or
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>let v = Vec&lt;u8&gt;::new()</code></td>
 <td>other: less-than operator, as the parser reads it</td>
+<td></td>
 <td>The parser reads <code>Vec &lt; u8 &gt; ::new()</code>: two comparisons in a row, as the error says.</td>
 </tr>
 </tbody>
@@ -3349,6 +3558,7 @@ help: split the comparison into two
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3357,12 +3567,14 @@ help: split the comparison into two
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>1</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td><code>1 &lt; 2</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>2</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td>A second comparison chained onto the first. This is the error.</td>
 </tr>
 </tbody>
@@ -3387,6 +3599,7 @@ help: split the comparison into two
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3395,24 +3608,28 @@ help: split the comparison into two
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>the</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td><code>the &lt; guardian</code>: <code>"the" &lt; "Turbofish"</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&gt;</code> immediately after <code>stands</code></td>
 <td>other: greater-than operator</td>
+<td></td>
 <td><code>stands &gt; (resolute)</code>: <code>"remains" &gt; "undefeated"</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>the</code> in the <code>println!</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td>The same comparison as ①, with spaces.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&gt;</code> immediately after <code>stands</code> in the <code>println!</code></td>
 <td>other: greater-than operator</td>
+<td></td>
 <td>The same comparison as ②, with spaces.</td>
 </tr>
 </tbody>
@@ -3446,6 +3663,7 @@ help: try comparing the cast value
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3454,12 +3672,14 @@ help: try comparing the cast value
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>usize</code> in <code>x as usize &lt; limit</code></td>
 <td>SUPPLY, as the parser reads it</td>
+<td>none: the parser expected a SUPPLY list here, but the code meant an operator. This is the error</td>
 <td>The parser reads it as the start of a SUPPLY list for <code>usize</code>. This is the error.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>limit</code> in <code>limit &lt; 10</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td>Never reached.</td>
 </tr>
 </tbody>
@@ -3490,6 +3710,7 @@ help: try shifting the cast value
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3498,6 +3719,7 @@ help: try shifting the cast value
 <td>①</td>
 <td><code>&lt;&lt;</code> immediately after <code>usize</code></td>
 <td>SUPPLY, as the parser reads it</td>
+<td>none: the parser expected a SUPPLY list here, but the code meant an operator. This is the error</td>
 <td>rustc reads <code>&lt;&lt;</code> as the start of a SUPPLY list for <code>usize</code>, as the error says. This is the error.</td>
 </tr>
 </tbody>
@@ -3525,6 +3747,7 @@ help: try shifting the cast value
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3533,24 +3756,28 @@ help: try shifting the cast value
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>)</code> in <code>(x as usize) &lt; limit</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td>After <code>)</code>, the parser is back in an expression.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>limit</code> in <code>limit &lt; 10</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td><code>5 &lt; 10</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;&lt;</code> immediately after <code>)</code> in <code>(x as usize) &lt;&lt; 2</code></td>
 <td>other: left shift operator</td>
+<td></td>
 <td><code>3 &lt;&lt; 2</code> is <code>12</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&gt;</code> immediately after <code>usize</code> in <code>x as usize &gt; limit</code></td>
 <td>other: greater-than operator</td>
+<td></td>
 <td>No parentheses needed: a SUPPLY list can't start with <code>&gt;</code>.</td>
 </tr>
 </tbody>
@@ -3588,6 +3815,7 @@ help: try shifting the cast value
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3596,48 +3824,56 @@ help: try shifting the cast value
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>first</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>T</code> with the bound <code>IntoIterator</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>first</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td>first <code>&lt;</code> of the <code>&lt;&lt;</code> immediately after <code>Option</code></td>
 <td>SUPPLY</td>
+<td><code>&lt;T as IntoIterator&gt;::Item</code>: built from passed-on <code>T</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>&lt;T as IntoIterator&gt;::Item</code>. <code>&lt;&lt;</code> is one token; the parser splits it.</td>
 </tr>
 <tr>
 <td>③</td>
 <td>second <code>&lt;</code> of the <code>&lt;&lt;</code> immediately after <code>Option</code></td>
 <td>other: qualified path</td>
+<td></td>
 <td>Names <code>IntoIterator</code>'s <code>Item</code> for <code>T</code> (item 9).</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after the first <code>Vec</code> in <code>Vec&lt;Vec&lt;u8&gt;&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>Vec&lt;u8&gt;</code>: concrete</td>
 <td>Fills the outer <code>Vec</code>'s <code>T</code> with <code>Vec&lt;u8&gt;</code>, chosen by the author of the <code>let nested</code> line.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after the second <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills the inner <code>Vec</code>'s <code>T</code> with <code>u8</code>. The final <code>&gt;&gt;</code> is one token, split to close ⑤ and then ④.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> in <code>let v: Vec&lt;u8&gt;= vec![2]</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>. <code>&gt;=</code> is one token, split into the <code>&gt;</code> that closes ⑥ and the <code>=</code> of the <code>let</code>.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;&lt;</code> immediately after <code>1</code></td>
 <td>other: left shift operator</td>
+<td></td>
 <td><code>1 &lt;&lt; 3</code> is <code>8</code>.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&gt;&gt;</code> immediately after <code>3</code></td>
 <td>other: right shift operator</td>
+<td></td>
 <td><code>8 &gt;&gt; 1</code> is <code>4</code>.</td>
 </tr>
 </tbody>
@@ -3668,6 +3904,7 @@ help: if you meant to write a comparison against a negative value, add a space i
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -3676,6 +3913,7 @@ help: if you meant to write a comparison against a negative value, add a space i
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>x</code> in <code>x&lt;-1</code></td>
 <td>other: less-than operator, intended</td>
+<td></td>
 <td>rustc read <code>&lt;-</code> as one token, which the parser doesn't accept here. This is the error.</td>
 </tr>
 </tbody>

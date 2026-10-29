@@ -128,6 +128,7 @@
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>Scope, or what it fills</th>
 </tr>
 </thead>
@@ -136,96 +137,112 @@
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>first</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code> with the bound <code>Copy</code>. Scope: to the closing <code>}</code> of <code>first</code>'s body.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Wrapper</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code>. Scope: to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Either</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>L</code>, and <code>R</code> with the default <code>L</code>. Scope: to the enum's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>Bits</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code> with the bound <code>Copy</code>. Scope: to the union's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Pair</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code>. Scope: to the <code>;</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>Processor</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code>. Scope: to the trait's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code> with the bound <code>Copy</code>. Scope: to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>impl&lt;T: Copy&gt; Wrapper&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T: Copy&gt;</code></td>
 <td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T: Copy&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>pair_with</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>U</code>. Scope: to the closing <code>}</code> of <code>pair_with</code>'s body.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&lt;</code> immediately after <code>Buf</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>The const parameter <code>N</code>. Scope: to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>type Item&lt;'a&gt;</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>'a</code> for the associated type. Scope: to the <code>;</code>.</td>
 </tr>
 <tr>
 <td>⑫</td>
 <td><code>&lt;</code> immediately after <code>lend</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>'a</code> for the method. Scope: to the <code>;</code> that ends <code>lend</code>'s declaration.</td>
 </tr>
 <tr>
 <td>⑬</td>
 <td><code>&lt;</code> immediately after <code>Option</code></td>
 <td>SUPPLY</td>
+<td><code>Self::Item&lt;'a&gt;</code>: built from passed-on <code>Self</code>, <code>'a</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>Self::Item&lt;'a&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑭</td>
 <td><code>&lt;</code> immediately after <code>Item</code> in <code>Self::Item&lt;'a&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>'a</code>: passed on, from <code>fn lend&lt;'a&gt;</code></td>
 <td>Fills <code>Item</code>'s <code>'a</code> with <code>'a</code> from <code>fn lend&lt;'a&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑮</td>
 <td><code>&lt;</code> immediately after <code>apply</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>F</code>. Scope: to the closing <code>}</code> of <code>apply</code>'s body, including the <code>where</code> clause.</td>
 </tr>
 <tr>
 <td>⑯</td>
 <td><code>&lt;</code> immediately after <code>for</code></td>
 <td>DECLARE (higher-ranked)</td>
+<td></td>
 <td><code>'a</code>. Scope: only the bound <code>Fn(&amp;'a str) -&gt; &amp;'a str</code>.</td>
 </tr>
 </tbody>
@@ -323,6 +340,7 @@
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>Scope, or what it fills</th>
 </tr>
 </thead>
@@ -331,120 +349,140 @@
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>Wrapper</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code>. Scope: to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Processor</code> in the trait</td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code>. Scope: to the trait's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Processor</code> in <code>impl Processor&lt;i32&gt; for Logger</code></td>
 <td>SUPPLY</td>
+<td><code>i32</code>: concrete</td>
 <td>Fills the trait's <code>T</code> with <code>i32</code>, chosen by the implementor.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code>. Scope: to the impl's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>From</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T&gt;</code></td>
 <td>Fills <code>From</code>'s parameter with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>for Wrapper&lt;T&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>T</code>: passed on, from <code>impl&lt;T&gt;</code></td>
 <td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>Buf</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>The const parameter <code>N</code>. Scope: to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>Holder</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td><code>'a</code>. Scope: to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>HashMap</code></td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete; <code>u8</code>: concrete</td>
 <td>Fills <code>K</code> with <code>String</code> and <code>V</code> with <code>u8</code>, chosen by the author of the <code>let ages</code> line; the default fills <code>S</code>.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&lt;</code> immediately after the first <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>Vec&lt;u8&gt;</code>: concrete</td>
 <td>Fills the outer <code>Vec</code>'s <code>T</code> with <code>Vec&lt;u8&gt;</code>, chosen by the author of the <code>let nested</code> line.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>&lt;</code> immediately after the second <code>Vec</code></td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills the inner <code>Vec</code>'s <code>T</code> with <code>u8</code>.</td>
 </tr>
 <tr>
 <td>⑫</td>
 <td><code>&lt;</code> immediately after <code>Holder</code> in <code>let h: Holder&lt;'static&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>'static</code>: concrete</td>
 <td>Fills <code>'a</code> with <code>'static</code>, chosen by the author of the <code>let h</code> line.</td>
 </tr>
 <tr>
 <td>⑬</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>"5".parse::&lt;u8&gt;()</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>parse</code>'s <code>F</code> with <code>u8</code>. The caller chose it.</td>
 </tr>
 <tr>
 <td>⑭</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>Vec::&lt;u8&gt;::with_capacity(2)</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>, chosen by the author of the <code>let v</code> line.</td>
 </tr>
 <tr>
 <td>⑮</td>
 <td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>let w: Wrapper&lt;char&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>char</code>: concrete</td>
 <td>Fills the struct's <code>T</code> with <code>char</code>, chosen by the author of the <code>let w</code> line. Matching then fills <code>T</code> from <code>impl&lt;T&gt;</code> with <code>char</code> for <code>Wrapper::from('w')</code>.</td>
 </tr>
 <tr>
 <td>⑯</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let b: Buf&lt;4&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>4</code>: concrete</td>
 <td>Fills <code>N</code> with <code>4</code>, chosen by the author of the <code>let b</code> line.</td>
 </tr>
 <tr>
 <td>⑰</td>
 <td><code>&lt;</code> immediately after <code>Buf</code> in <code>let c: Buf&lt;{ 2 * 3 }&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>{ 2 * 3 }</code>: concrete</td>
 <td>Fills <code>N</code> with <code>6</code>. An expression needs braces.</td>
 </tr>
 <tr>
 <td>⑱</td>
 <td><code>&lt;</code> immediately after <code>::</code> in <code>std::mem::size_of::&lt;u64&gt;()</code></td>
 <td>SUPPLY (turbofish)</td>
+<td><code>u64</code>: concrete</td>
 <td>Fills <code>size_of</code>'s parameter with <code>u64</code>. The caller chose it.</td>
 </tr>
 <tr>
 <td>⑲</td>
 <td><code>&lt;</code> immediately after <code>Box</code></td>
 <td>SUPPLY</td>
+<td><code>dyn Processor&lt;i32&gt;</code>: concrete</td>
 <td>Fills <code>Box</code>'s first parameter with <code>dyn Processor&lt;i32&gt;</code>, chosen by the author of the <code>let p</code> line.</td>
 </tr>
 <tr>
 <td>⑳</td>
 <td><code>&lt;</code> immediately after <code>Processor</code> inside ⑲</td>
 <td>SUPPLY</td>
+<td><code>i32</code>: concrete</td>
 <td>Fills the trait's <code>T</code> with <code>i32</code>.</td>
 </tr>
 </tbody>
@@ -523,6 +561,7 @@
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>Scope, or what it fills</th>
 </tr>
 </thead>
@@ -531,102 +570,119 @@
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>show_all</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>I</code>. Scope: to the closing <code>}</code> of <code>show_all</code>'s body, including the <code>where</code> clause.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>Iterator</code> in <code>I: Iterator&lt;Item: Display&gt;</code></td>
 <td>other: associated type bound</td>
+<td></td>
 <td>Requires <code>I</code>'s <code>Item</code> to implement <code>Display</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>Iterator</code> in <code>evens</code>'s return type</td>
 <td>other: associated type binding</td>
+<td></td>
 <td>Promises <code>Item = u32</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>chars_of</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>'a</code>. Scope: to the closing <code>}</code> of <code>chars_of</code>'s body.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>Iterator</code> in <code>chars_of</code>'s return type</td>
 <td>other: associated type binding</td>
+<td></td>
 <td>Promises <code>Item = char</code>.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>use</code></td>
 <td>other: precise capturing list</td>
+<td></td>
 <td>The hidden type may use <code>'a</code> only.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>first_item</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>T</code> with the bound <code>Iterator</code>. Scope: to the closing <code>}</code> of <code>first_item</code>'s body.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>Option</code></td>
 <td>SUPPLY</td>
+<td><code>&lt;T as Iterator&gt;::Item</code>: built from passed-on <code>T</code></td>
 <td>Fills <code>Option</code>'s <code>T</code> with <code>&lt;T as Iterator&gt;::Item</code>.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after the <code>&lt;</code> of ⑧</td>
 <td>other: qualified path</td>
+<td></td>
 <td>Names <code>Iterator</code>'s <code>Item</code> for <code>T</code>.</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>&lt;</code> immediately after <code>greet</code></td>
 <td>DECLARE</td>
+<td></td>
 <td><code>S</code> with the bound <code>Into&lt;String&gt;</code>. Scope: to the closing <code>}</code> of <code>greet</code>'s body.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>&lt;</code> immediately after <code>Into</code></td>
 <td>SUPPLY</td>
+<td><code>String</code>: concrete</td>
 <td>Fills <code>Into</code>'s parameter with <code>String</code>, chosen by the author of <code>greet</code>.</td>
 </tr>
 <tr>
 <td>⑫</td>
 <td><code>&lt;</code> immediately after <code>=</code> in <code>let empty = &lt;Vec&lt;u8&gt; as Default&gt;</code></td>
 <td>other: qualified path</td>
+<td></td>
 <td>Names <code>default</code> from <code>impl Default for Vec&lt;u8&gt;</code>.</td>
 </tr>
 <tr>
 <td>⑬</td>
 <td><code>&lt;</code> immediately after <code>Vec</code> inside ⑫</td>
 <td>SUPPLY</td>
+<td><code>u8</code>: concrete</td>
 <td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>.</td>
 </tr>
 <tr>
 <td>⑭</td>
 <td><code>&lt;</code> immediately after <code>=</code> in <code>let len = &lt;[i32]&gt;</code></td>
 <td>other: qualified path, without <code>as</code></td>
+<td></td>
 <td>Wraps the type <code>[i32]</code> so <code>::len</code> can follow.</td>
 </tr>
 <tr>
 <td>⑮</td>
 <td><code>&lt;</code> immediately after <code>len</code> in <code>len &lt; 5</code></td>
 <td>other: less-than operator</td>
+<td></td>
 <td><code>3 &lt; 5</code> is <code>true</code>.</td>
 </tr>
 <tr>
 <td>⑯</td>
 <td><code>&lt;&lt;</code> immediately after <code>len</code></td>
 <td>other: left shift operator</td>
+<td></td>
 <td><code>3 &lt;&lt; 1</code> is <code>6</code>.</td>
 </tr>
 <tr>
 <td>⑰</td>
 <td><code>&lt;</code> immediately after <code>:</code> inside <code>"[{:&lt;4}]"</code></td>
 <td>other: inside a string literal</td>
+<td></td>
 <td>Not Rust syntax: a format spec, left-align in a width of 4.</td>
 </tr>
 </tbody>
@@ -883,6 +939,7 @@
 <th>#</th>
 <th>What is marked</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -891,78 +948,91 @@
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>'a</code>, <code>K</code> and <code>V</code> for the impl block. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>, including the <code>where</code> clause and <code>from_iter</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>'a</code> inside ①</td>
 <td>declares</td>
+<td></td>
 <td>The lifetime parameter <code>'a</code>.</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>K</code> inside ①</td>
 <td>declares</td>
+<td></td>
 <td>The type parameter <code>K</code>, with the bounds <code>Hash</code> and <code>Eq</code>.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>V</code> inside ①</td>
 <td>declares</td>
+<td></td>
 <td>The type parameter <code>V</code>. Its bound is added at ⑬.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>FromIterator</code></td>
 <td>SUPPLY</td>
+<td><code>(&amp;'a K, V)</code>: built from passed-on <code>'a</code>, <code>K</code>, <code>V</code></td>
 <td>Fills <code>FromIterator</code>'s one parameter, <code>A</code> in std's <code>pub trait FromIterator&lt;A&gt;: Sized</code>, with the tuple type <code>(&amp;'a K, V)</code>. The impl's author chose it: this impl builds a <code>MyMap</code> from pairs of a borrowed key and a value.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>'a</code> inside ⑤</td>
 <td>uses</td>
+<td></td>
 <td><code>'a</code> from ①.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>K</code> inside ⑤</td>
 <td>uses</td>
+<td></td>
 <td><code>K</code> from ①.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>V</code> inside ⑤</td>
 <td>uses</td>
+<td></td>
 <td><code>V</code> from ①.</td>
 </tr>
 <tr>
 <td>⑨</td>
 <td><code>&lt;</code> immediately after <code>MyMap</code></td>
 <td>SUPPLY</td>
+<td><code>&amp;'a K</code>: built from passed-on <code>'a</code>, <code>K</code>; <code>V</code>: passed on, from <code>impl&lt;'a, K: Hash + Eq, V&gt;</code></td>
 <td>Fills the struct's two parameters: the struct's <code>K</code> with <code>&amp;'a K</code> and the struct's <code>V</code> with <code>V</code>. This is the self type (item 4).</td>
 </tr>
 <tr>
 <td>⑩</td>
 <td><code>'a</code> inside ⑨</td>
 <td>uses</td>
+<td></td>
 <td><code>'a</code> from ①.</td>
 </tr>
 <tr>
 <td>⑪</td>
 <td><code>K</code> inside ⑨</td>
 <td>uses</td>
+<td></td>
 <td><code>K</code> from ①, behind a reference.</td>
 </tr>
 <tr>
 <td>⑫</td>
 <td><code>V</code> inside ⑨</td>
 <td>uses</td>
+<td></td>
 <td><code>V</code> from ①.</td>
 </tr>
 <tr>
 <td>⑬</td>
 <td><code>V</code> after <code>where</code></td>
 <td>uses</td>
+<td></td>
 <td><code>V</code> from ①, with the bound <code>Clone</code>.</td>
 </tr>
 </tbody>
@@ -1012,6 +1082,7 @@
 <th>#</th>
 <th>Position</th>
 <th>Label</th>
+<th>Arguments</th>
 <th>What it does</th>
 </tr>
 </thead>
@@ -1020,48 +1091,56 @@
 <td>①</td>
 <td><code>&lt;</code> immediately after <code>MyMap</code> in the struct</td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares the struct's own <code>K</code> and <code>V</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
 </tr>
 <tr>
 <td>②</td>
 <td><code>&lt;</code> immediately after <code>HashMap</code></td>
 <td>SUPPLY</td>
+<td><code>K</code>: passed on, from <code>struct MyMap&lt;K, V&gt;</code>; <code>V</code>: passed on, from <code>struct MyMap&lt;K, V&gt;</code></td>
 <td>Fills <code>HashMap</code>'s <code>K</code> and <code>V</code> with the struct's <code>K</code> and <code>V</code>. The default fills <code>S</code> with <code>RandomState</code> (item 16).</td>
 </tr>
 <tr>
 <td>③</td>
 <td><code>&lt;</code> immediately after <code>impl</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>① in the excerpt.</td>
 </tr>
 <tr>
 <td>④</td>
 <td><code>&lt;</code> immediately after <code>FromIterator</code></td>
 <td>SUPPLY</td>
+<td><code>(&amp;'a K, V)</code>: built from passed-on <code>'a</code>, <code>K</code>, <code>V</code></td>
 <td>⑤ in the excerpt.</td>
 </tr>
 <tr>
 <td>⑤</td>
 <td><code>&lt;</code> immediately after <code>MyMap</code> in the impl header</td>
 <td>SUPPLY</td>
+<td><code>&amp;'a K</code>: built from passed-on <code>'a</code>, <code>K</code>; <code>V</code>: passed on, from <code>impl&lt;'a, K: Hash + Eq, V&gt;</code></td>
 <td>⑨ in the excerpt.</td>
 </tr>
 <tr>
 <td>⑥</td>
 <td><code>&lt;</code> immediately after <code>from_iter</code></td>
 <td>DECLARE</td>
+<td></td>
 <td>Declares <code>I</code> with the bound <code>IntoIterator&lt;Item = (&amp;'a K, V)&gt;</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>from_iter</code>'s body. std declares the same method as <code>fn from_iter&lt;T: IntoIterator&lt;Item = A&gt;&gt;(iter: T) -&gt; Self;</code>, and an impl may rename <code>T</code> to <code>I</code>.</td>
 </tr>
 <tr>
 <td>⑦</td>
 <td><code>&lt;</code> immediately after <code>IntoIterator</code></td>
 <td>other: associated type binding</td>
+<td></td>
 <td>Requires <code>I</code>'s <code>Item</code> to be <code>(&amp;'a K, V)</code>, the tuple that ④ supplied.</td>
 </tr>
 <tr>
 <td>⑧</td>
 <td><code>&lt;</code> immediately after <code>MyMap</code> in <code>let map: MyMap&lt;&amp;String, u8&gt;</code></td>
 <td>SUPPLY</td>
+<td><code>&amp;String</code>: concrete; <code>u8</code>: concrete</td>
 <td>Fills the struct's <code>K</code> with <code>&amp;String</code> and <code>V</code> with <code>u8</code>, chosen by the author of the <code>let map</code> line.</td>
 </tr>
 </tbody>
