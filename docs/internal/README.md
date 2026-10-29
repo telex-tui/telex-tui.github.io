@@ -8,7 +8,10 @@ Working notes for maintaining this blog. Not published to the site.
 index.html          — site homepage
 style.css           — all styles (one file, no build step)
 blog/
-  index.html        — blog listing page
+  index.html        — blog listing page (published posts only)
+  drafted-ai-crazies.html — "DraftedAICrazies": lists every hidden page
+  drafti.html       — older working index for the challenge series
+  draft*.html       — hidden drafts (unpublished)
   *.html            — individual posts
 assets/             — images, favicon
 docs/internal/      — this directory
@@ -19,10 +22,41 @@ No static site generator. Everything is hand-rolled HTML.
 ## Writing a new post
 
 1. Create `blog/your-post-slug.html` matching the structure of an existing post.
-2. Preview locally (see below).
-3. When ready to publish, add an entry to `blog/index.html` and commit + push.
+2. Add `<meta name="robots" content="noindex, nofollow">` to its `<head>`.
+3. List it on `blog/drafted-ai-crazies.html` (see below).
+4. Preview locally (see below).
+5. When ready to publish, follow "Publishing a post".
 
 **Do not add to `blog/index.html` until the post is ready to publish.**
+
+## Hidden posts and the DraftedAICrazies page
+
+A post is hidden when its file is in `blog/` but it isn't listed in `blog/index.html`. Hidden is not private: anyone who has the URL can read it, and the repo itself is public.
+
+`blog/drafted-ai-crazies.html` is the one page that lists **every** hidden page. It's linked from the nav on every page as "DraftedAICrazies", and it opens with a warning that this is a test bed for unfinished, AI-assisted work that readers shouldn't rely on, quote or share. The page itself has `noindex, nofollow`.
+
+How it's organised:
+
+- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
+- **Challenge series** — the two challenge series, each challenge with links to part A (problem + multiple choice) and part B (solution):
+  - Rust Design Challenges 1–27 = `draft10a/b.html` … `draft36a/b.html`
+  - Rust Idioms Challenges 1–14 = `draft37a/b.html` … `draft50a/b.html`
+- `drafti.html` — the older "Draft Index" page for the challenges. It has its own inline styling and isn't linked from the nav; it's listed on DraftedAICrazies.
+
+Naming: hidden articles have so far used `draftN.html` (next free number: `draft52.html`), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
+
+Keeping it current:
+
+- New hidden page → add it to `blog/drafted-ai-crazies.html` in the same commit.
+- Publishing a post → remove it from `blog/drafted-ai-crazies.html` in the same commit as adding it to `blog/index.html`.
+- To check nothing is missing, every `blog/*.html` file should be linked from either `blog/index.html` or `blog/drafted-ai-crazies.html`:
+
+```bash
+cd blog
+comm -23 <(ls *.html | grep -vx -e index.html -e drafted-ai-crazies.html | sort) \
+         <(cat index.html drafted-ai-crazies.html | grep -o 'href="[^"/]*\.html"' | sed 's/href="//;s/"//' | sort -u)
+# prints nothing when every page is listed
+```
 
 ## Post structure
 
@@ -91,7 +125,7 @@ Must use a server — root-relative links (`/blog/`, `/`) break under `file://`.
 
 ## Publishing a post
 
-1. Add a `.post-item` entry at the top of the list in `blog/index.html`:
+1. Add a `.post-item` entry at the top of the list in `blog/index.html`, remove the post from `blog/drafted-ai-crazies.html`, and delete its `noindex` meta tag:
 
 ```html
 <li class="post-item">
@@ -106,7 +140,7 @@ Must use a server — root-relative links (`/blog/`, `/`) break under `file://`.
 2. Commit and push:
 
 ```bash
-git add blog/your-post-slug.html blog/index.html
+git add blog/your-post-slug.html blog/index.html blog/drafted-ai-crazies.html
 git commit -m "Publish: Post Title"
 git push
 ```
