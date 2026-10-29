@@ -608,3 +608,33 @@ footer a:hover {
   float: right;
   margin-left: 1rem;
 }
+
+/* ── Long-form guide (Angle Brackets in Rust) ── */
+
+.guide .table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.guide .table-wrap table {
+  margin-bottom: 0;
+}
+
+.guide li code {
+  background: var(--bg-code);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.guide td code {
+  white-space: normal;
+}
+
+.mk { color: var(--orange); }        /* caret lines marking brackets */
+
+@media (max-width: 640px) {
+  .guide .table-wrap table {
+    min-width: 600px;
+  }
+}

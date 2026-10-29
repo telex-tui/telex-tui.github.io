@@ -37,13 +37,13 @@ A post is hidden when its file is in `blog/` but it isn't listed in `blog/index.
 
 How it's organised:
 
-- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
+- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft52-part1.html`–`draft52-part4.html` (Angle Brackets in Rust, a four-part series), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
 - **Challenge series** — the two challenge series, each challenge with links to part A (problem + multiple choice) and part B (solution):
   - Rust Design Challenges 1–27 = `draft10a/b.html` … `draft36a/b.html`
   - Rust Idioms Challenges 1–14 = `draft37a/b.html` … `draft50a/b.html`
 - `drafti.html` — the older "Draft Index" page for the challenges. It has its own inline styling and isn't linked from the nav; it's listed on DraftedAICrazies.
 
-Naming: hidden articles have so far used `draftN.html` (next free number: `draft52.html`), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
+Naming: hidden articles have so far used `draftN.html` (next free number: `draft53`; a multi-part draft uses `draftN-part1.html`, `draftN-part2.html`, …), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
 
 Keeping it current:
 

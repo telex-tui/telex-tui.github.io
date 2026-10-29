@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Angle Brackets in Rust, Part 4: Summary Table, Procedure and Quiz - Telex</title>
+  <meta name="description" content="Every bracket position in one table, a step-by-step identification procedure, a worked example and a ten-question quiz.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post guide">
+      <h1>Angle Brackets in Rust, Part 4: Summary Table, Procedure and Quiz</h1>
+      <div class="post-meta">October 2026</div>
+      <p class="series-nav">Part 4 of 4 in <a href="#series-index">Angle Brackets in Rust</a>, a guide to every place <code>&lt; &gt;</code> appears in Rust syntax.</p>
+      <p class="series-nav">Previous: <a href="draft52-part3.html">Part 3: Items 13–18</a> | Next: none</p>
+      <p class="note">Every example was compiled with rustc 1.97.0, edition 2024. Part 1 explains the caret lines, the circled numbers and the DECLARE / SUPPLY labels used throughout.</p>
+
+<h2>Every bracket position in one table</h2>
+<p>Three compiled programs hold one example of every position, marked. The table after them lists each position once and points to its mark: A① means mark ① in program A.</p>
+<h3>Program A: DECLARE positions</h3>
+<p><strong>Compiles.</strong> <code>#![allow(dead_code)]</code> on the first line turns off the warnings for items that <code>main</code> doesn't use; it has no brackets.</p>
+<pre><code><span class="cm">#![allow(dead_code)]</span>
+
+<span class="kw">fn</span> <span class="fn">first</span>&lt;<span class="ty">T</span>: <span class="ty">Copy</span>&gt;(items: &amp;[<span class="ty">T</span>]) -&gt; <span class="ty">T</span> {
+<span class="mk">//      ^^^^^^^^^</span>
+<span class="mk">//      ①</span>
+    items[<span class="num">0</span>]
+}
+
+<span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//            ^^^</span>
+<span class="mk">//            ②</span>
+    value: <span class="ty">T</span>,
+}
+
+<span class="kw">enum</span> <span class="ty">Either</span>&lt;<span class="ty">L</span>, <span class="ty">R</span> = <span class="ty">L</span>&gt; {
+<span class="mk">//         ^^^^^^^^^^</span>
+<span class="mk">//         ③</span>
+    <span class="ty">Left</span>(<span class="ty">L</span>),
+    <span class="ty">Right</span>(<span class="ty">R</span>),
+}
+
+<span class="kw">union</span> <span class="ty">Bits</span>&lt;<span class="ty">T</span>: <span class="ty">Copy</span>&gt; {
+<span class="mk">//        ^^^^^^^^^</span>
+<span class="mk">//        ④</span>
+    value: <span class="ty">T</span>,
+    raw: <span class="ty">u64</span>,
+}
+
+<span class="kw">type</span> <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; = (<span class="ty">T</span>, <span class="ty">T</span>);
+<span class="mk">//       ^^^</span>
+<span class="mk">//       ⑤</span>
+
+<span class="kw">trait</span> <span class="ty">Processor</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//             ^^^</span>
+<span class="mk">//             ⑥</span>
+    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">T</span>: <span class="ty">Copy</span>&gt; <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//  ^^^^^^^^^        ^^^</span>
+<span class="mk">//  ⑦                ⑧</span>
+    <span class="kw">fn</span> <span class="fn">get</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">T</span> {
+        <span class="kw">self</span>.value
+    }
+    <span class="kw">fn</span> <span class="fn">pair_with</span>&lt;<span class="ty">U</span>&gt;(&amp;<span class="kw">self</span>, other: <span class="ty">U</span>) -&gt; (<span class="ty">T</span>, <span class="ty">U</span>) {
+<span class="mk">    //          ^^^</span>
+<span class="mk">    //          ⑨</span>
+        (<span class="kw">self</span>.value, other)
+    }
+}
+
+<span class="kw">struct</span> <span class="ty">Buf</span>&lt;<span class="kw">const</span> <span class="ty">N</span>: <span class="ty">usize</span>&gt; {
+<span class="mk">//        ^^^^^^^^^^^^^^^^</span>
+<span class="mk">//        ⑩</span>
+    data: [<span class="ty">u8</span>; <span class="ty">N</span>],
+}
+
+<span class="kw">trait</span> <span class="ty">Lender</span> {
+    <span class="kw">type</span> <span class="ty">Item</span>&lt;<span class="kw">'a</span>&gt; <span class="kw">where</span> <span class="kw">Self</span>: <span class="kw">'a</span>;
+<span class="mk">    //       ^^^^</span>
+<span class="mk">    //       ⑪</span>
+    <span class="kw">fn</span> <span class="fn">lend</span>&lt;<span class="kw">'a</span>&gt;(&amp;<span class="kw">'a</span> <span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&lt;<span class="kw">'a</span>&gt;&gt;;
+<span class="mk">    //     ^^^^                        ^^^^^^^^^^^^^^^^</span>
+<span class="mk">    //     ⑫                           ⑬</span>
+<span class="mk">    //                                            ^^^^</span>
+<span class="mk">    //                                            ⑭</span>
+}
+
+<span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="ty">F</span>&gt;(f: <span class="ty">F</span>) -&gt; <span class="ty">usize</span>
+<span class="mk">//      ^^^</span>
+<span class="mk">//      ⑮</span>
+<span class="kw">where</span>
+    <span class="ty">F</span>: <span class="kw">for</span>&lt;<span class="kw">'a</span>&gt; <span class="ty">Fn</span>(&amp;<span class="kw">'a</span> <span class="ty">str</span>) -&gt; &amp;<span class="kw">'a</span> <span class="ty">str</span>,
+<span class="mk">    //    ^^^^</span>
+<span class="mk">    //    ⑯</span>
+{
+    <span class="fn">f</span>(<span class="str">"text"</span>).<span class="fn">len</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> w = <span class="ty">Wrapper</span> { value: <span class="fn">first</span>(&amp;[<span class="num">3</span>, <span class="num">4</span>]) };
+    <span class="mac">println!</span>(<span class="str">"{} {:?} {}"</span>, w.<span class="fn">get</span>(), w.<span class="fn">pair_with</span>(<span class="str">'x'</span>), <span class="fn">apply</span>(|s| s));
+}</code></pre>
+<p>Output:</p>
+<pre><code>3 (3, 'x') 4</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Position</th>
+<th>Label</th>
+<th>Scope, or what it fills</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><code>&lt;</code> immediately after <code>first</code></td>
+<td>DECLARE</td>
+<td><code>T</code> with the bound <code>Copy</code>. Scope: to the closing <code>}</code> of <code>first</code>'s body.</td>
+</tr>
+<tr>
+<td>②</td>
+<td><code>&lt;</code> immediately after <code>Wrapper</code> in the struct</td>
+<td>DECLARE</td>
+<td><code>T</code>. Scope: to the struct's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>③</td>
+<td><code>&lt;</code> immediately after <code>Either</code></td>
+<td>DECLARE</td>
+<td><code>L</code>, and <code>R</code> with the default <code>L</code>. Scope: to the enum's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>④</td>
+<td><code>&lt;</code> immediately after <code>Bits</code></td>
+<td>DECLARE</td>
+<td><code>T</code> with the bound <code>Copy</code>. Scope: to the union's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><code>&lt;</code> immediately after <code>Pair</code></td>
+<td>DECLARE</td>
+<td><code>T</code>. Scope: to the <code>;</code>.</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><code>&lt;</code> immediately after <code>Processor</code></td>
+<td>DECLARE</td>
+<td><code>T</code>. Scope: to the trait's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><code>&lt;</code> immediately after <code>impl</code></td>
+<td>DECLARE</td>
+<td><code>T</code> with the bound <code>Copy</code>. Scope: to the impl's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>impl&lt;T: Copy&gt; Wrapper&lt;T&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T: Copy&gt;</code>.</td>
+</tr>
+<tr>
+<td>⑨</td>
+<td><code>&lt;</code> immediately after <code>pair_with</code></td>
+<td>DECLARE</td>
+<td><code>U</code>. Scope: to the closing <code>}</code> of <code>pair_with</code>'s body.</td>
+</tr>
+<tr>
+<td>⑩</td>
+<td><code>&lt;</code> immediately after <code>Buf</code></td>
+<td>DECLARE</td>
+<td>The const parameter <code>N</code>. Scope: to the struct's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑪</td>
+<td><code>&lt;</code> immediately after <code>Item</code> in <code>type Item&lt;'a&gt;</code></td>
+<td>DECLARE</td>
+<td><code>'a</code> for the associated type. Scope: to the <code>;</code>.</td>
+</tr>
+<tr>
+<td>⑫</td>
+<td><code>&lt;</code> immediately after <code>lend</code></td>
+<td>DECLARE</td>
+<td><code>'a</code> for the method. Scope: to the <code>;</code> that ends <code>lend</code>'s declaration.</td>
+</tr>
+<tr>
+<td>⑬</td>
+<td><code>&lt;</code> immediately after <code>Option</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>Option</code>'s <code>T</code> with <code>Self::Item&lt;'a&gt;</code>.</td>
+</tr>
+<tr>
+<td>⑭</td>
+<td><code>&lt;</code> immediately after <code>Item</code> in <code>Self::Item&lt;'a&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>Item</code>'s <code>'a</code> with <code>'a</code> from <code>fn lend&lt;'a&gt;</code>.</td>
+</tr>
+<tr>
+<td>⑮</td>
+<td><code>&lt;</code> immediately after <code>apply</code></td>
+<td>DECLARE</td>
+<td><code>F</code>. Scope: to the closing <code>}</code> of <code>apply</code>'s body, including the <code>where</code> clause.</td>
+</tr>
+<tr>
+<td>⑯</td>
+<td><code>&lt;</code> immediately after <code>for</code></td>
+<td>DECLARE (higher-ranked)</td>
+<td><code>'a</code>. Scope: only the bound <code>Fn(&amp;'a str) -&gt; &amp;'a str</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<h3>Program B: SUPPLY positions</h3>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+
+<span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//            ^^^</span>
+<span class="mk">//            ①</span>
+    value: <span class="ty">T</span>,
+}
+
+<span class="kw">trait</span> <span class="ty">Processor</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//             ^^^</span>
+<span class="mk">//             ②</span>
+    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">Logger</span>;
+
+<span class="kw">impl</span> <span class="ty">Processor</span>&lt;<span class="ty">i32</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
+<span class="mk">//            ^^^^^</span>
+<span class="mk">//            ③</span>
+    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">i32</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"log {input}"</span>)
+    }
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">From</span>&lt;<span class="ty">T</span>&gt; <span class="kw">for</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//  ^^^     ^^^            ^^^</span>
+<span class="mk">//  ④       ⑤              ⑥</span>
+    <span class="kw">fn</span> <span class="fn">from</span>(value: <span class="ty">T</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">Wrapper</span> { value }
+    }
+}
+
+<span class="kw">struct</span> <span class="ty">Buf</span>&lt;<span class="kw">const</span> <span class="ty">N</span>: <span class="ty">usize</span>&gt; {
+<span class="mk">//        ^^^^^^^^^^^^^^^^</span>
+<span class="mk">//        ⑦</span>
+    data: [<span class="ty">u8</span>; <span class="ty">N</span>],
+}
+
+<span class="kw">struct</span> <span class="ty">Holder</span>&lt;<span class="kw">'a</span>&gt; {
+<span class="mk">//           ^^^^</span>
+<span class="mk">//           ⑧</span>
+    text: &amp;<span class="kw">'a</span> <span class="ty">str</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> ages: <span class="ty">HashMap</span>&lt;<span class="ty">String</span>, <span class="ty">u8</span>&gt; = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+<span class="mk">    //               ^^^^^^^^^^^^</span>
+<span class="mk">    //               ⑨</span>
+    <span class="kw">let</span> nested: <span class="ty">Vec</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;&gt; = <span class="ty">Vec</span>::<span class="fn">new</span>();
+<span class="mk">    //             ^^^^^^^^^</span>
+<span class="mk">    //             ⑩</span>
+<span class="mk">    //                 ^^^^</span>
+<span class="mk">    //                 ⑪</span>
+    <span class="kw">let</span> h: <span class="ty">Holder</span>&lt;<span class="kw">'static</span>&gt; = <span class="ty">Holder</span> { text: <span class="str">"hi"</span> };
+<span class="mk">    //           ^^^^^^^^^</span>
+<span class="mk">    //           ⑫</span>
+    <span class="kw">let</span> n = <span class="str">"5"</span>.<span class="fn">parse</span>::&lt;<span class="ty">u8</span>&gt;().<span class="fn">unwrap</span>();
+<span class="mk">    //                 ^^^^</span>
+<span class="mk">    //                 ⑬</span>
+    <span class="kw">let</span> v = <span class="ty">Vec</span>::&lt;<span class="ty">u8</span>&gt;::<span class="fn">with_capacity</span>(<span class="num">2</span>);
+<span class="mk">    //           ^^^^</span>
+<span class="mk">    //           ⑭</span>
+    <span class="kw">let</span> w: <span class="ty">Wrapper</span>&lt;<span class="ty">char</span>&gt; = <span class="ty">Wrapper</span>::<span class="fn">from</span>(<span class="str">'w'</span>);
+<span class="mk">    //            ^^^^^^</span>
+<span class="mk">    //            ⑮</span>
+    <span class="kw">let</span> b: <span class="ty">Buf</span>&lt;<span class="num">4</span>&gt; = <span class="ty">Buf</span> { data: [<span class="num">0</span>; <span class="num">4</span>] };
+<span class="mk">    //        ^^^</span>
+<span class="mk">    //        ⑯</span>
+    <span class="kw">let</span> c: <span class="ty">Buf</span>&lt;{ <span class="num">2</span> * <span class="num">3</span> }&gt; = <span class="ty">Buf</span> { data: [<span class="num">0</span>; <span class="num">6</span>] };
+<span class="mk">    //        ^^^^^^^^^^^</span>
+<span class="mk">    //        ⑰</span>
+    <span class="kw">let</span> size = std::mem::<span class="fn">size_of</span>::&lt;<span class="ty">u64</span>&gt;();
+<span class="mk">    //                            ^^^^^</span>
+<span class="mk">    //                            ⑱</span>
+    <span class="kw">let</span> p: <span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Processor</span>&lt;<span class="ty">i32</span>&gt;&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Logger</span>);
+<span class="mk">    //        ^^^^^^^^^^^^^^^^^^^^</span>
+<span class="mk">    //        ⑲</span>
+<span class="mk">    //                      ^^^^^</span>
+<span class="mk">    //                      ⑳</span>
+    <span class="mac">println!</span>(<span class="str">"{} {} {} {n} {} {}"</span>, ages.<span class="fn">len</span>(), nested.<span class="fn">len</span>(), h.text, v.<span class="fn">capacity</span>(), w.value);
+    <span class="mac">println!</span>(<span class="str">"{} {} {size} {}"</span>, b.data.<span class="fn">len</span>(), c.data.<span class="fn">len</span>(), p.<span class="fn">process</span>(<span class="num">5</span>));
+}</code></pre>
+<p>Output:</p>
+<pre><code>0 0 hi 5 2 w
+4 6 8 log 5</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Position</th>
+<th>Label</th>
+<th>Scope, or what it fills</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><code>&lt;</code> immediately after <code>Wrapper</code> in the struct</td>
+<td>DECLARE</td>
+<td><code>T</code>. Scope: to the struct's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>②</td>
+<td><code>&lt;</code> immediately after <code>Processor</code> in the trait</td>
+<td>DECLARE</td>
+<td><code>T</code>. Scope: to the trait's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>③</td>
+<td><code>&lt;</code> immediately after <code>Processor</code> in <code>impl Processor&lt;i32&gt; for Logger</code></td>
+<td>SUPPLY</td>
+<td>Fills the trait's <code>T</code> with <code>i32</code>, chosen by the implementor.</td>
+</tr>
+<tr>
+<td>④</td>
+<td><code>&lt;</code> immediately after <code>impl</code></td>
+<td>DECLARE</td>
+<td><code>T</code>. Scope: to the impl's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><code>&lt;</code> immediately after <code>From</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>From</code>'s parameter with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>for Wrapper&lt;T&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills the struct's <code>T</code> with <code>T</code> from <code>impl&lt;T&gt;</code>.</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><code>&lt;</code> immediately after <code>Buf</code></td>
+<td>DECLARE</td>
+<td>The const parameter <code>N</code>. Scope: to the struct's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><code>&lt;</code> immediately after <code>Holder</code> in the struct</td>
+<td>DECLARE</td>
+<td><code>'a</code>. Scope: to the struct's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>⑨</td>
+<td><code>&lt;</code> immediately after <code>HashMap</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>K</code> with <code>String</code> and <code>V</code> with <code>u8</code>, chosen by the author of the <code>let ages</code> line; the default fills <code>S</code>.</td>
+</tr>
+<tr>
+<td>⑩</td>
+<td><code>&lt;</code> immediately after the first <code>Vec</code></td>
+<td>SUPPLY</td>
+<td>Fills the outer <code>Vec</code>'s <code>T</code> with <code>Vec&lt;u8&gt;</code>, chosen by the author of the <code>let nested</code> line.</td>
+</tr>
+<tr>
+<td>⑪</td>
+<td><code>&lt;</code> immediately after the second <code>Vec</code></td>
+<td>SUPPLY</td>
+<td>Fills the inner <code>Vec</code>'s <code>T</code> with <code>u8</code>.</td>
+</tr>
+<tr>
+<td>⑫</td>
+<td><code>&lt;</code> immediately after <code>Holder</code> in <code>let h: Holder&lt;'static&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>'a</code> with <code>'static</code>, chosen by the author of the <code>let h</code> line.</td>
+</tr>
+<tr>
+<td>⑬</td>
+<td><code>&lt;</code> immediately after <code>::</code> in <code>"5".parse::&lt;u8&gt;()</code></td>
+<td>SUPPLY (turbofish)</td>
+<td>Fills <code>parse</code>'s <code>F</code> with <code>u8</code>. The caller chose it.</td>
+</tr>
+<tr>
+<td>⑭</td>
+<td><code>&lt;</code> immediately after <code>::</code> in <code>Vec::&lt;u8&gt;::with_capacity(2)</code></td>
+<td>SUPPLY (turbofish)</td>
+<td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>, chosen by the author of the <code>let v</code> line.</td>
+</tr>
+<tr>
+<td>⑮</td>
+<td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>let w: Wrapper&lt;char&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills the struct's <code>T</code> with <code>char</code>, chosen by the author of the <code>let w</code> line. Matching then fills <code>T</code> from <code>impl&lt;T&gt;</code> with <code>char</code> for <code>Wrapper::from('w')</code>.</td>
+</tr>
+<tr>
+<td>⑯</td>
+<td><code>&lt;</code> immediately after <code>Buf</code> in <code>let b: Buf&lt;4&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>N</code> with <code>4</code>, chosen by the author of the <code>let b</code> line.</td>
+</tr>
+<tr>
+<td>⑰</td>
+<td><code>&lt;</code> immediately after <code>Buf</code> in <code>let c: Buf&lt;{ 2 * 3 }&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>N</code> with <code>6</code>. An expression needs braces.</td>
+</tr>
+<tr>
+<td>⑱</td>
+<td><code>&lt;</code> immediately after <code>::</code> in <code>std::mem::size_of::&lt;u64&gt;()</code></td>
+<td>SUPPLY (turbofish)</td>
+<td>Fills <code>size_of</code>'s parameter with <code>u64</code>. The caller chose it.</td>
+</tr>
+<tr>
+<td>⑲</td>
+<td><code>&lt;</code> immediately after <code>Box</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>Box</code>'s first parameter with <code>dyn Processor&lt;i32&gt;</code>, chosen by the author of the <code>let p</code> line.</td>
+</tr>
+<tr>
+<td>⑳</td>
+<td><code>&lt;</code> immediately after <code>Processor</code> inside ⑲</td>
+<td>SUPPLY</td>
+<td>Fills the trait's <code>T</code> with <code>i32</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<h3>Program C: other positions</h3>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Display</span>;
+
+<span class="kw">fn</span> <span class="fn">show_all</span>&lt;<span class="ty">I</span>&gt;(items: <span class="ty">I</span>) -&gt; <span class="ty">String</span>
+<span class="mk">//         ^^^</span>
+<span class="mk">//         ①</span>
+<span class="kw">where</span>
+    <span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span>: <span class="ty">Display</span>&gt;,
+<span class="mk">    //         ^^^^^^^^^^^^^^^</span>
+<span class="mk">    //         ②</span>
+{
+    items.<span class="fn">map</span>(|x| x.<span class="fn">to_string</span>()).<span class="fn">collect</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">evens</span>(limit: <span class="ty">u32</span>) -&gt; <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">u32</span>&gt; {
+<span class="mk">//                                   ^^^^^^^^^^^^</span>
+<span class="mk">//                                   ③</span>
+    (<span class="num">0</span>..limit).<span class="fn">filter</span>(|n| n % <span class="num">2</span> == <span class="num">0</span>)
+}
+
+<span class="kw">fn</span> <span class="fn">chars_of</span>&lt;<span class="kw">'a</span>&gt;(text: &amp;<span class="kw">'a</span> <span class="ty">str</span>, _unused: &amp;<span class="ty">u8</span>) -&gt; <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">char</span>&gt; + <span class="kw">use</span>&lt;<span class="kw">'a</span>&gt; {
+<span class="mk">//         ^^^^                                              ^^^^^^^^^^^^^      ^^^^</span>
+<span class="mk">//         ④                                                 ⑤                  ⑥</span>
+    text.<span class="fn">chars</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">first_item</span>&lt;<span class="ty">T</span>: <span class="ty">Iterator</span>&gt;(<span class="kw">mut</span> it: <span class="ty">T</span>) -&gt; <span class="ty">Option</span>&lt;&lt;<span class="ty">T</span> <span class="kw">as</span> <span class="ty">Iterator</span>&gt;::<span class="ty">Item</span>&gt; {
+<span class="mk">//           ^^^^^^^^^^^^^                     ^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="mk">//           ⑦                                 ⑧</span>
+<span class="mk">//                                              ^^^^^^^^^^^^^^^</span>
+<span class="mk">//                                              ⑨</span>
+    it.<span class="fn">next</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">greet</span>&lt;<span class="ty">S</span>: <span class="ty">Into</span>&lt;<span class="ty">String</span>&gt;&gt;(name: <span class="ty">S</span>) -&gt; <span class="ty">String</span> {
+<span class="mk">//      ^^^^^^^^^^^^^^^^^</span>
+<span class="mk">//      ⑩</span>
+<span class="mk">//              ^^^^^^^^</span>
+<span class="mk">//              ⑪</span>
+    name.<span class="fn">into</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> empty = &lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; <span class="kw">as</span> <span class="ty">Default</span>&gt;::<span class="fn">default</span>();
+<span class="mk">    //          ^^^^^^^^^^^^^^^^^^^^</span>
+<span class="mk">    //          ⑫</span>
+<span class="mk">    //              ^^^^</span>
+<span class="mk">    //              ⑬</span>
+    <span class="kw">let</span> len = &lt;[<span class="ty">i32</span>]&gt;::<span class="fn">len</span>(&amp;[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]);
+<span class="mk">    //        ^^^^^^^</span>
+<span class="mk">    //        ⑭</span>
+    <span class="kw">let</span> small = len &lt; <span class="num">5</span>;
+<span class="mk">    //              ^</span>
+<span class="mk">    //              ⑮</span>
+    <span class="kw">let</span> shifted = len &lt;&lt; <span class="num">1</span>;
+<span class="mk">    //                ^^</span>
+<span class="mk">    //                ⑯</span>
+    <span class="mac">println!</span>(<span class="str">"{} {} {}"</span>, <span class="fn">show_all</span>(<span class="fn">evens</span>(<span class="num">5</span>)), empty.<span class="fn">len</span>(), <span class="fn">greet</span>(<span class="str">"ann"</span>));
+    <span class="mac">println!</span>(<span class="str">"{len} {small} {shifted} {:?} {:?}"</span>, <span class="fn">first_item</span>(<span class="fn">chars_of</span>(<span class="str">"hi"</span>, &amp;<span class="num">0</span>)), <span class="fn">first_item</span>(<span class="num">1</span>..<span class="num">3</span>));
+    <span class="mac">println!</span>(<span class="str">"[{:&lt;4}]"</span>, <span class="str">"ab"</span>);
+<span class="mk">    //           ^</span>
+<span class="mk">    //           ⑰</span>
+}</code></pre>
+<p>Output:</p>
+<pre><code>024 0 ann
+3 true 6 Some('h') Some(1)
+[ab  ]</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Position</th>
+<th>Label</th>
+<th>Scope, or what it fills</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><code>&lt;</code> immediately after <code>show_all</code></td>
+<td>DECLARE</td>
+<td><code>I</code>. Scope: to the closing <code>}</code> of <code>show_all</code>'s body, including the <code>where</code> clause.</td>
+</tr>
+<tr>
+<td>②</td>
+<td><code>&lt;</code> immediately after <code>Iterator</code> in <code>I: Iterator&lt;Item: Display&gt;</code></td>
+<td>other: associated type bound</td>
+<td>Requires <code>I</code>'s <code>Item</code> to implement <code>Display</code>.</td>
+</tr>
+<tr>
+<td>③</td>
+<td><code>&lt;</code> immediately after <code>Iterator</code> in <code>evens</code>'s return type</td>
+<td>other: associated type binding</td>
+<td>Promises <code>Item = u32</code>.</td>
+</tr>
+<tr>
+<td>④</td>
+<td><code>&lt;</code> immediately after <code>chars_of</code></td>
+<td>DECLARE</td>
+<td><code>'a</code>. Scope: to the closing <code>}</code> of <code>chars_of</code>'s body.</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><code>&lt;</code> immediately after <code>Iterator</code> in <code>chars_of</code>'s return type</td>
+<td>other: associated type binding</td>
+<td>Promises <code>Item = char</code>.</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><code>&lt;</code> immediately after <code>use</code></td>
+<td>other: precise capturing list</td>
+<td>The hidden type may use <code>'a</code> only.</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><code>&lt;</code> immediately after <code>first_item</code></td>
+<td>DECLARE</td>
+<td><code>T</code> with the bound <code>Iterator</code>. Scope: to the closing <code>}</code> of <code>first_item</code>'s body.</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><code>&lt;</code> immediately after <code>Option</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>Option</code>'s <code>T</code> with <code>&lt;T as Iterator&gt;::Item</code>.</td>
+</tr>
+<tr>
+<td>⑨</td>
+<td><code>&lt;</code> immediately after the <code>&lt;</code> of ⑧</td>
+<td>other: qualified path</td>
+<td>Names <code>Iterator</code>'s <code>Item</code> for <code>T</code>.</td>
+</tr>
+<tr>
+<td>⑩</td>
+<td><code>&lt;</code> immediately after <code>greet</code></td>
+<td>DECLARE</td>
+<td><code>S</code> with the bound <code>Into&lt;String&gt;</code>. Scope: to the closing <code>}</code> of <code>greet</code>'s body.</td>
+</tr>
+<tr>
+<td>⑪</td>
+<td><code>&lt;</code> immediately after <code>Into</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>Into</code>'s parameter with <code>String</code>, chosen by the author of <code>greet</code>.</td>
+</tr>
+<tr>
+<td>⑫</td>
+<td><code>&lt;</code> immediately after <code>=</code> in <code>let empty = &lt;Vec&lt;u8&gt; as Default&gt;</code></td>
+<td>other: qualified path</td>
+<td>Names <code>default</code> from <code>impl Default for Vec&lt;u8&gt;</code>.</td>
+</tr>
+<tr>
+<td>⑬</td>
+<td><code>&lt;</code> immediately after <code>Vec</code> inside ⑫</td>
+<td>SUPPLY</td>
+<td>Fills <code>Vec</code>'s <code>T</code> with <code>u8</code>.</td>
+</tr>
+<tr>
+<td>⑭</td>
+<td><code>&lt;</code> immediately after <code>=</code> in <code>let len = &lt;[i32]&gt;</code></td>
+<td>other: qualified path, without <code>as</code></td>
+<td>Wraps the type <code>[i32]</code> so <code>::len</code> can follow.</td>
+</tr>
+<tr>
+<td>⑮</td>
+<td><code>&lt;</code> immediately after <code>len</code> in <code>len &lt; 5</code></td>
+<td>other: less-than operator</td>
+<td><code>3 &lt; 5</code> is <code>true</code>.</td>
+</tr>
+<tr>
+<td>⑯</td>
+<td><code>&lt;&lt;</code> immediately after <code>len</code></td>
+<td>other: left shift operator</td>
+<td><code>3 &lt;&lt; 1</code> is <code>6</code>.</td>
+</tr>
+<tr>
+<td>⑰</td>
+<td><code>&lt;</code> immediately after <code>:</code> inside <code>"[{:&lt;4}]"</code></td>
+<td>other: inside a string literal</td>
+<td>Not Rust syntax: a format spec, left-align in a width of 4.</td>
+</tr>
+</tbody>
+</table></div>
+<h3>The table</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Token immediately before the <code>&lt;</code> (example)</th>
+<th>Mark</th>
+<th>Label</th>
+<th>Who chooses the concrete type</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a function name being defined: <code>fn first&lt;T: Copy&gt;</code></td>
+<td>A①</td>
+<td>DECLARE</td>
+<td>the caller: a turbofish <code>first::&lt;u8&gt;(…)</code>, or inference from the arguments</td>
+<td>per call; one compiled copy per distinct type</td>
+</tr>
+<tr>
+<td>a method name being defined: <code>fn pair_with&lt;U&gt;</code></td>
+<td>A⑨</td>
+<td>DECLARE</td>
+<td>the caller: <code>w.pair_with::&lt;char&gt;('x')</code>, or inference</td>
+<td>per call</td>
+</tr>
+<tr>
+<td>a struct, enum or union name being defined: <code>struct Wrapper&lt;T&gt;</code>, <code>enum Either&lt;L, R = L&gt;</code>, <code>union Bits&lt;T: Copy&gt;</code></td>
+<td>A② A③ A④</td>
+<td>DECLARE</td>
+<td>whoever writes the type with a SUPPLY list, as at B⑮, or inference from the field values</td>
+<td>per variable or expression</td>
+</tr>
+<tr>
+<td>a type alias name being defined: <code>type Pair&lt;T&gt;</code></td>
+<td>A⑤</td>
+<td>DECLARE</td>
+<td>whoever writes <code>Pair&lt;…&gt;</code></td>
+<td>per use</td>
+</tr>
+<tr>
+<td>a trait name being defined: <code>trait Processor&lt;T&gt;</code></td>
+<td>A⑥</td>
+<td>DECLARE</td>
+<td>the implementor, in the impl header (B③); at a call, inference picks among the impls</td>
+<td>per impl</td>
+</tr>
+<tr>
+<td><code>impl</code>: <code>impl&lt;T: Copy&gt; Wrapper&lt;T&gt;</code></td>
+<td>A⑦</td>
+<td>DECLARE</td>
+<td>matching: the type of the value being used fills it</td>
+<td>per use; one compiled copy per distinct type</td>
+</tr>
+<tr>
+<td>an associated type name being defined: <code>type Item&lt;'a&gt;</code></td>
+<td>A⑪</td>
+<td>DECLARE</td>
+<td>whoever writes <code>Self::Item&lt;'a&gt;</code>, as at A⑭</td>
+<td>per use</td>
+</tr>
+<tr>
+<td><code>for</code> in a bound or type: <code>for&lt;'a&gt; Fn(&amp;'a str) -&gt; &amp;'a str</code></td>
+<td>A⑯</td>
+<td>DECLARE (higher-ranked)</td>
+<td>the borrow checker</td>
+<td>per call through the bound</td>
+</tr>
+<tr>
+<td>inside a DECLARE list, after <code>=</code>: <code>R = L</code></td>
+<td>A③</td>
+<td>default</td>
+<td>the item's author; used only when a SUPPLY list leaves that parameter out</td>
+<td>where the type is written</td>
+</tr>
+<tr>
+<td>a type name in a type: <code>HashMap&lt;String, u8&gt;</code>, <code>Vec&lt;Vec&lt;u8&gt;&gt;</code></td>
+<td>B⑨ B⑩ B⑪</td>
+<td>SUPPLY</td>
+<td>the author of that line</td>
+<td>per variable</td>
+</tr>
+<tr>
+<td>a type name with a lifetime argument: <code>Holder&lt;'static&gt;</code></td>
+<td>B⑫</td>
+<td>SUPPLY</td>
+<td>the author of that line; the borrow checker when the lifetime is left out</td>
+<td>per variable</td>
+</tr>
+<tr>
+<td>a trait name in an impl header: <code>impl Processor&lt;i32&gt; for Logger</code></td>
+<td>B③</td>
+<td>SUPPLY</td>
+<td>the implementor</td>
+<td>per impl</td>
+</tr>
+<tr>
+<td>a type name after <code>for</code> in an impl header: <code>for Wrapper&lt;T&gt;</code></td>
+<td>B⑥</td>
+<td>SUPPLY</td>
+<td>the impl's author writes <code>T</code> from <code>impl&lt;T&gt;</code>; matching fills that <code>T</code></td>
+<td>per use of the impl</td>
+</tr>
+<tr>
+<td><code>::</code> after a function or method name: <code>"5".parse::&lt;u8&gt;()</code>, <code>size_of::&lt;u64&gt;()</code></td>
+<td>B⑬ B⑱</td>
+<td>SUPPLY (turbofish)</td>
+<td>the caller</td>
+<td>per call</td>
+</tr>
+<tr>
+<td><code>::</code> after a type name in an expression: <code>Vec::&lt;u8&gt;::with_capacity(2)</code></td>
+<td>B⑭</td>
+<td>SUPPLY (turbofish)</td>
+<td>the author of that expression</td>
+<td>per expression</td>
+</tr>
+<tr>
+<td>a type name with a const argument: <code>Buf&lt;4&gt;</code>, <code>Buf&lt;{ 2 * 3 }&gt;</code></td>
+<td>B⑯ B⑰</td>
+<td>SUPPLY</td>
+<td>the author of that line, or inference with <code>Buf&lt;_&gt;</code></td>
+<td>per variable</td>
+</tr>
+<tr>
+<td>a trait name in a <code>dyn</code> type: <code>Box&lt;dyn Processor&lt;i32&gt;&gt;</code></td>
+<td>B⑳</td>
+<td>SUPPLY</td>
+<td>the author of that line</td>
+<td>per variable</td>
+</tr>
+<tr>
+<td>a trait name in a bound: <code>S: Into&lt;String&gt;</code></td>
+<td>C⑪</td>
+<td>SUPPLY</td>
+<td>the author of the bound; <code>S</code> itself is chosen by each caller</td>
+<td>once, where the bound is written</td>
+</tr>
+<tr>
+<td>an associated type name in a use: <code>Self::Item&lt;'a&gt;</code></td>
+<td>A⑭</td>
+<td>SUPPLY</td>
+<td>the method's own parameter, which is filled at each call</td>
+<td>per call</td>
+</tr>
+<tr>
+<td>a trait name, followed by <code>Item = u32</code>: <code>impl Iterator&lt;Item = u32&gt;</code></td>
+<td>C③ C⑤</td>
+<td>other: associated type binding</td>
+<td>the author of the bound fixes <code>Item</code>; in a return type the function's author picks the hidden type, in an argument the caller picks the type</td>
+<td>per function, or per call</td>
+</tr>
+<tr>
+<td>a trait name, followed by <code>Item: Display</code>: <code>Iterator&lt;Item: Display&gt;</code></td>
+<td>C②</td>
+<td>other: associated type bound</td>
+<td>the type that fills <code>I</code> must meet it</td>
+<td>per call</td>
+</tr>
+<tr>
+<td>punctuation such as <code>=</code>, <code>(</code>, <code>,</code>, <code>:</code> or another <code>&lt;</code>: <code>&lt;Vec&lt;u8&gt; as Default&gt;::default()</code>, <code>Option&lt;&lt;T as Iterator&gt;::Item&gt;</code></td>
+<td>C⑫ C⑨</td>
+<td>other: qualified path</td>
+<td>the author of the path</td>
+<td>where it is written</td>
+</tr>
+<tr>
+<td>the same, with no <code>as</code>: <code>&lt;[i32]&gt;::len</code></td>
+<td>C⑭</td>
+<td>other: qualified path, without <code>as</code></td>
+<td>the author of the path</td>
+<td>where it is written</td>
+</tr>
+<tr>
+<td><code>use</code> after <code>impl Trait +</code>: <code>use&lt;'a&gt;</code></td>
+<td>C⑥</td>
+<td>other: precise capturing list</td>
+<td>the function's author lists which parameters the hidden type may use</td>
+<td>where it is written</td>
+</tr>
+<tr>
+<td>a value in an expression: <code>len &lt; 5</code>, <code>len &lt;&lt; 1</code></td>
+<td>C⑮ C⑯</td>
+<td>other: operator</td>
+<td>nothing to choose</td>
+<td>at run time</td>
+</tr>
+<tr>
+<td><code>:</code> inside a string literal: <code>"[{:&lt;4}]"</code></td>
+<td>C⑰</td>
+<td>not Rust syntax</td>
+<td>nothing to choose</td>
+<td>not applicable</td>
+</tr>
+</tbody>
+</table></div>
+<h2>How to identify any <code>&lt;</code>: a step-by-step procedure</h2>
+<p>Work through the questions in order and stop at the first answer that applies. Every example is from programs A, B and C above, which compile; the mark after each example points to it.</p>
+<p><strong>Step 1. Is the <code>&lt;</code> inside a string literal or a comment?</strong></p>
+<ul>
+<li>Yes: it is not Rust syntax. Example: <code>println!("[{:&lt;4}]", "ab")</code> (C⑰), where <code>println!</code> reads <code>:&lt;4</code> as "left-align in a width of 4".</li>
+<li>No: go to step 2.</li>
+</ul>
+<p><strong>Step 2. Is the token immediately before the <code>&lt;</code> one of <code>impl</code>, <code>for</code>, <code>use</code> or <code>::</code>?</strong></p>
+<ul>
+<li><code>impl</code>: DECLARE for the impl block. Example: <code>impl&lt;T: Copy&gt; Wrapper&lt;T&gt;</code> (A⑦). Scope: to the impl's closing <code>}</code>. Matching fills each name at each use.</li>
+<li><code>for</code>: DECLARE (higher-ranked), lifetimes only. Example: <code>F: for&lt;'a&gt; Fn(&amp;'a str) -&gt; &amp;'a str</code> (A⑯). Scope: only that bound or type. The borrow checker fills it at each call.</li>
+<li><code>use</code>: precise capturing list. Example: <code>-&gt; impl Iterator&lt;Item = char&gt; + use&lt;'a&gt;</code> (C⑥).</li>
+<li><code>::</code>: SUPPLY (turbofish). Examples: <code>"5".parse::&lt;u8&gt;()</code> (B⑬), <code>Vec::&lt;u8&gt;::with_capacity(2)</code> (B⑭). The list belongs to the name just before the <code>::</code>.</li>
+<li>None of these: go to step 3.</li>
+</ul>
+<p><strong>Step 3. Is the token immediately before the <code>&lt;</code> a name that is being defined right here, after <code>fn</code>, <code>struct</code>, <code>enum</code>, <code>union</code>, <code>trait</code> or <code>type</code>?</strong></p>
+<ul>
+<li>Yes: DECLARE. Examples: <code>fn first&lt;T: Copy&gt;</code> (A①), <code>fn pair_with&lt;U&gt;</code> (A⑨), <code>struct Wrapper&lt;T&gt;</code> (A②), <code>enum Either&lt;L, R = L&gt;</code> (A③), <code>union Bits&lt;T: Copy&gt;</code> (A④), <code>trait Processor&lt;T&gt;</code> (A⑥), <code>type Pair&lt;T&gt;</code> (A⑤), <code>type Item&lt;'a&gt;</code> inside a trait (A⑪). Scope: to the end of that item. An entry with <code>=</code>, such as <code>R = L</code>, is a default (item 16).</li>
+<li>No: go to step 4.</li>
+</ul>
+<p><strong>Step 4. Is the <code>&lt;</code> in a type or in an expression?</strong></p>
+<p>A type is what follows <code>:</code> in a <code>let</code>, a parameter or a field; what follows <code>-&gt;</code>; an impl header; anything inside another bracket list; what follows <code>dyn</code>, <code>impl</code> or <code>as</code>; and a bound. Everything else in a function body is an expression.</p>
+<ul>
+<li>In a type, after a name: SUPPLY. Examples: <code>let ages: HashMap&lt;String, u8&gt;</code> (B⑨), <code>impl Processor&lt;i32&gt; for Logger</code> (B③), <code>Box&lt;dyn Processor&lt;i32&gt;&gt;</code> (B⑳), <code>S: Into&lt;String&gt;</code> (C⑪), <code>Self::Item&lt;'a&gt;</code> (A⑭). Go to step 5.</li>
+<li>In a type, after punctuation such as <code>:</code>, <code>&amp;</code>, <code>(</code>, <code>,</code>, <code>-&gt;</code> or another <code>&lt;</code>: qualified path. Example: the second <code>&lt;</code> in <code>Option&lt;&lt;T as Iterator&gt;::Item&gt;</code> (C⑨). The <code>&lt;&lt;</code> there is two brackets: the first <code>&lt;</code> is a SUPPLY list for <code>Option</code> (C⑧).</li>
+<li>In an expression, after a value (a name, a literal, <code>)</code> or <code>]</code>): an operator. Examples: <code>len &lt; 5</code> (C⑮), <code>len &lt;&lt; 1</code> (C⑯), <code>(x as usize) &lt; limit</code> (item 18). One exception: right after <code>x as usize</code>, the parser is still reading a type, so <code>x as usize &lt; limit</code> starts a SUPPLY list and fails (item 18). And <code>x&lt;-1</code> fails because <code>&lt;-</code> is one token; write <code>x &lt; -1</code>.</li>
+<li>In an expression, after <code>=</code>, <code>(</code>, <code>,</code> or an operator, or at the start of a statement: qualified path. Examples: <code>let empty = &lt;Vec&lt;u8&gt; as Default&gt;::default();</code> (C⑫), <code>let len = &lt;[i32]&gt;::len(&amp;[1, 2, 3]);</code> (C⑭).</li>
+</ul>
+<p><strong>Step 5. Inside the SUPPLY list, how is each entry written?</strong></p>
+<ul>
+<li><code>Name = Type</code>: associated type binding. Example: <code>impl Iterator&lt;Item = u32&gt;</code> (C③).</li>
+<li><code>Name: Bound</code>: associated type bound. Example: <code>I: Iterator&lt;Item: Display&gt;</code> (C②).</li>
+<li>Anything else: it fills one parameter of that name's DECLARE list, in order. Example: <code>HashMap&lt;String, u8&gt;</code> (B⑨) fills <code>K</code> with <code>String</code> and <code>V</code> with <code>u8</code>; <code>S</code>, left out at the end, gets its default <code>RandomState</code> (item 16). A const argument that is an expression needs braces: <code>Buf&lt;{ 2 * 3 }&gt;</code> (B⑰).</li>
+</ul>
+<p><strong>Step 6. Who chose what is in the SUPPLY list?</strong> Look at where it is written.</p>
+<ul>
+<li>In a <code>let</code> annotation, a field type or a function signature: the author of that line. Example: <code>let ages: HashMap&lt;String, u8&gt;</code> (B⑨).</li>
+<li>After the trait name in an impl header: the implementor. Example: <code>impl Processor&lt;i32&gt; for Logger</code> (B③).</li>
+<li>In a turbofish: the caller. Example: <code>"5".parse::&lt;u8&gt;()</code> (B⑬).</li>
+<li>It contains a name from an enclosing DECLARE list: whoever fills that name. Example: in <code>impl&lt;T&gt; From&lt;T&gt; for Wrapper&lt;T&gt;</code> (B⑤, B⑥), matching fills <code>T</code>; in <code>fn first_item&lt;T: Iterator&gt;(…) -&gt; Option&lt;&lt;T as Iterator&gt;::Item&gt;</code> (C⑧), the caller fills <code>T</code>.</li>
+<li>No brackets were written at all: inference filled the parameter, or a default did. Examples: <code>first(&amp;[3, 4])</code> in program A, where inference fills <code>T</code> with <code>i32</code>; <code>let a: Meters = …</code> in item 16, where the default fills <code>T</code> with <code>f64</code>.</li>
+</ul>
+<h2>Worked example: <code>impl&lt;'a, K: Hash + Eq, V&gt; FromIterator&lt;(&amp;'a K, V)&gt; for MyMap&lt;&amp;'a K, V&gt; where V: Clone</code></h2>
+<h3>The signature, every bracket and every generic name marked</h3>
+<p><strong>Excerpt</strong> (the <code>impl</code> line of the program in the next part, unchanged):</p>
+<pre><code><span class="kw">impl</span>&lt;<span class="kw">'a</span>, <span class="ty">K</span>: <span class="ty">Hash</span> + <span class="ty">Eq</span>, <span class="ty">V</span>&gt; <span class="ty">FromIterator</span>&lt;(&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>)&gt; <span class="kw">for</span> <span class="ty">MyMap</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>&gt; <span class="kw">where</span> <span class="ty">V</span>: <span class="ty">Clone</span> {
+<span class="mk">//  ^^^^^^^^^^^^^^^^^^^^^             ^^^^^^^^^^^^          ^^^^^^^^^^       ^</span>
+<span class="mk">//  ①                                 ⑤                     ⑨                ⑬</span>
+<span class="mk">//   ^^  ^             ^                 ^^ ^  ^              ^^ ^  ^</span>
+<span class="mk">//   ②   ③             ④                 ⑥  ⑦  ⑧              ⑩  ⑪  ⑫</span></code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>What is marked</th>
+<th>Label</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><code>&lt;</code> immediately after <code>impl</code></td>
+<td>DECLARE</td>
+<td>Declares <code>'a</code>, <code>K</code> and <code>V</code> for the impl block. Scope: from this <code>&lt;</code> to the impl's closing <code>}</code>, including the <code>where</code> clause and <code>from_iter</code>.</td>
+</tr>
+<tr>
+<td>②</td>
+<td><code>'a</code> inside ①</td>
+<td>declares</td>
+<td>The lifetime parameter <code>'a</code>.</td>
+</tr>
+<tr>
+<td>③</td>
+<td><code>K</code> inside ①</td>
+<td>declares</td>
+<td>The type parameter <code>K</code>, with the bounds <code>Hash</code> and <code>Eq</code>.</td>
+</tr>
+<tr>
+<td>④</td>
+<td><code>V</code> inside ①</td>
+<td>declares</td>
+<td>The type parameter <code>V</code>. Its bound is added at ⑬.</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><code>&lt;</code> immediately after <code>FromIterator</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>FromIterator</code>'s one parameter, <code>A</code> in std's <code>pub trait FromIterator&lt;A&gt;: Sized</code>, with the tuple type <code>(&amp;'a K, V)</code>. The impl's author chose it: this impl builds a <code>MyMap</code> from pairs of a borrowed key and a value.</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><code>'a</code> inside ⑤</td>
+<td>uses</td>
+<td><code>'a</code> from ①.</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><code>K</code> inside ⑤</td>
+<td>uses</td>
+<td><code>K</code> from ①.</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><code>V</code> inside ⑤</td>
+<td>uses</td>
+<td><code>V</code> from ①.</td>
+</tr>
+<tr>
+<td>⑨</td>
+<td><code>&lt;</code> immediately after <code>MyMap</code></td>
+<td>SUPPLY</td>
+<td>Fills the struct's two parameters: the struct's <code>K</code> with <code>&amp;'a K</code> and the struct's <code>V</code> with <code>V</code>. This is the self type (item 4).</td>
+</tr>
+<tr>
+<td>⑩</td>
+<td><code>'a</code> inside ⑨</td>
+<td>uses</td>
+<td><code>'a</code> from ①.</td>
+</tr>
+<tr>
+<td>⑪</td>
+<td><code>K</code> inside ⑨</td>
+<td>uses</td>
+<td><code>K</code> from ①, behind a reference.</td>
+</tr>
+<tr>
+<td>⑫</td>
+<td><code>V</code> inside ⑨</td>
+<td>uses</td>
+<td><code>V</code> from ①.</td>
+</tr>
+<tr>
+<td>⑬</td>
+<td><code>V</code> after <code>where</code></td>
+<td>uses</td>
+<td><code>V</code> from ①, with the bound <code>Clone</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The trap in this line: the struct is declared <code>struct MyMap&lt;K, V&gt;</code>, and the impl also has a <code>K</code> and a <code>V</code>, but they are different parameters. At ⑨, the struct's <code>K</code> is filled with <code>&amp;'a K</code>, a reference to the impl's <code>K</code>. So this impl covers only maps whose keys are references, such as <code>MyMap&lt;&amp;String, u8&gt;</code>, and not <code>MyMap&lt;String, u8&gt;</code>.</p>
+<h3>The whole program</h3>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
+<span class="kw">use</span> std::hash::<span class="ty">Hash</span>;
+
+<span class="kw">struct</span> <span class="ty">MyMap</span>&lt;<span class="ty">K</span>, <span class="ty">V</span>&gt; {
+<span class="mk">//          ^^^^^^</span>
+<span class="mk">//          ①</span>
+    inner: <span class="ty">HashMap</span>&lt;<span class="ty">K</span>, <span class="ty">V</span>&gt;,
+<span class="mk">    //            ^^^^^^</span>
+<span class="mk">    //            ②</span>
+}
+
+<span class="kw">impl</span>&lt;<span class="kw">'a</span>, <span class="ty">K</span>: <span class="ty">Hash</span> + <span class="ty">Eq</span>, <span class="ty">V</span>&gt; <span class="ty">FromIterator</span>&lt;(&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>)&gt; <span class="kw">for</span> <span class="ty">MyMap</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>&gt; <span class="kw">where</span> <span class="ty">V</span>: <span class="ty">Clone</span> {
+<span class="mk">//  ^^^^^^^^^^^^^^^^^^^^^             ^^^^^^^^^^^^          ^^^^^^^^^^</span>
+<span class="mk">//  ③                                 ④                     ⑤</span>
+    <span class="kw">fn</span> <span class="fn">from_iter</span>&lt;<span class="ty">I</span>: <span class="ty">IntoIterator</span>&lt;<span class="ty">Item</span> = (&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>)&gt;&gt;(iter: <span class="ty">I</span>) -&gt; <span class="kw">Self</span> {
+<span class="mk">    //          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="mk">    //          ⑥</span>
+<span class="mk">    //                          ^^^^^^^^^^^^^^^^^^^</span>
+<span class="mk">    //                          ⑦</span>
+        <span class="kw">let</span> <span class="kw">mut</span> inner = <span class="ty">HashMap</span>::<span class="fn">new</span>();
+        <span class="kw">for</span> (k, v) <span class="kw">in</span> iter {
+            inner.<span class="fn">insert</span>(k, v.<span class="fn">clone</span>());
+        }
+        <span class="ty">MyMap</span> { inner }
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> names = <span class="mac">vec!</span>[<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"ann"</span>), <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"bob"</span>)];
+    <span class="kw">let</span> map: <span class="ty">MyMap</span>&lt;&amp;<span class="ty">String</span>, <span class="ty">u8</span>&gt; = names.<span class="fn">iter</span>().<span class="fn">zip</span>([<span class="num">1</span>, <span class="num">2</span>]).<span class="fn">collect</span>();
+<span class="mk">    //            ^^^^^^^^^^^^^</span>
+<span class="mk">    //            ⑧</span>
+    <span class="mac">println!</span>(<span class="str">"{} {:?}"</span>, map.inner.<span class="fn">len</span>(), map.inner.<span class="fn">get</span>(&amp;names[<span class="num">1</span>]));
+}</code></pre>
+<p>Output:</p>
+<pre><code>2 Some(2)</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Position</th>
+<th>Label</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><code>&lt;</code> immediately after <code>MyMap</code> in the struct</td>
+<td>DECLARE</td>
+<td>Declares the struct's own <code>K</code> and <code>V</code>. Scope: from this <code>&lt;</code> to the struct's closing <code>}</code>.</td>
+</tr>
+<tr>
+<td>②</td>
+<td><code>&lt;</code> immediately after <code>HashMap</code></td>
+<td>SUPPLY</td>
+<td>Fills <code>HashMap</code>'s <code>K</code> and <code>V</code> with the struct's <code>K</code> and <code>V</code>. The default fills <code>S</code> with <code>RandomState</code> (item 16).</td>
+</tr>
+<tr>
+<td>③</td>
+<td><code>&lt;</code> immediately after <code>impl</code></td>
+<td>DECLARE</td>
+<td>① in the excerpt.</td>
+</tr>
+<tr>
+<td>④</td>
+<td><code>&lt;</code> immediately after <code>FromIterator</code></td>
+<td>SUPPLY</td>
+<td>⑤ in the excerpt.</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td><code>&lt;</code> immediately after <code>MyMap</code> in the impl header</td>
+<td>SUPPLY</td>
+<td>⑨ in the excerpt.</td>
+</tr>
+<tr>
+<td>⑥</td>
+<td><code>&lt;</code> immediately after <code>from_iter</code></td>
+<td>DECLARE</td>
+<td>Declares <code>I</code> with the bound <code>IntoIterator&lt;Item = (&amp;'a K, V)&gt;</code>. Scope: from this <code>&lt;</code> to the closing <code>}</code> of <code>from_iter</code>'s body. std declares the same method as <code>fn from_iter&lt;T: IntoIterator&lt;Item = A&gt;&gt;(iter: T) -&gt; Self;</code>, and an impl may rename <code>T</code> to <code>I</code>.</td>
+</tr>
+<tr>
+<td>⑦</td>
+<td><code>&lt;</code> immediately after <code>IntoIterator</code></td>
+<td>other: associated type binding</td>
+<td>Requires <code>I</code>'s <code>Item</code> to be <code>(&amp;'a K, V)</code>, the tuple that ④ supplied.</td>
+</tr>
+<tr>
+<td>⑧</td>
+<td><code>&lt;</code> immediately after <code>MyMap</code> in <code>let map: MyMap&lt;&amp;String, u8&gt;</code></td>
+<td>SUPPLY</td>
+<td>Fills the struct's <code>K</code> with <code>&amp;String</code> and <code>V</code> with <code>u8</code>, chosen by the author of the <code>let map</code> line.</td>
+</tr>
+</tbody>
+</table></div>
+<h3>Who fills each name, and when</h3>
+<p>Everything happens at compile time, at the call <code>names.iter().zip([1, 2]).collect()</code>:</p>
+<ol>
+<li><code>collect</code> is declared in std as <code>fn collect&lt;B: FromIterator&lt;Self::Item&gt;&gt;(self) -&gt; B</code>. The annotation at ⑧ fills <code>B</code> with <code>MyMap&lt;&amp;String, u8&gt;</code>. The iterator's <code>Item</code> is <code>(&amp;String, u8)</code>: <code>names.iter()</code> yields <code>&amp;String</code>, and <code>[1, 2]</code> yields integers, which inference makes <code>u8</code> to fit.</li>
+<li>So rustc needs <code>impl FromIterator&lt;(&amp;String, u8)&gt; for MyMap&lt;&amp;String, u8&gt;</code>. Matching the header against it: <code>MyMap&lt;&amp;'a K, V&gt;</code> against <code>MyMap&lt;&amp;String, u8&gt;</code> fills <code>K</code> with <code>String</code>, <code>V</code> with <code>u8</code>, and <code>'a</code> with the borrow of <code>names</code> that <code>names.iter()</code> made. The borrow checker chose that lifetime.</li>
+<li>rustc checks the bounds: <code>String: Hash + Eq</code> holds, and <code>u8: Clone</code> holds.</li>
+<li>Inference fills <code>from_iter</code>'s <code>I</code> with the iterator type <code>Zip&lt;std::slice::Iter&lt;'_, String&gt;, std::array::IntoIter&lt;u8, 2&gt;&gt;</code>, and rustc compiles one copy of <code>from_iter</code> for that <code>K</code>, <code>V</code> and <code>I</code>.</li>
+</ol>
+<h2>Quiz: ten brackets</h2>
+<p>For each question, say what the bracket marked ① is (DECLARE, SUPPLY, or which kind of "other"), and who fills or chooses what is in it. Every snippet compiles. The answers are at the end.</p>
+<p><strong>Question 1.</strong></p>
+<pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
+
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">From</span>&lt;<span class="ty">T</span>&gt; <span class="kw">for</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//          ^^^</span>
+<span class="mk">//          ①</span>
+    <span class="kw">fn</span> <span class="fn">from</span>(value: <span class="ty">T</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">Wrapper</span>(value)
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> w = <span class="ty">Wrapper</span>::<span class="fn">from</span>(<span class="num">5_u8</span>);
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="num">0</span>);
+}</code></pre>
+<p><strong>Question 2.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> n = <span class="str">"7"</span>.<span class="fn">parse</span>::&lt;<span class="ty">u8</span>&gt;().<span class="fn">unwrap</span>();
+<span class="mk">    //                 ^^^^</span>
+<span class="mk">    //                 ①</span>
+    <span class="mac">println!</span>(<span class="str">"{n}"</span>);
+}</code></pre>
+<p><strong>Question 3.</strong></p>
+<pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
+
+<span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
+<span class="mk">//  ^^^</span>
+<span class="mk">//  ①</span>
+    <span class="kw">fn</span> <span class="fn">get</span>(&amp;<span class="kw">self</span>) -&gt; &amp;<span class="ty">T</span> {
+        &amp;<span class="kw">self</span>.<span class="num">0</span>
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">Wrapper</span>(<span class="str">'q'</span>).<span class="fn">get</span>());
+}</code></pre>
+<p><strong>Question 4.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> empty = &lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; <span class="kw">as</span> <span class="ty">Default</span>&gt;::<span class="fn">default</span>();
+<span class="mk">    //          ^^^^^^^^^^^^^^^^^^^^</span>
+<span class="mk">    //          ①</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, empty.<span class="fn">len</span>());
+}</code></pre>
+<p><strong>Question 5.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> it: <span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">u8</span>&gt;&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>].<span class="fn">into_iter</span>());
+<span class="mk">    //                      ^^^^^^^^^^^</span>
+<span class="mk">    //                      ①</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, it.<span class="fn">count</span>());
+}</code></pre>
+<p><strong>Question 6.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="ty">F</span>&gt;(f: <span class="ty">F</span>) -&gt; <span class="ty">usize</span>
+<span class="kw">where</span>
+    <span class="ty">F</span>: <span class="kw">for</span>&lt;<span class="kw">'a</span>&gt; <span class="ty">Fn</span>(&amp;<span class="kw">'a</span> <span class="ty">str</span>) -&gt; &amp;<span class="kw">'a</span> <span class="ty">str</span>,
+<span class="mk">    //    ^^^^</span>
+<span class="mk">    //    ①</span>
+{
+    <span class="kw">let</span> local = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"local text"</span>);
+    <span class="fn">f</span>(&amp;local).<span class="fn">len</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="fn">apply</span>(|s| &amp;s[..<span class="num">5</span>]));
+}</code></pre>
+<p><strong>Question 7.</strong></p>
+<pre><code><span class="kw">struct</span> <span class="ty">Buf</span>&lt;<span class="kw">const</span> <span class="ty">N</span>: <span class="ty">usize</span>&gt; {
+    data: [<span class="ty">u8</span>; <span class="ty">N</span>],
+}
+
+<span class="kw">const</span> <span class="ty">SIZE</span>: <span class="ty">usize</span> = <span class="num">2</span>;
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> b: <span class="ty">Buf</span>&lt;{ <span class="ty">SIZE</span> * <span class="num">2</span> }&gt; = <span class="ty">Buf</span> { data: [<span class="num">0</span>; <span class="num">4</span>] };
+<span class="mk">    //        ^^^^^^^^^^^^^^</span>
+<span class="mk">    //        ①</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, b.data.<span class="fn">len</span>());
+}</code></pre>
+<p><strong>Question 8.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">first_item</span>&lt;<span class="ty">T</span>: <span class="ty">Iterator</span>&gt;(<span class="kw">mut</span> it: <span class="ty">T</span>) -&gt; <span class="ty">Option</span>&lt;&lt;<span class="ty">T</span> <span class="kw">as</span> <span class="ty">Iterator</span>&gt;::<span class="ty">Item</span>&gt; {
+<span class="mk">//                                              ^^^^^^^^^^^^^^^</span>
+<span class="mk">//                                              ①</span>
+    it.<span class="fn">next</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="mac">println!</span>(<span class="str">"{:?}"</span>, <span class="fn">first_item</span>(<span class="str">"ab"</span>.<span class="fn">chars</span>()));
+}</code></pre>
+<p><strong>Question 9.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> len = <span class="num">300_u32</span>;
+    <span class="kw">let</span> max = <span class="num">255_u8</span>;
+    <span class="kw">let</span> fits = (len <span class="kw">as</span> <span class="ty">u8</span>) &lt; max;
+<span class="mk">    //                     ^</span>
+<span class="mk">    //                     ①</span>
+    <span class="mac">println!</span>(<span class="str">"{fits}"</span>);
+}</code></pre>
+<p><strong>Question 10.</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">chars_of</span>&lt;<span class="kw">'a</span>&gt;(text: &amp;<span class="kw">'a</span> <span class="ty">str</span>, _unused: &amp;<span class="ty">u8</span>) -&gt; <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">char</span>&gt; + <span class="kw">use</span>&lt;<span class="kw">'a</span>&gt; {
+<span class="mk">//                                                                              ^^^^</span>
+<span class="mk">//                                                                              ①</span>
+    text.<span class="fn">chars</span>()
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> n = <span class="num">0_u8</span>;
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="fn">chars_of</span>(<span class="str">"quiz"</span>, &amp;n).<span class="fn">count</span>());
+}</code></pre>
+<h3>Answers</h3>
+<ol>
+<li><strong>SUPPLY.</strong> The <code>&lt;</code> immediately after <code>From</code> in an impl header fills <code>From</code>'s parameter with <code>T</code> from <code>impl&lt;T&gt;</code>. Matching fills that <code>T</code>: at <code>Wrapper::from(5_u8)</code>, with <code>u8</code>. One compiled copy per type used.</li>
+<li><strong>SUPPLY (turbofish).</strong> The <code>&lt;</code> immediately after <code>::</code> fills <code>parse</code>'s <code>F</code> with <code>u8</code>. The caller chose it, at this call. The program prints <code>7</code>.</li>
+<li><strong>DECLARE.</strong> The <code>&lt;</code> immediately after <code>impl</code> declares <code>T</code> for the impl block. Scope: to the impl's closing <code>}</code>. Matching fills it at each use: at <code>Wrapper('q').get()</code>, with <code>char</code>.</li>
+<li><strong>Other: qualified path.</strong> The token before this <code>&lt;</code> is <code>=</code>, in an expression. It names <code>default</code> from <code>impl Default for Vec&lt;u8&gt;</code>. The author of the <code>let empty</code> line chose both the type and the trait. The <code>&lt;</code> after <code>Vec</code> inside it is a SUPPLY list.</li>
+<li><strong>Other: associated type binding.</strong> The <code>&lt;</code> immediately after <code>Iterator</code> in a <code>dyn</code> type requires the <code>dyn</code> type's <code>Item</code> to be <code>u8</code> (items 8 and 12). The author of the <code>let it</code> line chose <code>u8</code>.</li>
+<li><strong>DECLARE (higher-ranked).</strong> The <code>&lt;</code> immediately after <code>for</code> declares <code>'a</code> for the one bound <code>Fn(&amp;'a str) -&gt; &amp;'a str</code>. The borrow checker fills <code>'a</code> at each call <code>f(&amp;local)</code>, with a borrow of <code>local</code>, which exists only inside <code>apply</code> (item 10).</li>
+<li><strong>SUPPLY.</strong> The <code>&lt;</code> immediately after <code>Buf</code> in a type fills the const parameter <code>N</code> with <code>SIZE * 2</code>, which is <code>4</code>. An expression must be in braces (item 13). The author of the <code>let b</code> line chose it.</li>
+<li><strong>Other: qualified path.</strong> This is the second <code>&lt;</code> of the <code>&lt;&lt;</code> after <code>Option</code>. The first <code>&lt;</code> is <code>Option</code>'s SUPPLY list; this one starts <code>&lt;T as Iterator&gt;::Item</code>, which names <code>Iterator</code>'s <code>Item</code> for <code>T</code> (items 9 and 18). The caller of <code>first_item</code> fills <code>T</code>: at <code>first_item("ab".chars())</code>, with <code>Chars</code>, so <code>Item</code> is <code>char</code>.</li>
+<li><strong>Other: less-than operator.</strong> The token before it is <code>)</code>, so the parser is in an expression and reads a comparison. Without the parentheses, <code>len as u8 &lt; max</code> would start a SUPPLY list for <code>u8</code> and fail (item 18). It prints <code>true</code> because <code>300_u32 as u8</code> is <code>44</code>.</li>
+<li><strong>Other: precise capturing list.</strong> The <code>&lt;</code> immediately after <code>use</code> lists the generic parameters the hidden return type may use: <code>'a</code> only, not the lifetime of <code>_unused</code> (item 11). The author of <code>chars_of</code> wrote it.</li>
+</ol>
+
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft52-part1.html">Part 1: Items 1–5 and the design guide</a></li>
+          <li><a href="draft52-part2.html">Part 2: Items 6–12</a></li>
+          <li><a href="draft52-part3.html">Part 3: Items 13–18</a></li>
+          <li><strong>Part 4: Summary table, procedure and quiz</strong> (this post)</li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
