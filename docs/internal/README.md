@@ -39,7 +39,7 @@ A post is hidden when its file is in `blog/` but it isn't listed in `blog/index.
 
 How it's organised:
 
-- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft53.html` (Angle Brackets in Rust: The Patterns, the short version), `draft52-part1.html`–`draft52-part4.html` (Angle Brackets in Rust, a four-part series), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
+- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft53.html` (Angle Brackets in Rust: Generics in Traits and Impls, the short version), `draft52-part1.html`–`draft52-part4.html` (Angle Brackets in Rust, a four-part series), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
 - **Challenge series** — the two challenge series, each challenge with links to part A (problem + multiple choice) and part B (solution):
   - Rust Design Challenges 1–27 = `draft10a/b.html` … `draft36a/b.html`
   - Rust Idioms Challenges 1–14 = `draft37a/b.html` … `draft50a/b.html`
