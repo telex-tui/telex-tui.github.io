@@ -530,14 +530,81 @@ footer a:hover {
   }
 
   nav {
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   nav a {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
+  }
+
+  header .container {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
   }
 
   .feature-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── DraftedAICrazies (hidden drafts index) ── */
+
+.draft-warning {
+  border: 1px solid var(--orange);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0 2rem;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.draft-warning strong {
+  color: var(--orange);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.draft-section {
+  font-size: 1.4rem;
+  margin: 2rem 0 0.5rem;
+}
+
+.draft-subsection {
+  font-size: 1.1rem;
+  margin: 1.75rem 0 0.25rem;
+}
+
+.draft-series-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.draft-list {
+  list-style: none;
+  padding-bottom: 1rem;
+  font-size: 0.92rem;
+}
+
+.draft-list li {
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0;
+}
+
+.draft-list .draft-group {
+  border-bottom: none;
+  padding-top: 1rem;
+  color: var(--text-muted);
+}
+
+.draft-num {
+  display: inline-block;
+  min-width: 2rem;
+  color: var(--text-muted);
+}
+
+.draft-links {
+  float: right;
+  margin-left: 1rem;
 }

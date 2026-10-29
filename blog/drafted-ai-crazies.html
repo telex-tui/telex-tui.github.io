@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DraftedAICrazies - Telex</title>
+  <meta name="description" content="Test bed for unfinished, AI-assisted drafts. Not published posts.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="page-title">
+      <h1>DraftedAICrazies</h1>
+      <p>Every hidden page on this site, in one place.</p>
+    </section>
+
+    <div class="draft-warning">
+      <strong>You probably don&rsquo;t want to be here.</strong>
+      This is a test bed for works in progress. Everything below is an unfinished, AI-assisted draft: it may be wrong, incomplete, badly formatted, or gone tomorrow. Please don&rsquo;t rely on it, quote it, or share links to it. The finished writing is on the <a href="/blog/">Blog</a>.
+    </div>
+
+    <h2 class="draft-section">Draft articles</h2>
+    <ul class="post-list">
+      <li class="post-item">
+        <a href="20-rules-of-thumb-in-rust.html">
+          <h2>20 Rules of Thumb in Rust</h2>
+          <div class="post-meta">April 2026 &middot; <code>20-rules-of-thumb-in-rust.html</code></div>
+          <p class="post-excerpt">Twenty rules of thumb for writing idiomatic Rust — the lessons most developers learn through trial and error, handed over early.</p>
+        </a>
+      </li>
+      <li class="post-item">
+        <a href="draft51.html">
+          <h2>STM32 From First Principles</h2>
+          <div class="post-meta">March 2026 &middot; <code>draft51.html</code></div>
+          <p class="post-excerpt">A lesson series that actually explains things: the STM32 memory map, clock tree, GPIO registers, interrupts, timers, UART, DMA, SPI, I2C, startup code, power modes, and debugging.</p>
+        </a>
+      </li>
+      <li class="post-item">
+        <a href="draft3.html">
+          <h2>Concurrency Primitives: What Rust Inherited from C</h2>
+          <div class="post-meta">March 2026 &middot; <code>draft3.html</code></div>
+          <p class="post-excerpt">A mapping of C's concurrency primitives to their Rust equivalents — mutexes, rwlocks, condvars, semaphores, atomics, barriers, and more — showing where Rust's abstractions come from.</p>
+        </a>
+      </li>
+      <li class="post-item">
+        <a href="draft2.html">
+          <h2>The GIL Is Just a Mutex</h2>
+          <div class="post-meta">March 2026 &middot; <code>draft2.html</code></div>
+          <p class="post-excerpt">A Rust developer's guide to the GIL and PyO3's concurrency model: what the GIL actually is, how allow_threads works, and how to design clean FFI boundaries.</p>
+        </a>
+      </li>
+      <li class="post-item">
+        <a href="draft1.html">
+          <h2>How Polars Works Internally</h2>
+          <div class="post-meta">March 2026 &middot; <code>draft1.html</code></div>
+          <p class="post-excerpt">A source-traced walk through Polars internals: the PyO3 boundary layer, the expression AST, eager vs lazy execution, zero-copy data paths, and the plugin FFI.</p>
+        </a>
+      </li>
+    </ul>
+
+    <h2 class="draft-section">Challenge series</h2>
+    <p class="draft-series-label">Each challenge has a part A (problem and multiple choice) and a part B (solution and explanation). The older working index for these is <a href="drafti.html"><code>drafti.html</code></a>.</p>
+
+    <h3 class="draft-subsection">Rust Design Challenges</h3>
+    <p class="draft-series-label">27 challenges — ownership, lifetimes, interior mutability, async patterns</p>
+      <ul class="draft-list">
+        <li><span class="draft-num">1</span> Two functions need the same string. Who owns it? <span class="draft-links"><a href="draft10a.html">A</a> <a href="draft10b.html">B</a></span></li>
+        <li><span class="draft-num">2</span> Add a parent pointer to this tree node <span class="draft-links"><a href="draft11a.html">A</a> <a href="draft11b.html">B</a></span></li>
+        <li><span class="draft-num">3</span> This counter needs to be visible to three threads <span class="draft-links"><a href="draft12a.html">A</a> <a href="draft12b.html">B</a></span></li>
+        <li><span class="draft-num">4</span> Make this cache lazy — only compute on first access <span class="draft-links"><a href="draft13a.html">A</a> <a href="draft13b.html">B</a></span></li>
+        <li><span class="draft-num">5</span> Two components need to mutate shared config. No threads <span class="draft-links"><a href="draft14a.html">A</a> <a href="draft14b.html">B</a></span></li>
+        <li><span class="draft-num">6</span> This iterator needs to yield borrowed data. Make it compile <span class="draft-links"><a href="draft15a.html">A</a> <a href="draft15b.html">B</a></span></li>
+        <li><span class="draft-num">7</span> The callback needs to outlive the thing that registered it <span class="draft-links"><a href="draft16a.html">A</a> <a href="draft16b.html">B</a></span></li>
+        <li><span class="draft-num">8</span> Add logging to this without changing every call site <span class="draft-links"><a href="draft17a.html">A</a> <a href="draft17b.html">B</a></span></li>
+        <li><span class="draft-num">9</span> This works single-threaded. Now make it work across threads <span class="draft-links"><a href="draft18a.html">A</a> <a href="draft18b.html">B</a></span></li>
+        <li><span class="draft-num">10</span> You need a graph. Some nodes have two parents <span class="draft-links"><a href="draft19a.html">A</a> <a href="draft19b.html">B</a></span></li>
+        <li><span class="draft-num">11</span> This function returns a reference. Why won't it compile? <span class="draft-links"><a href="draft20a.html">A</a> <a href="draft20b.html">B</a></span></li>
+        <li><span class="draft-num">12</span> You clone everywhere to make it compile. What's the real fix? <span class="draft-links"><a href="draft21a.html">A</a> <a href="draft21b.html">B</a></span></li>
+        <li><span class="draft-num">13</span> This value needs to live longer than the function that created it <span class="draft-links"><a href="draft22a.html">A</a> <a href="draft22b.html">B</a></span></li>
+        <li><span class="draft-num">14</span> Two places read this data. A third place writes it. Structure that <span class="draft-links"><a href="draft23a.html">A</a> <a href="draft23b.html">B</a></span></li>
+        <li><span class="draft-num">15</span> Walk this tree without cloning the nodes <span class="draft-links"><a href="draft24a.html">A</a> <a href="draft24b.html">B</a></span></li>
+        <li><span class="draft-num">16</span> This tree needs an iterator. Write one <span class="draft-links"><a href="draft25a.html">A</a> <a href="draft25b.html">B</a></span></li>
+        <li><span class="draft-num">17</span> A cache shared across tasks. It needs to initialise exactly once <span class="draft-links"><a href="draft26a.html">A</a> <a href="draft26b.html">B</a></span></li>
+        <li><span class="draft-num">18</span> This struct holds a reference. Now give it a method <span class="draft-links"><a href="draft27a.html">A</a> <a href="draft27b.html">B</a></span></li>
+        <li><span class="draft-num">19</span> Two structs reference each other. Model that without cycles <span class="draft-links"><a href="draft28a.html">A</a> <a href="draft28b.html">B</a></span></li>
+        <li><span class="draft-num">20</span> Three types share behaviour. Trait or enum? <span class="draft-links"><a href="draft29a.html">A</a> <a href="draft29b.html">B</a></span></li>
+        <li><span class="draft-num">21</span> Make this generic — but only for types that can fail <span class="draft-links"><a href="draft30a.html">A</a> <a href="draft30b.html">B</a></span></li>
+        <li><span class="draft-num">22</span> The caller shouldn't know what concrete type this is <span class="draft-links"><a href="draft31a.html">A</a> <a href="draft31b.html">B</a></span></li>
+        <li><span class="draft-num">23</span> This config loads from disk. Load it once, share it everywhere <span class="draft-links"><a href="draft32a.html">A</a> <a href="draft32b.html">B</a></span></li>
+        <li><span class="draft-num">24</span> This blocking call is inside an async function. Fix it <span class="draft-links"><a href="draft33a.html">A</a> <a href="draft33b.html">B</a></span></li>
+        <li><span class="draft-num">25</span> Two async tasks need to coordinate on a single result <span class="draft-links"><a href="draft34a.html">A</a> <a href="draft34b.html">B</a></span></li>
+        <li><span class="draft-num">26</span> Fan out to three tasks. Collect all results. Handle one failure <span class="draft-links"><a href="draft35a.html">A</a> <a href="draft35b.html">B</a></span></li>
+        <li><span class="draft-num">27</span> This type needs to be both printable and sortable <span class="draft-links"><a href="draft36a.html">A</a> <a href="draft36b.html">B</a></span></li>
+      </ul>
+    <h3 class="draft-subsection">Rust Idioms Challenges</h3>
+    <p class="draft-series-label">14 challenges — six standard library naming conventions</p>
+      <ul class="draft-list">
+        <li class="draft-group"><code>_or vs _or_else</code></li>
+        <li><span class="draft-num">1</span> This fallback allocates a String every call. It shouldn't <span class="draft-links"><a href="draft37a.html">A</a> <a href="draft37b.html">B</a></span></li>
+        <li><span class="draft-num">2</span> Convert this Option to a Result. The error message needs computing <span class="draft-links"><a href="draft38a.html">A</a> <a href="draft38b.html">B</a></span></li>
+        <li><span class="draft-num">3</span> Three Options. Chain them so the first Some wins <span class="draft-links"><a href="draft39a.html">A</a> <a href="draft39b.html">B</a></span></li>
+        <li class="draft-group"><code>as_ / to_ / into_</code></li>
+        <li><span class="draft-num">4</span> This function takes &amp;str but you have a String. Which conversion? <span class="draft-links"><a href="draft40a.html">A</a> <a href="draft40b.html">B</a></span></li>
+        <li><span class="draft-num">5</span> You need the raw bytes of a String. Borrow or consume? <span class="draft-links"><a href="draft41a.html">A</a> <a href="draft41b.html">B</a></span></li>
+        <li><span class="draft-num">6</span> This API takes an owned String. You have a &amp;str. Cheapest path <span class="draft-links"><a href="draft42a.html">A</a> <a href="draft42b.html">B</a></span></li>
+        <li class="draft-group"><code>_map combiners</code></li>
+        <li><span class="draft-num">7</span> Filter a Vec of strings, parse the survivors, discard parse errors <span class="draft-links"><a href="draft43a.html">A</a> <a href="draft43b.html">B</a></span></li>
+        <li><span class="draft-num">8</span> Find the first line in a file that parses as a valid port number <span class="draft-links"><a href="draft44a.html">A</a> <a href="draft44b.html">B</a></span></li>
+        <li><span class="draft-num">9</span> You have Option&lt;Option&lt;T&gt;&gt;. Flatten it without matching <span class="draft-links"><a href="draft45a.html">A</a> <a href="draft45b.html">B</a></span></li>
+        <li class="draft-group"><code>_while</code></li>
+        <li><span class="draft-num">10</span> Read lines from a stream. Stop at the first blank line <span class="draft-links"><a href="draft46a.html">A</a> <a href="draft46b.html">B</a></span></li>
+        <li class="draft-group"><code>_by / _by_key</code></li>
+        <li><span class="draft-num">11</span> Sort these log entries by timestamp. Reverse the order <span class="draft-links"><a href="draft47a.html">A</a> <a href="draft47b.html">B</a></span></li>
+        <li><span class="draft-num">12</span> Find the process using the most memory <span class="draft-links"><a href="draft48a.html">A</a> <a href="draft48b.html">B</a></span></li>
+        <li class="draft-group"><code>copied vs cloned</code></li>
+        <li><span class="draft-num">13</span> This iterator yields &amp;u32. Make it yield u32 and signal the cost <span class="draft-links"><a href="draft49a.html">A</a> <a href="draft49b.html">B</a></span></li>
+        <li><span class="draft-num">14</span> You have Vec&lt;String&gt;. Iterate with owned values. What does the choice signal? <span class="draft-links"><a href="draft50a.html">A</a> <a href="draft50b.html">B</a></span></li>
+      </ul>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
