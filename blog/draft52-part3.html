@@ -31,11 +31,12 @@
       <div class="post-meta">October 2026</div>
       <p class="series-nav">Part 3 of 4 in <a href="#series-index">Angle Brackets in Rust</a>, a guide to every place <code>&lt; &gt;</code> appears in Rust syntax.</p>
       <p class="series-nav">Previous: <a href="draft52-part2.html">Part 2: Items 6–12</a> | Next: <a href="draft52-part4.html">Part 4: Summary table, procedure and quiz</a></p>
+      <p class="note">New to this series? Start with the short version, <a href="draft53.html">Angle Brackets in Rust: The Patterns</a>, then come back here to look things up.</p>
       <p class="note">Every example was compiled with rustc 1.97.0, edition 2024. Part 1 explains the caret lines, the circled numbers and the DECLARE / SUPPLY labels used throughout.</p>
 
-<h2>Item 13 — Const generics: <code>&lt;const N: usize&gt;</code></h2>
+<h2 id="item-13">Item 13 — Const generics: <code>&lt;const N: usize&gt;</code></h2>
 <p>A const parameter (defined in part 1) is declared with the keyword <code>const</code> inside a DECLARE list, and its generic argument is a value, not a type. <code>Buf&lt;4&gt;</code> and <code>Buf&lt;16&gt;</code> are two different types, and each value gets its own compiled copy of the code that uses it, just as each type does for a type parameter. Who fills it: whoever writes the SUPPLY list, or inference, usually from an array's length.</p>
-<h3>13.1 Declaring and supplying a const parameter</h3>
+<h3 id="s13-1">13.1 Declaring and supplying a const parameter</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Buf</span>&lt;<span class="kw">const</span> <span class="ty">N</span>: <span class="ty">usize</span>&gt; {
 <span class="mk">//        ^^^^^^^^^^^^^^^^</span>
@@ -140,7 +141,7 @@
 </table></div>
 <p><code>sum([1, 2, 3])</code> has no brackets: at that call site, inference fills <code>sum</code>'s <code>N</code> with <code>3</code>, the length of the array argument.</p>
 <p>The array type <code>[u8; N]</code> uses <code>;</code>, not angle brackets, but its length is the same kind of value. In item 11, <code>std::array::IntoIter&lt;u8, 1&gt;</code> supplied a type and a const in one SUPPLY list.</p>
-<h3>13.2 What may go between the brackets without braces</h3>
+<h3 id="s13-2">13.2 What may go between the brackets without braces</h3>
 <p>Without braces, a const argument must be one of: a literal (<code>16</code>, <code>-1</code>, <code>true</code>, <code>'x'</code>), a single name (<code>SIZE</code>, <code>N</code>), or <code>_</code>. Anything else needs <code>{ … }</code>.</p>
 <p><strong>Does not compile: an expression without braces.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Buf</span>&lt;<span class="kw">const</span> <span class="ty">N</span>: <span class="ty">usize</span>&gt; {
@@ -256,7 +257,7 @@ help: if this generic argument was intended as a const parameter, surround it wi
 </table></div>
 <p>The bare name <code>SIZE</code> at ⑥ in 13.1 works because rustc reinterprets a single name as a constant when no type has that name. The two errors show it does not do that for <code>sizes::SIZE</code>.</p>
 <p>Write this: <code>Buf&lt;{ sizes::SIZE }&gt;</code>. Not this: <code>Buf&lt;sizes::SIZE&gt;</code>.</p>
-<h3>13.3 A const parameter can't be used in an expression in a type</h3>
+<h3 id="s13-3">13.3 A const parameter can't be used in an expression in a type</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Buf</span>&lt;<span class="kw">const</span> <span class="ty">N</span>: <span class="ty">usize</span>&gt; {
 <span class="mk">//        ^^^^^^^^^^^^^^^^</span>
@@ -441,7 +442,7 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 15 |     let b: Buf&lt;7&gt; = double(Buf { data: [0; 3] });
    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^</code></pre>
 <p>The note names the instantiation with a turbofish, <code>double::&lt;3, 7&gt;</code>: rustc found the error while making the copy of <code>double</code> for <code>N = 3</code>, <code>M = 7</code>. This kind of error appears only when rustc builds the program. I ran <code>rustc --emit=metadata</code> on the same file, which is what <code>cargo check</code> asks for, and it reported nothing.</p>
-<h3>13.4 Allowed types for a const parameter</h3>
+<h3 id="s13-4">13.4 Allowed types for a const parameter</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Label</span>&lt;<span class="kw">const</span> <span class="ty">S</span>: &amp;<span class="kw">'static</span> <span class="ty">str</span>&gt;;
 <span class="mk">//          ^^^^^^^^^^^^^^^^^^^^^^^</span>
@@ -488,7 +489,7 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 </tbody>
 </table></div>
 <p>Write this: <code>&lt;const N: usize&gt;</code>, <code>&lt;const D: i32&gt;</code>, <code>&lt;const ON: bool&gt;</code>, <code>&lt;const C: char&gt;</code>. Not this: <code>&lt;const S: &amp;'static str&gt;</code>.</p>
-<h3>13.5 Negative literals and <code>_</code></h3>
+<h3 id="s13-5">13.5 Negative literals and <code>_</code></h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Offset</span>&lt;<span class="kw">const</span> <span class="ty">D</span>: <span class="ty">i32</span>&gt;;
 <span class="mk">//           ^^^^^^^^^^^^^^</span>
@@ -616,9 +617,9 @@ note: the above error was encountered while instantiating `fn double::&lt;3, 7&g
 </tr>
 </tbody>
 </table></div>
-<h2>Item 14 — Generic associated types: <code>type Item&lt;'a&gt;</code></h2>
+<h2 id="item-14">Item 14 — Generic associated types: <code>type Item&lt;'a&gt;</code></h2>
 <p>An associated type (defined in part 1) can have its own DECLARE list, written immediately after its name: <code>type Item&lt;'a&gt;;</code> or <code>type Of&lt;T&gt;;</code>. This is called a generic associated type. Each use then needs a SUPPLY list after the associated type's name, such as <code>Self::Item&lt;'a&gt;</code>. Who fills it: whoever writes that use, usually a method signature in the trait that passes its own parameter along.</p>
-<h3>14.1 The problem: <code>Iterator::Item</code> can't borrow from the iterator</h3>
+<h3 id="s14-1">14.1 The problem: <code>Iterator::Item</code> can't borrow from the iterator</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Windows</span> {
     data: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;,
@@ -695,7 +696,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 </tbody>
 </table></div>
 <p><code>Self::Item</code> is one type for the whole impl, fixed before any call. The borrow of <code>self</code> in <code>next(&amp;mut self)</code> gets a new lifetime at each call, so <code>type Item</code> has no way to name it. That is also what makes <code>Iterator</code> safe to <code>collect</code>: all items can be alive at once. These items are overlapping <code>&amp;mut</code> borrows of one <code>Vec</code>, so they must not be.</p>
-<h3>14.2 A lifetime parameter on an associated type</h3>
+<h3 id="s14-2">14.2 A lifetime parameter on an associated type</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Lender</span> {
     <span class="kw">type</span> <span class="ty">Item</span>&lt;<span class="kw">'a</span>&gt; <span class="kw">where</span> <span class="kw">Self</span>: <span class="kw">'a</span>;
@@ -829,7 +830,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 </tbody>
 </table></div>
 <p>At each call <code>w.lend()</code>, the borrow checker fills <code>lend</code>'s <code>'a</code>, and through ⑨, <code>Item</code>'s <code>'a</code>: the borrow of <code>w</code> lasts as long as <code>pair</code> is used. <code>pair</code> is last used in the <code>println!</code>, so the next call can borrow <code>w</code> again. Writing to <code>pair[0]</code> changes <code>w.data</code>: the first window is <code>[1, 2]</code> and becomes <code>[11, 2]</code>; the second starts at index 1, <code>[2, 3]</code>, and becomes <code>[12, 3]</code>.</p>
-<h3>14.3 The <code>where Self: 'a</code> is required</h3>
+<h3 id="s14-3">14.3 The <code>where Self: 'a</code> is required</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Lender</span> {
     <span class="kw">type</span> <span class="ty">Item</span>&lt;<span class="kw">'a</span>&gt;;
@@ -897,7 +898,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 </tbody>
 </table></div>
 <p><code>lend</code> takes <code>&amp;'a mut self</code>, which already requires <code>Self: 'a</code>. rustc wants that requirement written on <code>Item</code> too, so that an implementor may write <code>type Item&lt;'a&gt; = &amp;'a mut [u8]</code>, a borrow of something inside <code>Self</code>. Write this: <code>type Item&lt;'a&gt; where Self: 'a;</code>. Not this: <code>type Item&lt;'a&gt;;</code>.</p>
-<h3>14.4 A type parameter on an associated type</h3>
+<h3 id="s14-4">14.4 A type parameter on an associated type</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Container</span> {
     <span class="kw">type</span> <span class="ty">Of</span>&lt;<span class="ty">T</span>&gt;;
@@ -1047,7 +1048,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 </tbody>
 </table></div>
 <p>At <code>OptionFamily::wrap("x")</code>, inference fills <code>wrap</code>'s <code>T</code> with <code>&amp;str</code>, so <code>b</code> is <code>Option&lt;&amp;str&gt;</code>.</p>
-<h3>14.5 Why not a trait parameter</h3>
+<h3 id="s14-5">14.5 Why not a trait parameter</h3>
 <p>A generic impl of a trait with a DECLARE list also covers every element type: <code>impl&lt;T&gt; Container&lt;T&gt; for VecFamily</code>. The difference shows in a function that uses one family at two element types.</p>
 <p><strong>Compiles: with <code>type Of&lt;T&gt;</code>.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Container</span> {
@@ -1347,9 +1348,9 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 </tr>
 </tbody>
 </table></div>
-<h2>Item 15 — Bounds: <code>&lt;T: Clone&gt;</code>, <code>where T: Clone</code>, <code>T: Into&lt;String&gt;</code>, <code>'a: 'b</code>, <code>T: 'static</code></h2>
+<h2 id="item-15">Item 15 — Bounds: <code>&lt;T: Clone&gt;</code>, <code>where T: Clone</code>, <code>T: Into&lt;String&gt;</code>, <code>'a: 'b</code>, <code>T: 'static</code></h2>
 <p>A bound (defined in part 1) can be written in two places: inside the DECLARE list, after the name it restricts (<code>&lt;T: Clone&gt;</code>), or in a <code>where</code> clause after the signature (<code>where T: Clone</code>). A bound can itself contain a SUPPLY list (<code>T: Into&lt;String&gt;</code>). Lifetimes take bounds too: <code>'a: 'b</code> and <code>T: 'static</code>.</p>
-<h3>15.1 Inline and <code>where</code> mean the same</h3>
+<h3 id="s15-1">15.1 Inline and <code>where</code> mean the same</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Display</span>;
 
@@ -1403,7 +1404,7 @@ note: you can't create an `Iterator` that borrows each `Item` from itself, but y
 </tbody>
 </table></div>
 <p>At <code>show_inline(&amp;5_u8)</code>, inference fills <code>T</code> with <code>u8</code>; at <code>show_where(&amp;String::from("hi"))</code>, with <code>String</code>. The two functions accept exactly the same types. A <code>where</code> clause has no brackets of its own; it only contains brackets when a bound in it has a SUPPLY list.</p>
-<h3>15.2 What only a <code>where</code> clause (or an associated type bound) can do</h3>
+<h3 id="s15-2">15.2 What only a <code>where</code> clause (or an associated type bound) can do</h3>
 <p>Inside a DECLARE list, each entry declares a new name (after the keyword <code>const</code>, for a const parameter), and a bound there can only follow that new name. A bound on anything else, such as an associated type, goes in a <code>where</code> clause.</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Display</span>;
@@ -1513,7 +1514,7 @@ b</code></pre>
 </tbody>
 </table></div>
 <p>Write this: <code>where I: Iterator, I::Item: Display</code>, or <code>&lt;I: Iterator&lt;Item: Display&gt;&gt;</code>. Not this: <code>&lt;I: Iterator, I::Item: Display&gt;</code>. The same goes for bounds on a type that is not a plain parameter, such as <code>where Vec&lt;T&gt;: Debug</code>, or the <code>for&lt;'a&gt; &amp;'a C: IntoIterator&lt;Item = &amp;'a u8&gt;</code> in item 10.</p>
-<h3>15.3 A SUPPLY list inside a bound</h3>
+<h3 id="s15-3">15.3 A SUPPLY list inside a bound</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">User</span> {
     name: <span class="ty">String</span>,
@@ -1632,7 +1633,7 @@ note: required by a bound in `User::new`
 </tbody>
 </table></div>
 <p>At <code>User::new(42)</code>, inference fills <code>S</code> with an integer type, which has no <code>Into&lt;String&gt;</code>. The error talks about <code>From</code> because std provides <code>Into</code> through one generic impl, <code>impl&lt;T, U&gt; Into&lt;U&gt; for T where U: From&lt;T&gt;</code> (std's source also has <code>const</code> markers there, left out here), as the note "required for <code>{integer}</code> to implement <code>Into&lt;String&gt;</code>" says.</p>
-<h3>15.4 Lifetime bounds: <code>'a: 'b</code></h3>
+<h3 id="s15-4">15.4 Lifetime bounds: <code>'a: 'b</code></h3>
 <p><code>'a: 'b</code> reads "<code>'a</code> outlives <code>'b</code>": every borrow with lifetime <code>'a</code> is still valid for all of <code>'b</code>.</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">pick</span>&lt;<span class="kw">'a</span>: <span class="kw">'b</span>, <span class="kw">'b</span>&gt;(long: &amp;<span class="kw">'a</span> <span class="ty">str</span>, short: &amp;<span class="kw">'b</span> <span class="ty">str</span>) -&gt; &amp;<span class="kw">'b</span> <span class="ty">str</span> {
@@ -1732,7 +1733,7 @@ note: required by a bound in `User::new`
 </tbody>
 </table></div>
 <p>Returning <code>long</code>, a <code>&amp;'a str</code>, as a <code>&amp;'b str</code> needs <code>'a: 'b</code>. Write this: <code>fn pick&lt;'a: 'b, 'b&gt;</code>. Not this: <code>fn pick&lt;'a, 'b&gt;</code>.</p>
-<h3>15.5 <code>T: 'static</code></h3>
+<h3 id="s15-5">15.5 <code>T: 'static</code></h3>
 <p><code>T: 'static</code> means: <code>T</code> contains no borrow shorter than <code>'static</code>. It does not mean the value lives forever. <code>String</code> and <code>u8</code> contain no borrows, so they meet it; <code>&amp;'static str</code> meets it; <code>&amp;String</code> borrowed from a local variable doesn't.</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
@@ -1857,7 +1858,7 @@ note: requirement that the value outlives `'static` introduced here
 </tbody>
 </table></div>
 <p>Inference fills <code>T</code> with <code>&amp;String</code>, borrowed from <code>local</code>. The bound requires that borrow to be <code>'static</code>, and <code>local</code> is dropped at the end of <code>main</code>. Write this: <code>keep(local)</code>, which moves the <code>String</code>. Not this: <code>keep(&amp;local)</code>.</p>
-<h3>15.6 A bound in a struct's DECLARE list must be repeated</h3>
+<h3 id="s15-6">15.6 A bound in a struct's DECLARE list must be repeated</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Sorted</span>&lt;<span class="ty">T</span>: <span class="ty">Ord</span>&gt; {
 <span class="mk">//           ^^^^^^^^</span>
@@ -2058,9 +2059,9 @@ help: consider restricting type parameter `T` with trait `Ord`
 </tr>
 </tbody>
 </table></div>
-<h2>Item 16 — Defaults: <code>struct S&lt;T = i32&gt;</code></h2>
+<h2 id="item-16">Item 16 — Defaults: <code>struct S&lt;T = i32&gt;</code></h2>
 <p>A default is written in a DECLARE list after <code>=</code>: <code>struct Meters&lt;T = f64&gt;</code>. The author of the item chooses it. It fills a parameter in exactly one situation: a type or trait is named with trailing generic arguments left out, such as <code>Meters</code> alone or <code>HashMap&lt;String, u8&gt;</code>. Inference in an expression never uses it.</p>
-<h3>16.1 Declaring a default, and when it fills the parameter</h3>
+<h3 id="s16-1">16.1 Declaring a default, and when it fills the parameter</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::any::type_name_of_val;
 
@@ -2177,7 +2178,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 </tbody>
 </table></div>
 <p><code>Meters { value: zero() }</code> is an expression, so <code>Meters</code>'s <code>T</code> is left to inference, and nothing in the line decides it; the default <code>f64</code> is not tried. The help's <code>Meters&lt;T&gt;</code> uses <code>T</code> as a placeholder for a type you pick. Write this: <code>let z: Meters = Meters { value: zero() };</code>, which names the type with its SUPPLY list left out, so the default fills <code>T</code> with <code>f64</code> (I compiled it; it prints <code>0</code>). Not this: <code>let z = Meters { value: zero() };</code>.</p>
-<h3>16.2 A default in std: <code>HashMap</code></h3>
+<h3 id="s16-2">16.2 A default in std: <code>HashMap</code></h3>
 <p><strong>std excerpt</strong> (from <code>std::collections::HashMap</code>, as written in std's source):</p>
 <pre><code><span class="kw">pub</span> <span class="kw">struct</span> <span class="ty">HashMap</span>&lt;
 <span class="mk">//                ^</span>
@@ -2264,7 +2265,7 @@ help: consider giving `z` an explicit type, where the type for type parameter `T
 </tbody>
 </table></div>
 <p><code>HashMap::new()</code> is declared in <code>impl&lt;K, V&gt; HashMap&lt;K, V, RandomState&gt;</code>, so it returns a map with <code>S</code> as <code>RandomState</code> regardless of the default. For <code>custom</code>, <code>HashMap::default()</code> is used because <code>new</code> only exists for <code>RandomState</code>.</p>
-<h3>16.3 Where defaults are not allowed</h3>
+<h3 id="s16-3">16.3 Where defaults are not allowed</h3>
 <p><strong>Does not compile: a default in a function's DECLARE list.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">make</span>&lt;<span class="ty">T</span>: <span class="ty">Default</span> = <span class="ty">i32</span>&gt;() -&gt; <span class="ty">T</span> {
 <span class="mk">//     ^^^^^^^^^^^^^^^^^^</span>
@@ -2578,7 +2579,7 @@ main::Either&lt;u8, &amp;str&gt;
   |
   = note: see issue #29661 &lt;https://github.com/rust-lang/rust/issues/29661&gt; for more information</code></pre>
 <p>This program has no angle brackets. <code>type Unit = f64;</code> in a trait body would be a default for the associated type; on stable Rust it is not allowed.</p>
-<h3>16.4 Where defaults are allowed: traits, type aliases, const parameters</h3>
+<h3 id="s16-4">16.4 Where defaults are allowed: traits, type aliases, const parameters</h3>
 <p><strong>Compiles: a default in a trait's DECLARE list.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Combine</span>&lt;<span class="ty">Rhs</span> = <span class="kw">Self</span>&gt; {
 <span class="mk">//           ^^^^^^^^^^^^</span>
@@ -2825,9 +2826,9 @@ main::Either&lt;u8, &amp;str&gt;
 </tr>
 </tbody>
 </table></div>
-<h2>Item 17 — Places that can't take generic parameters</h2>
+<h2 id="item-17">Item 17 — Places that can't take generic parameters</h2>
 <p>Only these can have a DECLARE list: functions and methods, structs, enums, unions, type aliases, traits, impl blocks, associated types (item 14), and the <code>for&lt;'a&gt;</code> lists of item 10. Everything else can't. This item covers closures, <code>const</code> and <code>static</code> items in detail, then lists the rest in one table.</p>
-<h3>17.1 Closures</h3>
+<h3 id="s17-1">17.1 Closures</h3>
 <p>A closure has no name, so there is no token for a <code>&lt;</code> to follow. Writing one before the closure's <code>|</code> doesn't work:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
@@ -2968,7 +2969,7 @@ note: closure parameter defined here
 </tbody>
 </table></div>
 <p>The closure <code>copies</code> uses <code>T</code> from <code>fn repeat_each&lt;T: Clone&gt;</code> in <code>|x: &amp;T|</code> and captures the local <code>times</code>. It is not generic itself: inside the copy of <code>repeat_each</code> for <code>i32</code>, <code>T</code> is <code>i32</code>, and the closure takes <code>&amp;i32</code>.</p>
-<h3>17.2 <code>const</code> items</h3>
+<h3 id="s17-2">17.2 <code>const</code> items</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">const</span> <span class="ty">EMPTY</span>&lt;<span class="ty">T</span>&gt;: <span class="ty">Vec</span>&lt;<span class="ty">T</span>&gt; = <span class="ty">Vec</span>::<span class="fn">new</span>();
 <span class="mk">//         ^^^     ^^^</span>
@@ -3077,7 +3078,7 @@ note: closure parameter defined here
 </tbody>
 </table></div>
 <p><code>T::ZERO</code> picks the constant from the impl for whatever type fills <code>T</code>: at <code>let a: u8 = zero_of();</code>, inference fills <code>T</code> with <code>u8</code> from the annotation. Write this: <code>trait Zero { const ZERO: Self; }</code> with one impl per type. Not this: a generic <code>const</code> item like <code>const EMPTY&lt;T&gt;: Vec&lt;T&gt; = Vec::new();</code>.</p>
-<h3>17.3 <code>static</code> items</h3>
+<h3 id="s17-3">17.3 <code>static</code> items</h3>
 <p>A <code>static</code> written inside a generic function is a separate item, so it can't use that function's parameters:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">first</span>&lt;<span class="ty">T</span>&gt;(items: <span class="ty">Vec</span>&lt;<span class="ty">T</span>&gt;) -&gt; <span class="ty">Option</span>&lt;<span class="ty">T</span>&gt; {
@@ -3186,7 +3187,7 @@ note: closure parameter defined here
 </tbody>
 </table></div>
 <p>Inference fills <code>T</code> with <code>u8</code>, <code>&amp;str</code> and <code>f64</code> at the three calls, so rustc makes three copies of <code>count_calls</code>. All three use the one <code>CALLS</code>, so the counts are <code>1 2 3</code>, not <code>1 1 1</code>.</p>
-<h3>17.4 The other places</h3>
+<h3 id="s17-4">17.4 The other places</h3>
 <p>Each "not this" below is a separate program that I compiled; the third column is the first line of rustc's error.</p>
 <div class="table-wrap"><table>
 <thead>
@@ -3398,9 +3399,9 @@ note: closure parameter defined here
 </tr>
 </tbody>
 </table></div>
-<h2>Item 18 — Non-generic uses of <code>&lt;</code>: <code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code></h2>
+<h2 id="item-18">Item 18 — Non-generic uses of <code>&lt;</code>: <code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code></h2>
 <p>In an expression, <code>&lt;</code> is also an operator. None of these DECLARE or SUPPLY anything, so each gets the label "other" plus the operator's name.</p>
-<h3>18.1 The operators</h3>
+<h3 id="s18-1">18.1 The operators</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> a = <span class="num">3</span>;
@@ -3494,7 +3495,7 @@ note: closure parameter defined here
 </tr>
 </tbody>
 </table></div>
-<h3>18.2 How the parser tells them apart</h3>
+<h3 id="s18-2">18.2 How the parser tells them apart</h3>
 <p><strong>Rule 1: in a type, a <code>&lt;</code> after a name is always a DECLARE or SUPPLY list.</strong> Outside <code>{ … }</code> (item 13), types have no operators. Write this: <code>let v: Vec&lt;u8&gt; = Vec::new();</code>.</p>
 <p><strong>Rule 2: in an expression, a <code>&lt;</code> after a value or a name is less-than</strong> (except after <code>as</code> and a type, rule 3). So generic arguments in an expression need <code>::&lt;</code>, the turbofish (item 7).</p>
 <p><strong>Does not compile.</strong></p>

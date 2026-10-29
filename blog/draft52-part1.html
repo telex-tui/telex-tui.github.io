@@ -31,6 +31,7 @@
       <div class="post-meta">October 2026</div>
       <p class="series-nav">Part 1 of 4 in <a href="#series-index">Angle Brackets in Rust</a>, a guide to every place <code>&lt; &gt;</code> appears in Rust syntax.</p>
       <p class="series-nav">Previous: none | Next: <a href="draft52-part2.html">Part 2: Items 6–12</a></p>
+      <p class="note">New to this series? Start with the short version, <a href="draft53.html">Angle Brackets in Rust: The Patterns</a>, then come back here to look things up.</p>
 
 <h2>Toolchain and how the examples were checked</h2>
 <p>Every example in this guide was compiled with <strong>rustc 1.97.0 (2d8144b78, 2026-07-07), edition 2024</strong>: each one was saved as <code>main.rs</code> and built with <code>rustc --edition 2024 main.rs</code>. Each example is shown exactly as compiled, caret comment lines included, so the line numbers in error messages match the code above them.</p>
@@ -41,7 +42,7 @@
 <li><strong>std excerpt</strong> marks a declaration copied from the standard library's documentation. It is not a complete program, so it is not compiled on its own.</li>
 </ul>
 <p>rustc 1.97 reports a missing type as E0425. Older versions reported E0412, and <code>rustc --explain E0412</code> now opens with the note that the compiler no longer emits that code.</p>
-<h2>How to read this guide</h2>
+<h2 id="how-to-read">How to read this guide</h2>
 <p>Every code block marks its angle brackets with a caret line and a circled number, and a table under the block explains each number.</p>
 <h3>Caret lines</h3>
 <p>Under a code line, a comment line puts <code>^</code> under each marked bracket, from its <code>&lt;</code> to its matching <code>&gt;</code>. The next comment line puts a circled number under the first <code>^</code>. When one marked bracket sits inside another, as in <code>Vec&lt;Vec&lt;T&gt;&gt;</code>, the inner one gets its own two lines below.</p>
@@ -254,7 +255,7 @@
 <p>Lifetimes are the one place where "concrete" has no direct equivalent. The borrow checker fills a lifetime parameter with a region of code, and regions have no names you can write, except <code>'static</code>. So where other examples show a concrete type, lifetime examples show a placeholder and say which code determines the region.</p>
 <h3>Telling same-named parameters apart</h3>
 <p>Many examples declare several parameters all named <code>T</code>. I tell them apart by the DECLARE list that declared each one. "<code>T</code> from <code>impl&lt;T&gt;</code>" means the <code>T</code> declared in the <code>&lt;</code> immediately after the keyword <code>impl</code>; "<code>T</code> from <code>struct Wrapper&lt;T&gt;</code>" means the <code>T</code> declared in the <code>&lt;</code> immediately after <code>Wrapper</code> in the struct definition. Two parameters with the same name in different DECLARE lists are unrelated.</p>
-<h3>The Arguments column</h3>
+<h3 id="arguments-column">The Arguments column</h3>
 <p>Every table that explains numbered marks has an <strong>Arguments</strong> column, filled in for SUPPLY rows. A SUPPLY list fills another item's parameters, but what it fills them with isn't always a finished type yet. Ordinary function arguments work the same way:</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">double</span>(n: <span class="ty">i32</span>) -&gt; <span class="ty">i32</span> {
@@ -380,7 +381,7 @@
 </table></div>
 <p>Follow the chain from the bottom: at ⑤ the caller supplies <code>u8</code> to <code>T</code> from <code>fn wrap_all&lt;T&gt;</code>, and ② and ④ pass that <code>T</code> on, so for this call <code>items</code> is a <code>Vec&lt;u8&gt;</code> and the result is a <code>Vec&lt;Option&lt;u8&gt;&gt;</code>.</p>
 <p>Rows that aren't SUPPLY leave the column empty. An associated type binding such as <code>Item = u8</code> inside a SUPPLY list doesn't fill a parameter of that list, so it isn't tagged (item 8).</p>
-<h2>The mental model: blanks, and who fills them</h2>
+<h2 id="mental-model">The mental model: blanks, and who fills them</h2>
 <p>Every <code>&lt;…&gt;</code> either creates blanks (a DECLARE list) or fills blanks (a SUPPLY list). For every blank, three questions tell you everything: where its name can be used (its scope), who fills it, and when. Items 1–4 are four places a DECLARE list can sit, and each one has a different answer to "who fills it".</p>
 <p>This program has one DECLARE list in each of those four places.</p>
 <p><strong>Compiles.</strong></p>
@@ -564,10 +565,10 @@
 <li><strong>Each instantiation is a separate type or a separate function.</strong> <code>Pair&lt;u8&gt;</code> and <code>Pair&lt;u32&gt;</code> are unrelated types. To turn a <code>Pair&lt;u8&gt;</code> into a <code>Pair&lt;u32&gt;</code>, write this: <code>let big: Pair&lt;u32&gt; = Pair { left: u32::from(small.left), right: u32::from(small.right) };</code>. Not this: <code>let big: Pair&lt;u32&gt; = small;</code>, which fails with E0308 (item 2).</li>
 <li><strong>Every blank must be filled before code is generated.</strong> If no SUPPLY list, no inference and no matching fills it, compilation stops. Write this: <code>let name: String = make();</code>. Not this: <code>let thing = make();</code>, which fails with E0283, "type annotations needed" (item 1).</li>
 </ol>
-<h2>Item 1 — Function items: <code>fn name&lt;…&gt;(…)</code></h2>
+<h2 id="item-1">Item 1 — Function items: <code>fn name&lt;…&gt;(…)</code></h2>
 <p>A DECLARE list immediately after a function's name declares generic parameters that the caller fills at each call site, either with a turbofish or through inference.</p>
 <p>The DECLARE list sits between the function's name and its <strong>function parameter list</strong>, which is the <code>(…)</code> of ordinary parameters, such as <code>(_value: T)</code> below. "Generic parameter" always means a name in <code>&lt;…&gt;</code>; "function parameter" always means a name in <code>(…)</code>.</p>
-<h3>1.1 One function, one blank, filled at each call</h3>
+<h3 id="s1-1">1.1 One function, one blank, filled at each call</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::any::type_name;
 
@@ -643,7 +644,7 @@ alloc::vec::Vec&lt;f64&gt;</code></pre>
 </table></div>
 <p>All three are decided at compile time. The program contains three compiled copies of <code>type_of</code>, one per instantiation: this is monomorphization. Inside each copy, <code>T</code> in ② is already concrete, so <code>type_name::&lt;T&gt;()</code> returns that copy's type name. (<code>type_name</code> is meant for diagnostics; std doesn't promise its exact text.)</p>
 <p>Why the caller fills it: only the call site knows what is being passed. The function's author writes the body once, for every <code>T</code>.</p>
-<h3>1.2 Bounds, inference and turbofish</h3>
+<h3 id="s1-2">1.2 Bounds, inference and turbofish</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">largest</span>&lt;<span class="ty">T</span>: <span class="ty">Ord</span> + <span class="ty">Copy</span>&gt;(items: &amp;[<span class="ty">T</span>]) -&gt; <span class="ty">T</span> {
 <span class="mk">//        ^^^^^^^^^^^^^^^</span>
@@ -883,7 +884,7 @@ note: required by a bound in `largest`
 </tbody>
 </table></div>
 <p>Inference fills <code>T</code> with <code>f64</code> at <code>largest(&amp;prices)</code>, and <code>f64</code> does not implement <code>Ord</code>, because the float value NaN is not ordered relative to any value. This time the error points at the call site, and the note points back at the bound in ①.</p>
-<h3>1.3 Inference from the expected result</h3>
+<h3 id="s1-3">1.3 Inference from the expected result</h3>
 <p>When a generic parameter appears only in the return type, nothing in the arguments can fill it. The caller fills it through what the result is assigned to, or with a turbofish.</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">make</span>&lt;<span class="ty">T</span>: <span class="ty">Default</span>&gt;() -&gt; <span class="ty">T</span> {
@@ -1003,7 +1004,7 @@ help: consider giving `thing` an explicit type
 </tbody>
 </table></div>
 <p>At <code>let thing = make();</code> there is no turbofish, no type annotation, and no later use of <code>thing</code> that would pin a type. rustc knows only that <code>T</code> must implement <code>Default</code>, and many types do, so it stops with E0283. The fixes are the two from 1.3: a type annotation, as in <code>let name: String = make();</code>, or a turbofish, as in <code>make::&lt;(u8, bool)&gt;()</code>.</p>
-<h3>1.4 Lifetime and const parameters</h3>
+<h3 id="s1-4">1.4 Lifetime and const parameters</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">longer</span>&lt;<span class="kw">'a</span>&gt;(x: &amp;<span class="kw">'a</span> <span class="ty">str</span>, y: &amp;<span class="kw">'a</span> <span class="ty">str</span>) -&gt; &amp;<span class="kw">'a</span> <span class="ty">str</span> {
 <span class="mk">//       ^^^^</span>
@@ -1158,7 +1159,7 @@ note: the late bound lifetime parameter is introduced here
 </tbody>
 </table></div>
 <p>For <code>longer</code>, the caller cannot fill <code>'a</code> at all; only the borrow checker can. rustc's message calls <code>'a</code> a "late bound" lifetime parameter. Some lifetime parameters do accept a turbofish argument; item 6 shows which ones, and why.</p>
-<h3>1.5 The order inside a DECLARE list</h3>
+<h3 id="s1-5">1.5 The order inside a DECLARE list</h3>
 <p><strong>Does not compile: a lifetime parameter after a type parameter.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">tagged</span>&lt;<span class="ty">T</span>, <span class="kw">'a</span>&gt;(text: &amp;<span class="kw">'a</span> <span class="ty">str</span>, _tag: <span class="ty">T</span>) -&gt; &amp;<span class="kw">'a</span> <span class="ty">str</span> {
 <span class="mk">//       ^^^^^^^</span>
@@ -1238,7 +1239,7 @@ note: the late bound lifetime parameter is introduced here
 </tbody>
 </table></div>
 <p>I'm not sure the Rust project documents a reason for the lifetimes-first rule. To check, I'd look at the "Generic parameters" chapter of the Rust Reference and the RFC discussions on const generics. The effect is that every DECLARE list follows one order, and a SUPPLY list such as <code>fill::&lt;3, char&gt;</code> above can match its arguments to parameters by position.</p>
-<h3>1.6 Items nested in a function body can't see its parameters</h3>
+<h3 id="s1-6">1.6 Items nested in a function body can't see its parameters</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
 
@@ -1393,10 +1394,10 @@ closure got 4</code></pre>
 </tr>
 </tbody>
 </table></div>
-<h2>Item 2 — Struct, enum, union and type alias definitions: <code>struct Name&lt;…&gt;</code></h2>
+<h2 id="item-2">Item 2 — Struct, enum, union and type alias definitions: <code>struct Name&lt;…&gt;</code></h2>
 <p>A DECLARE list immediately after a type's name declares parameters that are filled wherever someone writes the type: by a type annotation, by a function signature, or by inference from a value.</p>
 <p>The DECLARE list sits between the type's name and whatever comes next: <code>{</code> for a struct with named fields, an enum or a union; <code>(</code> for a tuple struct; <code>=</code> for a type alias.</p>
-<h3>2.1 Structs</h3>
+<h3 id="s2-1">2.1 Structs</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
 <span class="mk">//         ^^^</span>
@@ -1463,7 +1464,7 @@ closure got 4</code></pre>
 </tbody>
 </table></div>
 <p>The scope of <code>T</code> ends at the struct's closing <code>}</code>. Nothing outside the definition can use that <code>T</code>; item 4 shows what this means for impl blocks.</p>
-<h3>2.2 Each instantiation is a separate type</h3>
+<h3 id="s2-2">2.2 Each instantiation is a separate type</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
 <span class="mk">//         ^^^</span>
@@ -1579,7 +1580,7 @@ closure got 4</code></pre>
 </tr>
 </tbody>
 </table></div>
-<h3>2.3 Enums</h3>
+<h3 id="s2-3">2.3 Enums</h3>
 <p><strong>std excerpt</strong> (as std's documentation shows it):</p>
 <pre><code><span class="kw">pub</span> <span class="kw">enum</span> <span class="ty">Option</span>&lt;<span class="ty">T</span>&gt; {
 <span class="mk">//             ^^^</span>
@@ -1756,7 +1757,7 @@ help: consider giving `nothing` an explicit type, where the type for type parame
 </tbody>
 </table></div>
 <p>For an enum variant, a turbofish can follow the enum's name or the variant's name. Item 7 covers which part of a path a turbofish attaches to.</p>
-<h3>2.4 Unions</h3>
+<h3 id="s2-4">2.4 Unions</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">union</span> <span class="ty">Bits</span>&lt;<span class="ty">T</span>: <span class="ty">Copy</span>&gt; {
 <span class="mk">//        ^^^^^^^^^</span>
@@ -1856,7 +1857,7 @@ help: wrap the field type in `ManuallyDrop&lt;...&gt;`
 </tbody>
 </table></div>
 <p>The only use fills <code>T</code> with <code>f32</code>, which is <code>Copy</code>, yet the error is in the definition. It is rule 2 from the mental model again: the definition must be valid for every <code>T</code> its bounds allow, and with no bound that includes types that run code when dropped, which a union field can't hold.</p>
-<h3>2.5 Type aliases</h3>
+<h3 id="s2-5">2.5 Type aliases</h3>
 <p><strong>std excerpt</strong> (from <code>std::io</code>, as written in std's source):</p>
 <pre><code><span class="kw">pub</span> <span class="kw">type</span> <span class="ty">Result</span>&lt;<span class="ty">T</span>&gt; = result::<span class="ty">Result</span>&lt;<span class="ty">T</span>, <span class="ty">Error</span>&gt;;
 <span class="mk">//             ^^^                 ^^^^^^^^^^</span>
@@ -2105,7 +2106,7 @@ warning: 1 warning emitted</code></pre>
 </tbody>
 </table></div>
 <p>If rustc accepted this, <code>Count&lt;String&gt;</code> and <code>Count&lt;bool&gt;</code> would both mean <code>u32</code>, and the argument would have no effect anywhere. rustc rejects the parameter instead.</p>
-<h3>2.6 Unused parameters in structs, enums and unions</h3>
+<h3 id="s2-6">2.6 Unused parameters in structs, enums and unions</h3>
 <p><strong>Does not compile: an unused type parameter.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Id</span>&lt;<span class="ty">T</span>&gt; {
 <span class="mk">//       ^^^</span>
@@ -2345,9 +2346,9 @@ help: consider specifying a concrete type for the type parameter `T`
 </tr>
 </tbody>
 </table></div>
-<h2>Item 3 — Trait definitions: <code>trait Name&lt;…&gt;</code>, and the hidden <code>Self</code></h2>
+<h2 id="item-3">Item 3 — Trait definitions: <code>trait Name&lt;…&gt;</code>, and the hidden <code>Self</code></h2>
 <p>Every trait has a hidden type parameter, <code>Self</code>, which each trait impl fills with its self type. A DECLARE list immediately after the trait's name adds more parameters, and each trait impl fills those in its impl header.</p>
-<h3>3.1 <code>Self</code>: the parameter no trait declares</h3>
+<h3 id="s3-1">3.1 <code>Self</code>: the parameter no trait declares</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Describe</span> {
     <span class="kw">fn</span> <span class="fn">describe</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
@@ -2427,7 +2428,7 @@ the number 7</code></pre>
 </tbody>
 </table></div>
 <p>The qualified path at ① shows the hidden parameter in written form. <code>&lt;u8 as Describe&gt;</code> reads "the trait <code>Describe</code> with <code>Self</code> = <code>u8</code>".</p>
-<h3>3.2 A DECLARE list after the trait's name</h3>
+<h3 id="s3-2">3.2 A DECLARE list after the trait's name</h3>
 <p><strong>std excerpt</strong> (as std's documentation shows it):</p>
 <pre><code><span class="kw">pub</span> <span class="kw">trait</span> <span class="ty">From</span>&lt;<span class="ty">T</span>&gt;: <span class="ty">Sized</span> {
 <span class="mk">//            ^^^</span>
@@ -2580,7 +2581,7 @@ the number 7</code></pre>
 </tbody>
 </table></div>
 <p>The implementors decide which values of <code>T</code> exist. A call site only picks one of them, and it fails if it asks for one nobody implemented (example below). Because <code>T</code> is already <code>u64</code> in the impl header at ②, the method body in that impl contains no generic parameters at all. It is ordinary code, compiled once, not once per call site.</p>
-<h3>3.3 Three ways to get <code>trait Convert&lt;T&gt;</code> wrong</h3>
+<h3 id="s3-3">3.3 Three ways to get <code>trait Convert&lt;T&gt;</code> wrong</h3>
 <p><strong>Does not compile: nothing picks <code>T</code>.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Seconds</span>(<span class="ty">u32</span>);
 
@@ -2812,7 +2813,7 @@ help: add missing generic argument
 </tbody>
 </table></div>
 <p>In an impl header, the name of a trait that has a DECLARE list must be followed by a SUPPLY list. (Item 16 covers the exception: parameters with defaults.) rustc's suggestion <code>Convert&lt;T&gt;</code> is a template again: replace <code>T</code> with the type this impl is for, as in <code>impl Convert&lt;u64&gt; for Seconds</code> from 3.2.</p>
-<h3>3.4 <code>Self</code> has no automatic <code>Sized</code> bound</h3>
+<h3 id="s3-4">3.4 <code>Self</code> has no automatic <code>Sized</code> bound</h3>
 <p>Every type parameter you declare gets an invisible bound <code>Sized</code>, which means its size is known at compile time. <code>Self</code> in a trait is the exception, so a trait can be implemented for types such as <code>str</code>, whose size is not known at compile time. A default method body that takes <code>self</code> by value needs that size:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Consume</span> {
@@ -2891,10 +2892,10 @@ help: function arguments must have a statically known size, borrowed types alway
 </tr>
 </tbody>
 </table></div>
-<h2>Item 4 — Impl blocks: <code>impl&lt;…&gt; Type&lt;…&gt;</code> and <code>impl&lt;…&gt; Trait&lt;…&gt; for Type&lt;…&gt;</code></h2>
+<h2 id="item-4">Item 4 — Impl blocks: <code>impl&lt;…&gt; Type&lt;…&gt;</code> and <code>impl&lt;…&gt; Trait&lt;…&gt; for Type&lt;…&gt;</code></h2>
 <p>A DECLARE list immediately after the keyword <code>impl</code> declares the impl block's own parameters. The SUPPLY lists in the rest of the impl header use them, and nobody ever writes their values: matching finds them each time the impl is used.</p>
 <p>One more term: an <strong>inherent impl</strong> is an impl block with no trait, such as <code>impl&lt;T&gt; Wrapper&lt;T&gt; { … }</code>. Its self type is the type right after the DECLARE list, here <code>Wrapper&lt;T&gt;</code>.</p>
-<h3>4.1 An inherent impl</h3>
+<h3 id="s4-1">4.1 An inherent impl</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
 <span class="mk">//            ^^^</span>
@@ -3010,7 +3011,7 @@ help: function arguments must have a statically known size, borrowed types alway
 </tr>
 </tbody>
 </table></div>
-<h3>4.2 Why <code>T</code> from <code>struct Wrapper&lt;T&gt;</code> doesn't carry into the impl</h3>
+<h3 id="s4-2">4.2 Why <code>T</code> from <code>struct Wrapper&lt;T&gt;</code> doesn't carry into the impl</h3>
 <p>There are three reasons, and each one shows up in compiled code.</p>
 <p><strong>Reason 1: scope.</strong> <code>T</code> from <code>struct Wrapper&lt;T&gt;</code> is in scope only until the <code>;</code> that ends the struct definition. An impl block is a separate item.</p>
 <p><strong>Does not compile.</strong></p>
@@ -3313,7 +3314,7 @@ error[E0425]: cannot find type `T` in this scope
 </tbody>
 </table></div>
 <p>So, for methods on every <code>Wrapper</code>, write this: <code>impl&lt;T&gt; Wrapper&lt;T&gt; { … }</code> (4.1). For methods on <code>Wrapper&lt;i32&gt;</code> only, write this: <code>impl Wrapper&lt;i32&gt; { … }</code> (above). Not this: <code>impl Wrapper&lt;T&gt; { … }</code>, unless a type named <code>T</code> exists and you mean it.</p>
-<h3>4.3 Matching must be able to find every parameter</h3>
+<h3 id="s4-3">4.3 Matching must be able to find every parameter</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
 <span class="mk">//            ^^^</span>
@@ -3515,7 +3516,7 @@ error[E0282]: type annotations needed
 </tr>
 </tbody>
 </table></div>
-<h3>4.4 Trait impls: every bracket in <code>impl&lt;T&gt; From&lt;T&gt; for Wrapper&lt;T&gt;</code></h3>
+<h3 id="s4-4">4.4 Trait impls: every bracket in <code>impl&lt;T&gt; From&lt;T&gt; for Wrapper&lt;T&gt;</code></h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
 <span class="mk">//            ^^^</span>
@@ -3698,7 +3699,7 @@ error[E0282]: type annotations needed
 </tbody>
 </table></div>
 <p>(std's source writes the last two headers with an extra <code>const</code>, as in <code>impl&lt;T&gt; const From&lt;T&gt; for T</code>; as with <code>From</code> itself, that word belongs to an unstable feature and changes no brackets.)</p>
-<h3>4.5 Two impls may not cover the same pair</h3>
+<h3 id="s4-5">4.5 Two impls may not cover the same pair</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
 <span class="mk">//            ^^^</span>
@@ -3793,7 +3794,7 @@ error[E0282]: type annotations needed
 </tbody>
 </table></div>
 <p>The note names the clash: core's <code>impl&lt;T&gt; From&lt;T&gt; for T</code>. Put <code>Wrapper&lt;u8&gt;</code> in for that impl's <code>T</code> and you get <code>From&lt;Wrapper&lt;u8&gt;&gt; for Wrapper&lt;u8&gt;</code>, which is exactly a pair this impl also claims. With two impls for one pair, rustc couldn't tell which body to run, so it refuses the second impl. <code>impl&lt;T&gt; From&lt;T&gt; for Wrapper&lt;T&gt;</code> from 4.4 never clashes: core's impl needs <code>Self</code> and <code>T</code> to be the same type, and <code>Wrapper&lt;T&gt;</code> is never the same type as <code>T</code>.</p>
-<h3>4.6 <code>T</code> from <code>trait Convert&lt;T&gt;</code> doesn't carry into the impl either</h3>
+<h3 id="s4-6">4.6 <code>T</code> from <code>trait Convert&lt;T&gt;</code> doesn't carry into the impl either</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Seconds</span>(<span class="ty">u32</span>);
 
@@ -3848,7 +3849,7 @@ error[E0282]: type annotations needed
 </tbody>
 </table></div>
 <p>Inside the impl, the method signature must spell out what the impl header chose. Write this: <code>fn convert(&amp;self) -&gt; u64 {</code>, as in 3.2. Not this: <code>fn convert(&amp;self) -&gt; T {</code>.</p>
-<h3>4.7 Lifetime parameters in an impl block</h3>
+<h3 id="s4-7">4.7 Lifetime parameters in an impl block</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Excerpt</span>&lt;<span class="kw">'a</span>&gt; {
 <span class="mk">//            ^^^^</span>
@@ -3941,7 +3942,7 @@ error[E0282]: type annotations needed
 </tr>
 </tbody>
 </table></div>
-<h2>Part 1 summary: every bracket position in items 1–4</h2>
+<h2 id="part1-summary">Part 1 summary: every bracket position in items 1–4</h2>
 <p>Items 1–4 cover four DECLARE positions, the SUPPLY positions that fill them, and three kinds of "other". Every example in the table compiles somewhere above.</p>
 <div class="table-wrap"><table>
 <thead>
@@ -4077,9 +4078,9 @@ error[E0282]: type annotations needed
 </tr>
 </tbody>
 </table></div>
-<h2>Item 5 — Methods inside impls and traits</h2>
+<h2 id="item-5">Item 5 — Methods inside impls and traits</h2>
 <p>A method can get a generic parameter from three DECLARE lists: the one immediately after <code>impl</code>, the one immediately after the trait's name, or its own, immediately after the method's name. The three give three different answers to "who fills it, and when".</p>
-<h3>5.1 The three positions side by side</h3>
+<h3 id="s5-1">5.1 The three positions side by side</h3>
 <p><strong>(A) A parameter from <code>impl&lt;T&gt;</code>. Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
 <span class="mk">//            ^^^</span>
@@ -4383,7 +4384,7 @@ one body, T = char</code></pre>
 </tr>
 </tbody>
 </table></div>
-<h3>5.2 When <code>T</code> becomes concrete in each version</h3>
+<h3 id="s5-2">5.2 When <code>T</code> becomes concrete in each version</h3>
 <p>It's tempting to say both <code>Processor</code> versions become concrete at the same point, at each call site. That's wrong for (B) when its impls name concrete types, as above. The outputs show the difference:</p>
 <ul>
 <li>In (B), the impl header <code>impl Processor&lt;i32&gt; for Logger</code> already says <code>T</code> is <code>i32</code>. That impl's method is <code>fn process(&amp;self, input: i32)</code>, with no generic parameter left, so it is compiled once. A call site only picks which of the existing impls runs.</li>
@@ -4461,7 +4462,7 @@ generic impl, T = &amp;str</code></pre>
 </tbody>
 </table></div>
 <p>At <code>logger.process(21_i32)</code>, inference from <code>21_i32</code> picks <code>Processor&lt;i32&gt;</code>, and matching against ③ fills <code>T</code> from <code>impl&lt;T&gt;</code> with <code>i32</code>. Each distinct <code>T</code> gets its own compiled copy, as in (C). The difference that remains: a generic impl like this one gives every <code>T</code> the same body, so a second impl for one specific type would overlap with it (item 4.5).</p>
-<h3>5.3 Where the SUPPLY list goes</h3>
+<h3 id="s5-3">5.3 Where the SUPPLY list goes</h3>
 <p>For (B), the type belongs to the trait, so a SUPPLY list goes immediately after the trait's name: <code>&lt;Logger as Processor&lt;i32&gt;&gt;::process(&amp;logger, 5)</code> or <code>Processor::&lt;i32&gt;::process(&amp;logger, 6)</code>, both compiled in 5.1. Not after the method's name:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
@@ -4624,7 +4625,7 @@ note: trait defined here, with 0 generic parameters
 </tr>
 </tbody>
 </table></div>
-<h3>5.4 Calling with a type that isn't allowed</h3>
+<h3 id="s5-4">5.4 Calling with a type that isn't allowed</h3>
 <p><strong>(B) Does not compile: no impl covers <code>f64</code>.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
 
@@ -4840,7 +4841,7 @@ note: required by a bound in `Processor::process`
 </tbody>
 </table></div>
 <p>In (B), the list of impls decides which types are allowed. In (C), the bound in the trait's declaration of the method decides, and the note points at it.</p>
-<h3>5.5 Bounds on the method's own parameter</h3>
+<h3 id="s5-5">5.5 Bounds on the method's own parameter</h3>
 <p><strong>(C) Does not compile: the body uses <code>+</code>, which no bound promises.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
 
@@ -5013,7 +5014,7 @@ logged hi</code></pre>
 </tbody>
 </table></div>
 <p>Write this: <code>fn process&lt;T: Display&gt;(&amp;self, input: T);</code> in the trait and <code>fn process&lt;T: Display&gt;(&amp;self, input: T) { … }</code> in the impl. Not this: <code>fn process&lt;T&gt;(&amp;self, input: T);</code> in the trait with <code>fn process&lt;T: Display&gt;</code> in the impl.</p>
-<h3>5.6 <code>dyn</code>: why (C) can't be a trait object and (B) can</h3>
+<h3 id="s5-6">5.6 <code>dyn</code>: why (C) can't be a trait object and (B) can</h3>
 <p><strong>(C) Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
 
@@ -5139,7 +5140,7 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
 </tbody>
 </table></div>
 <p><code>dyn Processor&lt;i32&gt;</code> names one <code>T</code>, so its table holds one <code>process</code>: the <code>i32</code> one.</p>
-<h3>5.7 The escape hatch <code>where Self: Sized</code>, and its cost</h3>
+<h3 id="s5-7">5.7 The escape hatch <code>where Self: Sized</code>, and its cost</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
 
@@ -5268,7 +5269,7 @@ generic process</code></pre>
 </tbody>
 </table></div>
 <p>This error has no error code. std uses the same hatch: <code>Iterator::map</code> declares its own <code>&lt;B, F&gt;</code> and has <code>where Self: Sized</code>, which is why <code>dyn Iterator&lt;Item = u8&gt;</code> is allowed at all. The design guide below shows that line, and item 12 shows how a boxed iterator still gets <code>map</code>.</p>
-<h2>Design guide: where to write <code>&lt;T&gt;</code> in a trait</h2>
+<h2 id="design-guide">Design guide: where to write <code>&lt;T&gt;</code> in a trait</h2>
 <p>Pick the shape by asking two questions about the code that must work: who decides the type, and how many types each implementing type needs. Five rules cover the cases. Each shows "write this" and "not this", both compile-checked.</p>
 <p>The three shapes:</p>
 <ul>
@@ -5276,7 +5277,7 @@ generic process</code></pre>
 <li>(b) <code>&lt;T&gt;</code> immediately after the method's name: <code>trait Processor { fn process&lt;T&gt;(&amp;self, input: T); }</code></li>
 <li>(c) no <code>&lt;T&gt;</code> at all, an <strong>associated type</strong> in the trait body: <code>trait Processor { type Input; fn process(&amp;self, input: Self::Input); }</code>. Each impl sets it once, with a line such as <code>type Input = i32;</code>, and code refers to it as <code>Self::Input</code> or <code>P::Input</code>. Rule 3 compiles one.</li>
 </ul>
-<h3>Rule 1: several input types per implementing type, each with its own body → (a)</h3>
+<h3 id="rule-1">Rule 1: several input types per implementing type, each with its own body → (a)</h3>
 <p>When <code>Logger</code> should handle <code>i32</code> one way and <code>String</code> another, write the <code>&lt;T&gt;</code> immediately after the trait's name.</p>
 <p><strong>Write this</strong> (excerpt of 5.1 (B), which compiles in full):</p>
 <pre><code><span class="kw">trait</span> <span class="ty">Processor</span>&lt;<span class="ty">T</span>&gt; {
@@ -5423,7 +5424,7 @@ generic process</code></pre>
 </tr>
 </tbody>
 </table></div>
-<h3>Rule 2: every implementation must take any type the caller picks, with one body → (b)</h3>
+<h3 id="rule-2">Rule 2: every implementation must take any type the caller picks, with one body → (b)</h3>
 <p>When generic code should call <code>process</code> with whatever types it likes, write the <code>&lt;T&gt;</code> immediately after the method's name.</p>
 <p><strong>Write this. Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
@@ -5601,7 +5602,7 @@ note: method defined here
 </tr>
 </tbody>
 </table></div>
-<h3>Rule 3: each implementing type determines exactly one type → (c)</h3>
+<h3 id="rule-3">Rule 3: each implementing type determines exactly one type → (c)</h3>
 <p>When every implementing type has exactly one natural input type, make it an associated type.</p>
 <p><strong>Write this. Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
@@ -5814,7 +5815,7 @@ help: consider specifying the generic arguments
 </tbody>
 </table></div>
 <p><code>Iterator::Item</code> is (c) because an iterator over a <code>Vec&lt;u8&gt;</code> yields <code>u8</code> and nothing else. <code>map</code> is (b), and its <code>where Self: Sized</code> keeps <code>dyn Iterator</code> possible (5.7).</p>
-<h3>Rule 4: the trait must work as <code>dyn</code> → (a) or (c), never (b)</h3>
+<h3 id="rule-4">Rule 4: the trait must work as <code>dyn</code> → (a) or (c), never (b)</h3>
 <p><strong>Write this. Compiles.</strong> The (c) form; the (a) form, <code>&amp;dyn Processor&lt;i32&gt;</code>, compiles in 5.6.</p>
 <pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
 
@@ -5868,7 +5869,7 @@ help: consider specifying the generic arguments
 </tbody>
 </table></div>
 <p><strong>Not this:</strong> <code>trait Processor { fn process&lt;T&gt;(&amp;self, input: T); }</code> with <code>let p: &amp;dyn Processor = &amp;Logger;</code>, which fails with E0038 in 5.6. If (b) is unavoidable, add <code>where Self: Sized</code> to that method and accept that <code>dyn</code> can't call it (5.7).</p>
-<h3>Rule 5: the caller picks the input type, and the impl fixes the output type → (a) for the input, (c) for the output</h3>
+<h3 id="rule-5">Rule 5: the caller picks the input type, and the impl fixes the output type → (a) for the input, (c) for the output</h3>
 <p><strong>Write this. Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Meters</span>(<span class="ty">f64</span>);
 

@@ -31,11 +31,12 @@
       <div class="post-meta">October 2026</div>
       <p class="series-nav">Part 2 of 4 in <a href="#series-index">Angle Brackets in Rust</a>, a guide to every place <code>&lt; &gt;</code> appears in Rust syntax.</p>
       <p class="series-nav">Previous: <a href="draft52-part1.html">Part 1: Items 1–5 and the design guide</a> | Next: <a href="draft52-part3.html">Part 3: Items 13–18</a></p>
+      <p class="note">New to this series? Start with the short version, <a href="draft53.html">Angle Brackets in Rust: The Patterns</a>, then come back here to look things up.</p>
       <p class="note">Every example was compiled with rustc 1.97.0, edition 2024. Part 1 explains the caret lines, the circled numbers and the DECLARE / SUPPLY labels used throughout.</p>
 
-<h2>Item 6 — Generic arguments in type position: <code>Vec&lt;i32&gt;</code>, <code>HashMap&lt;String, u8&gt;</code>, <code>&amp;'a str</code></h2>
+<h2 id="item-6">Item 6 — Generic arguments in type position: <code>Vec&lt;i32&gt;</code>, <code>HashMap&lt;String, u8&gt;</code>, <code>&amp;'a str</code></h2>
 <p>Wherever the grammar expects a type, a <code>&lt;</code> immediately after a type's name is always a SUPPLY list, and no <code>::</code> is needed. The type positions are <code>let</code> annotations, function parameter and return types, field types, impl headers, and the inside of another SUPPLY list.</p>
-<h3>6.1 SUPPLY lists in type positions, nested</h3>
+<h3 id="s6-1">6.1 SUPPLY lists in type positions, nested</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
 
@@ -155,7 +156,7 @@
 </tr>
 </tbody>
 </table></div>
-<h3>6.2 Lifetime arguments</h3>
+<h3 id="s6-2">6.2 Lifetime arguments</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::borrow::<span class="ty">Cow</span>;
 
@@ -288,7 +289,7 @@
 </tr>
 </tbody>
 </table></div>
-<h3>6.3 Hidden lifetime arguments</h3>
+<h3 id="s6-3">6.3 Hidden lifetime arguments</h3>
 <p>A type with a lifetime parameter can be written without its SUPPLY list in a function signature. The lifetime is still there, hidden, and it can surprise you:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Excerpt</span>&lt;<span class="kw">'a</span>&gt; {
@@ -483,7 +484,7 @@ help: consider introducing a named lifetime parameter
 2 ~     text: &amp;'a str,
   |</code></pre>
 <p>This program has no angle brackets. rustc's help shows where two belong: a DECLARE list <code>&lt;'a&gt;</code> immediately after <code>Holder</code>, and the argument <code>'a</code> after <code>&amp;</code>.</p>
-<h3>6.4 <code>_</code> as an argument</h3>
+<h3 id="s6-4">6.4 <code>_</code> as an argument</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::collections::<span class="ty">HashMap</span>;
 
@@ -568,7 +569,7 @@ help: replace with the correct return type
 </tr>
 </tbody>
 </table></div>
-<h3>6.5 Which lifetime parameters a turbofish can supply</h3>
+<h3 id="s6-5">6.5 Which lifetime parameters a turbofish can supply</h3>
 <p>Item 1.4 showed <code>longer::&lt;'static&gt;(…)</code> failing with E0794. Two terms explain it:</p>
 <ul>
 <li>A <strong>late-bound</strong> lifetime parameter appears in the function parameter list and in no bound or <code>where</code> clause. <code>'a</code> in <code>fn longer&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str</code> is late-bound. rustc treats it as part of the function's signature, chosen anew by the borrow checker at every call, so there is nothing to supply at the path.</li>
@@ -621,7 +622,7 @@ help: replace with the correct return type
 </tr>
 </tbody>
 </table></div>
-<h3>6.6 Lifetimes left out of an impl header</h3>
+<h3 id="s6-6">6.6 Lifetimes left out of an impl header</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Name</span>(<span class="ty">String</span>);
 
@@ -731,9 +732,9 @@ help: replace with the correct return type
 </tr>
 </tbody>
 </table></div>
-<h2>Item 7 — Generic arguments in expression position: the turbofish</h2>
+<h2 id="item-7">Item 7 — Generic arguments in expression position: the turbofish</h2>
 <p>Inside an expression, a SUPPLY list must be written <code>::&lt;…&gt;</code>, because a bare <code>&lt;</code> after a name is read as "less than". The SUPPLY list fills the generic parameters of the path segment immediately before the <code>::</code>.</p>
-<h3>7.1 The forms</h3>
+<h3 id="s7-1">7.1 The forms</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> v = <span class="ty">Vec</span>::&lt;<span class="ty">i32</span>&gt;::<span class="fn">new</span>();
@@ -893,7 +894,7 @@ help: replace with the correct return type
 </tbody>
 </table></div>
 <p><code>size_of</code> needs no <code>use</code> line because std 1.80 added it to the prelude.</p>
-<h3>7.2 Why expressions need <code>::</code></h3>
+<h3 id="s7-2">7.2 Why expressions need <code>::</code></h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> v = <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt;::<span class="fn">new</span>();
@@ -972,7 +973,7 @@ help: use `::&lt;...&gt;` instead of `&lt;...&gt;` to specify lifetime, type, or
 </tr>
 </tbody>
 </table></div>
-<h3>7.3 The turbofish fills the segment right before it</h3>
+<h3 id="s7-3">7.3 The turbofish fills the segment right before it</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> v = <span class="ty">Vec</span>::<span class="fn">new</span>::&lt;<span class="ty">i32</span>&gt;();
@@ -1008,7 +1009,7 @@ help: use `::&lt;...&gt;` instead of `&lt;...&gt;` to specify lifetime, type, or
 </tbody>
 </table></div>
 <p>Write this: <code>Vec::&lt;i32&gt;::new()</code> (7.1). Not this: <code>Vec::new::&lt;i32&gt;()</code>. The same rule placed the SUPPLY list after the trait's name for <code>trait Processor&lt;T&gt;</code> and after the method's name for <code>fn process&lt;T&gt;</code> (item 5.3). Enum variants are an exception, where either segment works: <code>Option::&lt;u8&gt;::None</code> and <code>None::&lt;u8&gt;</code> (item 2.3).</p>
-<h3>7.4 All the type arguments or none, with <code>_</code> for the rest</h3>
+<h3 id="s7-4">7.4 All the type arguments or none, with <code>_</code> for the rest</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">pair</span>&lt;<span class="ty">A</span>, <span class="ty">B</span>&gt;(a: <span class="ty">A</span>, b: <span class="ty">B</span>) -&gt; (<span class="ty">A</span>, <span class="ty">B</span>) {
 <span class="mk">//     ^^^^^^</span>
@@ -1156,9 +1157,9 @@ help: add missing generic argument
 </tr>
 </tbody>
 </table></div>
-<h2>Item 8 — Associated type bindings: <code>Iterator&lt;Item = u8&gt;</code></h2>
+<h2 id="item-8">Item 8 — Associated type bindings: <code>Iterator&lt;Item = u8&gt;</code></h2>
 <p>Inside the SUPPLY list after a trait's name, <code>Name = Type</code> fills no generic parameter. It pins one of the trait's associated types, which the trait's implementor already decided, and so it is a requirement, not a choice. I label it "other: associated type binding".</p>
-<h3>8.1 The three places it appears</h3>
+<h3 id="s8-1">8.1 The three places it appears</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">sum_bytes</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">u8</span>&gt;&gt;(it: <span class="ty">I</span>) -&gt; <span class="ty">u32</span> {
 <span class="mk">//          ^^^^^^^^^^^^^^^^^^^^^^^^</span>
@@ -1244,7 +1245,7 @@ help: add missing generic argument
 </tbody>
 </table></div>
 <p>Who decides <code>Item</code>? The implementor of <code>Iterator</code> for the actual type. For <code>vec![1_u8, 2, 3].into_iter()</code>, the type is <code>std::vec::IntoIter&lt;u8&gt;</code>, and std's impl of <code>Iterator</code> for it sets <code>type Item = T;</code>, so <code>Item</code> is <code>u8</code>. The binding at ② only checks that. The last call also shows that <code>Box&lt;dyn Iterator&lt;Item = u8&gt;&gt;</code> is itself an iterator, which is how a boxed iterator gets <code>map</code> despite <code>map</code>'s <code>where Self: Sized</code> (item 5.7).</p>
-<h3>8.2 How a binding differs from a generic argument</h3>
+<h3 id="s8-2">8.2 How a binding differs from a generic argument</h3>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1326,7 +1327,7 @@ help: add missing generic argument
 </tbody>
 </table></div>
 <p>At <code>add_one(5_u8)</code>, inference fills <code>T</code> with <code>u8</code>, and std's <code>impl Add&lt;u8&gt; for u8</code> sets <code>type Output = u8;</code>, which satisfies the binding.</p>
-<h3>8.3 What goes wrong</h3>
+<h3 id="s8-3">8.3 What goes wrong</h3>
 <p><strong>Does not compile: the implementor decided a different <code>Item</code>.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">sum_bytes</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">u8</span>&gt;&gt;(it: <span class="ty">I</span>) -&gt; <span class="ty">u32</span> {
 <span class="mk">//          ^^^^^^^^^^^^^^^^^^^^^^^^</span>
@@ -1516,7 +1517,7 @@ help: consider removing this associated item binding
 </tr>
 </tbody>
 </table></div>
-<h3>8.4 Bounds on an associated type: <code>Iterator&lt;Item: Display&gt;</code></h3>
+<h3 id="s8-4">8.4 Bounds on an associated type: <code>Iterator&lt;Item: Display&gt;</code></h3>
 <p>A <code>:</code> instead of <code>=</code> puts a bound on the associated type instead of fixing it. The two functions below mean the same thing:</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Display</span>;
@@ -1645,9 +1646,9 @@ help: consider removing this associated item binding
 </tr>
 </tbody>
 </table></div>
-<h2>Item 9 — Qualified paths: <code>&lt;Vec&lt;u8&gt; as Default&gt;::default()</code>, <code>&lt;T as Iterator&gt;::Item</code></h2>
+<h2 id="item-9">Item 9 — Qualified paths: <code>&lt;Vec&lt;u8&gt; as Default&gt;::default()</code>, <code>&lt;T as Iterator&gt;::Item</code></h2>
 <p>A <code>&lt;</code> at the very start of a path opens a qualified path. <code>&lt;Type as Trait&gt;::item</code> names an item of one specific trait impl; <code>&lt;Type&gt;::item</code> names an item of a type whose name isn't a plain path. Neither DECLAREs nor SUPPLYs anything, so I label it "other: qualified path". Who fills it: whoever writes the path.</p>
-<h3>9.1 The forms</h3>
+<h3 id="s9-1">9.1 The forms</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">first_item</span>&lt;<span class="ty">T</span>: <span class="ty">Iterator</span>&gt;(<span class="kw">mut</span> it: <span class="ty">T</span>) -&gt; <span class="ty">Option</span>&lt;&lt;<span class="ty">T</span> <span class="kw">as</span> <span class="ty">Iterator</span>&gt;::<span class="ty">Item</span>&gt; {
 <span class="mk">//           ^^^^^^^^^^^^^                     ^^^^^^^^^^^^^^^^^^^^^^^</span>
@@ -1737,7 +1738,7 @@ help: consider removing this associated item binding
 </tbody>
 </table></div>
 <p>The token immediately before a qualified path's <code>&lt;</code> is never a name or <code>::</code>. It is punctuation such as <code>=</code>, <code>(</code>, <code>,</code>, <code>:</code>, <code>&amp;</code>, <code>-&gt;</code> or another <code>&lt;</code>, a keyword such as <code>as</code> or <code>for</code>, or nothing at all. That is how you tell it from a SUPPLY list, whose <code>&lt;</code> always follows a name or <code>::</code>.</p>
-<h3>9.2 When you need one</h3>
+<h3 id="s9-2">9.2 When you need one</h3>
 <p><strong>Case 1: two items with the same name.</strong> <code>Dog</code> has an inherent function <code>baby_name</code> and a trait function <code>baby_name</code>:</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Animal</span> {
@@ -2090,9 +2091,9 @@ help: types that don't start with an identifier need to be surrounded with angle
 </tr>
 </tbody>
 </table></div>
-<h2>Item 10 — Higher-ranked bounds: <code>for&lt;'a&gt;</code></h2>
+<h2 id="item-10">Item 10 — Higher-ranked bounds: <code>for&lt;'a&gt;</code></h2>
 <p><code>for&lt;'a&gt;</code> is a DECLARE list that declares a lifetime for one bound or one type only, and it means "for every lifetime <code>'a</code>". A closure or function that meets <code>for&lt;'a&gt; Fn(&amp;'a str) -&gt; &amp;'a str</code> must work with whatever borrow it receives, including a borrow of a local variable that exists only inside the callee. I label it "DECLARE (higher-ranked)". Who fills its <code>'a</code>: the borrow checker, separately at each call through it.</p>
-<h3>10.1 The three places it appears</h3>
+<h3 id="s10-1">10.1 The three places it appears</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="ty">F</span>&gt;(f: <span class="ty">F</span>) -&gt; <span class="ty">usize</span>
 <span class="mk">//      ^^^</span>
@@ -2172,7 +2173,7 @@ help: types that don't start with an identifier need to be surrounded with angle
 </tbody>
 </table></div>
 <p><code>Fn(&amp;'a str) -&gt; &amp;'a str</code> uses parentheses, not angle brackets, for the closure's argument types. Item 12 says more about that form.</p>
-<h3>10.2 Why: the callee picks the borrow</h3>
+<h3 id="s10-2">10.2 Why: the callee picks the borrow</h3>
 <p><strong>Does not compile: <code>'a</code> declared after <code>apply</code> instead.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="kw">'a</span>, <span class="ty">F</span>&gt;(f: <span class="ty">F</span>) -&gt; <span class="ty">usize</span>
 <span class="mk">//      ^^^^^^^</span>
@@ -2231,7 +2232,7 @@ note: requirement that the value outlives `'a` introduced here
 </table></div>
 <p>Here <code>'a</code> belongs to <code>apply</code>, so the caller's side fixes it, and it must last at least as long as the whole call to <code>apply</code>. A borrow of <code>local</code>, which <code>apply</code> creates and drops inside its body, can't last that long. With <code>for&lt;'a&gt;</code> in 10.1, the bound promises <code>f</code> works for every lifetime, so each call <code>f(&amp;local)</code> gets a lifetime of its own, as short as needed.</p>
 <p>(The note's file path points into std's own source, where the <code>Fn</code> trait is defined.)</p>
-<h3>10.3 The usual spelling hides <code>for&lt;'a&gt;</code></h3>
+<h3 id="s10-3">10.3 The usual spelling hides <code>for&lt;'a&gt;</code></h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="ty">F</span>&gt;(f: <span class="ty">F</span>) -&gt; <span class="ty">usize</span>
 <span class="mk">//      ^^^</span>
@@ -2273,7 +2274,7 @@ note: requirement that the value outlives `'a` introduced here
 </tbody>
 </table></div>
 <p><code>F: Fn(&amp;str) -&gt; &amp;str</code> has no brackets, yet it means <code>F: for&lt;'a&gt; Fn(&amp;'a str) -&gt; &amp;'a str</code>: inside a <code>Fn</code> bound, a left-out lifetime becomes a higher-ranked one. That is why most code never writes <code>for&lt;'a&gt;</code>.</p>
-<h3>10.4 Beyond closures</h3>
+<h3 id="s10-4">10.4 Beyond closures</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">total</span>&lt;<span class="ty">C</span>&gt;(c: &amp;<span class="ty">C</span>) -&gt; <span class="ty">u32</span>
 <span class="mk">//      ^^^</span>
@@ -2328,7 +2329,7 @@ note: requirement that the value outlives `'a` introduced here
 </tbody>
 </table></div>
 <p>The bound says: however briefly <code>c</code> is borrowed, the borrow can be iterated and yields bytes borrowed for the same time. At <code>total(&amp;v)</code> inference fills <code>C</code> with <code>Vec&lt;u8&gt;</code>, and at <code>total(&amp;arr)</code> with <code>[u8; 2]</code>.</p>
-<h3>10.5 Only lifetimes</h3>
+<h3 id="s10-5">10.5 Only lifetimes</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">show</span>&lt;<span class="ty">T</span>&gt;(_x: <span class="ty">T</span>) -&gt; <span class="ty">String</span>
 <span class="mk">//     ^^^</span>
@@ -2428,9 +2429,9 @@ note: requirement that the value outlives `'a` introduced here
 </tr>
 </tbody>
 </table></div>
-<h2>Item 11 — <code>impl Trait</code> in argument and return position</h2>
+<h2 id="item-11">Item 11 — <code>impl Trait</code> in argument and return position</h2>
 <p><code>impl Trait</code> writes no DECLARE list, but it still stands for a generic parameter. In argument position it is an anonymous type parameter that the caller fills, like <code>&lt;I: Iterator&lt;Item = u8&gt;&gt;</code>. In return position it is a hidden concrete type that the function's author fills, through the body, and the caller never learns its name. The only angle brackets involved are SUPPLY lists and bindings inside the bound, plus, in return position, an optional <code>use&lt;…&gt;</code> list.</p>
-<h3>11.1 Argument position: an anonymous type parameter</h3>
+<h3 id="s11-1">11.1 Argument position: an anonymous type parameter</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">total</span>(items: <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">u8</span>&gt;) -&gt; <span class="ty">u32</span> {
 <span class="mk">//                           ^^^^^^^^^^^</span>
@@ -2570,7 +2571,7 @@ note: function defined here, with 0 generic parameters
 </tr>
 </tbody>
 </table></div>
-<h3>11.2 Return position: a hidden concrete type</h3>
+<h3 id="s11-2">11.2 Return position: a hidden concrete type</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::any::type_name_of_val;
 
@@ -2680,7 +2681,7 @@ help: if you change the return type to expect trait objects, box the returned ex
 </tbody>
 </table></div>
 <p>The help shows the way out: a <code>dyn</code> type (item 12), which can hold either.</p>
-<h3>11.3 Who chooses: the caller or the callee</h3>
+<h3 id="s11-3">11.3 Who chooses: the caller or the callee</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">make_default</span>&lt;<span class="ty">T</span>: <span class="ty">Default</span>&gt;() -&gt; <span class="ty">T</span> {
 <span class="mk">//             ^^^^^^^^^^^^</span>
@@ -2752,7 +2753,7 @@ help: if you change the return type to expect trait objects, box the returned ex
 </tr>
 </tbody>
 </table></div>
-<h3>11.4 <code>use&lt;…&gt;</code>: which generic parameters the hidden type may use</h3>
+<h3 id="s11-4">11.4 <code>use&lt;…&gt;</code>: which generic parameters the hidden type may use</h3>
 <p>In edition 2024, a hidden return type may use every generic parameter and lifetime in scope, including the lifetime of an argument it never actually keeps. That can keep a borrow alive too long:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">scaled</span>&lt;<span class="kw">'a</span>&gt;(words: &amp;<span class="kw">'a</span> [<span class="ty">String</span>], factor: &amp;<span class="ty">usize</span>) -&gt; <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">usize</span>&gt; {
@@ -2930,9 +2931,9 @@ help: use the precise capturing `use&lt;...&gt;` syntax to make the captures exp
 </tr>
 </tbody>
 </table></div>
-<h2>Item 12 — <code>dyn Trait&lt;…&gt;</code>: generic arguments on trait objects</h2>
+<h2 id="item-12">Item 12 — <code>dyn Trait&lt;…&gt;</code>: generic arguments on trait objects</h2>
 <p>A <code>dyn</code> type names a trait with all of its generic parameters and associated types filled, because one compiled table of function pointers must serve every value behind it. So the SUPPLY list after the trait's name is required, and so are bindings for its associated types. A method with its own DECLARE list can't go in such a table, which is why it blocks <code>dyn</code> (item 5.6).</p>
-<h3>12.1 Different types behind one <code>dyn Processor&lt;i32&gt;</code></h3>
+<h3 id="s12-1">12.1 Different types behind one <code>dyn Processor&lt;i32&gt;</code></h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Processor</span>&lt;<span class="ty">T</span>&gt; {
 <span class="mk">//             ^^^</span>
@@ -3030,7 +3031,7 @@ count 6</code></pre>
 </tbody>
 </table></div>
 <p><code>Logger</code> and <code>Counter</code> are different types, so they can share a <code>Vec</code> only behind <code>dyn</code>. The <code>T</code> in ⑥ is fixed by the author of the <code>let all</code> line; it cannot vary from element to element.</p>
-<h3>12.2 A <code>dyn</code> type must state its associated types</h3>
+<h3 id="s12-2">12.2 A <code>dyn</code> type must state its associated types</h3>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> it: <span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Iterator</span>&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="mac">vec!</span>[<span class="num">1_u8</span>].<span class="fn">into_iter</span>());
@@ -3069,7 +3070,7 @@ help: specify the associated type
 </tbody>
 </table></div>
 <p>Write this: <code>Box&lt;dyn Iterator&lt;Item = u8&gt;&gt;</code>, as in item 8.1. A caller of <code>next</code> through the table must know what type comes back.</p>
-<h3>12.3 <code>Fn</code> traits use parentheses</h3>
+<h3 id="s12-3">12.3 <code>Fn</code> traits use parentheses</h3>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> add_one: <span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Fn</span>(<span class="ty">i32</span>) -&gt; <span class="ty">i32</span>&gt; = <span class="ty">Box</span>::<span class="fn">new</span>(|x| x + <span class="num">1</span>);
@@ -3146,7 +3147,7 @@ help: specify the associated type
 </tr>
 </tbody>
 </table></div>
-<h3>12.4 Why a method's own DECLARE list blocks <code>dyn</code></h3>
+<h3 id="s12-4">12.4 Why a method's own DECLARE list blocks <code>dyn</code></h3>
 <p>Item 5.6 compiled the case: <code>trait Processor { fn process&lt;T&gt;(&amp;self, input: T); }</code> with <code>let p: &amp;dyn Processor = &amp;Logger;</code> fails with E0038, because the table would need one <code>process</code> per <code>T</code>. <code>trait Processor&lt;T&gt; { fn process(&amp;self, input: T); }</code> works as <code>dyn Processor&lt;i32&gt;</code>, because the SUPPLY list after <code>Processor</code> picks one <code>T</code> up front, as at ⑥ in 12.1. The escape hatch, <code>where Self: Sized</code> on the generic method, is in 5.7.</p>
 <h3>Item 12 in one table</h3>
 <div class="table-wrap"><table>

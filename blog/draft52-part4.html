@@ -31,9 +31,10 @@
       <div class="post-meta">October 2026</div>
       <p class="series-nav">Part 4 of 4 in <a href="#series-index">Angle Brackets in Rust</a>, a guide to every place <code>&lt; &gt;</code> appears in Rust syntax.</p>
       <p class="series-nav">Previous: <a href="draft52-part3.html">Part 3: Items 13–18</a> | Next: none</p>
+      <p class="note">New to this series? Start with the short version, <a href="draft53.html">Angle Brackets in Rust: The Patterns</a>, then come back here to look things up.</p>
       <p class="note">Every example was compiled with rustc 1.97.0, edition 2024. Part 1 explains the caret lines, the circled numbers and the DECLARE / SUPPLY labels used throughout.</p>
 
-<h2>Every bracket position in one table</h2>
+<h2 id="every-position">Every bracket position in one table</h2>
 <p>Three compiled programs hold one example of every position, marked. The table after them lists each position once and points to its mark: A① means mark ① in program A.</p>
 <h3>Program A: DECLARE positions</h3>
 <p><strong>Compiles.</strong> <code>#![allow(dead_code)]</code> on the first line turns off the warnings for items that <code>main</code> doesn't use; it has no brackets.</p>
@@ -883,7 +884,7 @@
 </tr>
 </tbody>
 </table></div>
-<h2>How to identify any <code>&lt;</code>: a step-by-step procedure</h2>
+<h2 id="procedure">How to identify any <code>&lt;</code>: a step-by-step procedure</h2>
 <p>Work through the questions in order and stop at the first answer that applies. Every example is from programs A, B and C above, which compile; the mark after each example points to it.</p>
 <p><strong>Step 1. Is the <code>&lt;</code> inside a string literal or a comment?</strong></p>
 <ul>
@@ -925,7 +926,7 @@
 <li>It contains a name from an enclosing DECLARE list: whoever fills that name. Example: in <code>impl&lt;T&gt; From&lt;T&gt; for Wrapper&lt;T&gt;</code> (B⑤, B⑥), matching fills <code>T</code>; in <code>fn first_item&lt;T: Iterator&gt;(…) -&gt; Option&lt;&lt;T as Iterator&gt;::Item&gt;</code> (C⑧), the caller fills <code>T</code>.</li>
 <li>No brackets were written at all: inference filled the parameter, or a default did. Examples: <code>first(&amp;[3, 4])</code> in program A, where inference fills <code>T</code> with <code>i32</code>; <code>let a: Meters = …</code> in item 16, where the default fills <code>T</code> with <code>f64</code>.</li>
 </ul>
-<h2>Worked example: <code>impl&lt;'a, K: Hash + Eq, V&gt; FromIterator&lt;(&amp;'a K, V)&gt; for MyMap&lt;&amp;'a K, V&gt; where V: Clone</code></h2>
+<h2 id="worked-example">Worked example: <code>impl&lt;'a, K: Hash + Eq, V&gt; FromIterator&lt;(&amp;'a K, V)&gt; for MyMap&lt;&amp;'a K, V&gt; where V: Clone</code></h2>
 <h3>The signature, every bracket and every generic name marked</h3>
 <p><strong>Excerpt</strong> (the <code>impl</code> line of the program in the next part, unchanged):</p>
 <pre><code><span class="kw">impl</span>&lt;<span class="kw">'a</span>, <span class="ty">K</span>: <span class="ty">Hash</span> + <span class="ty">Eq</span>, <span class="ty">V</span>&gt; <span class="ty">FromIterator</span>&lt;(&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>)&gt; <span class="kw">for</span> <span class="ty">MyMap</span>&lt;&amp;<span class="kw">'a</span> <span class="ty">K</span>, <span class="ty">V</span>&gt; <span class="kw">where</span> <span class="ty">V</span>: <span class="ty">Clone</span> {
@@ -1153,7 +1154,7 @@
 <li>rustc checks the bounds: <code>String: Hash + Eq</code> holds, and <code>u8: Clone</code> holds.</li>
 <li>Inference fills <code>from_iter</code>'s <code>I</code> with the iterator type <code>Zip&lt;std::slice::Iter&lt;'_, String&gt;, std::array::IntoIter&lt;u8, 2&gt;&gt;</code>, and rustc compiles one copy of <code>from_iter</code> for that <code>K</code>, <code>V</code> and <code>I</code>.</li>
 </ol>
-<h2>Quiz: ten brackets</h2>
+<h2 id="quiz">Quiz: ten brackets</h2>
 <p>For each question, say what the bracket marked ① is (DECLARE, SUPPLY, or which kind of "other"), and who fills or chooses what is in it. Every snippet compiles. The answers are at the end.</p>
 <p><strong>Question 1.</strong></p>
 <pre><code><span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
