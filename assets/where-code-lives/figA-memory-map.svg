@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" role="img" aria-labelledby="figA-title figA-desc">
+  <title id="figA-title">Where a running program keeps its code and its data</title>
+  <desc id="figA-desc">Four regions of a running program. The stack holds main's frame with bar, an 8-byte ProgressBar, and boxed, an address. The heap holds the ProgressBar that boxed points to. Read-only data holds constants. The code region holds one copy of each function, including ProgressBar::render. Neither value contains a pointer to render.</desc>
+  <defs>
+    <style>
+      text { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
+      .sans, .sans text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    </style>
+    <pattern id="fAhatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#1c2128"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#30363d" stroke-width="2"/>
+    </pattern>
+    <marker id="fAarrowP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#bc8cff"/>
+    </marker>
+  </defs>
+
+  <rect width="800" height="600" fill="#0d1117"/>
+  <rect x="10" y="10" width="780" height="580" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text class="sans" x="30" y="42" font-size="15" fill="#e6edf3">One running program, four regions</text>
+  <text class="sans" x="30" y="64" font-size="13" fill="#8b949e">Simplified: real programs have more regions. Higher addresses are at the top.</text>
+
+  <!-- region labels -->
+  <g class="sans">
+    <text x="30" y="122" font-size="14" font-weight="bold" fill="#e6edf3">stack</text>
+    <text x="30" y="141" font-size="11.5" fill="#8b949e">one frame per</text>
+    <text x="30" y="155" font-size="11.5" fill="#8b949e">running function</text>
+    <text x="30" y="262" font-size="14" font-weight="bold" fill="#e6edf3">heap</text>
+    <text x="30" y="281" font-size="11.5" fill="#8b949e">values that outlive</text>
+    <text x="30" y="295" font-size="11.5" fill="#8b949e">a frame</text>
+    <text x="30" y="352" font-size="14" font-weight="bold" fill="#e6edf3">read-only data</text>
+    <text x="30" y="371" font-size="11.5" fill="#8b949e">constants</text>
+    <text x="30" y="442" font-size="14" font-weight="bold" fill="#e6edf3">code</text>
+    <text x="30" y="461" font-size="11.5" fill="#8b949e">one copy of</text>
+    <text x="30" y="475" font-size="11.5" fill="#8b949e">each function</text>
+  </g>
+
+  <!-- region bands -->
+  <g fill="#1c2128" stroke="#30363d">
+    <rect x="170" y="96" width="600" height="110" rx="4"/>
+    <rect x="170" y="240" width="600" height="72" rx="4"/>
+    <rect x="170" y="330" width="600" height="64" rx="4"/>
+    <rect x="170" y="414" width="600" height="96" rx="4"/>
+  </g>
+  <text class="sans" x="470" y="226" font-size="12" fill="#8b949e" text-anchor="middle">⋮ free space ⋮</text>
+
+  <!-- stack: main's frame -->
+  <text class="sans" x="184" y="114" font-size="11.5" fill="#8b949e">main's frame</text>
+  <text x="190" y="134" font-size="12" fill="#3fb950">bar: ProgressBar</text>
+  <rect x="190" y="142" width="104" height="40" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <line x1="216" y1="143" x2="216" y2="181" stroke="#30363d"/><line x1="242" y1="143" x2="242" y2="181" stroke="#30363d"/><line x1="268" y1="143" x2="268" y2="181" stroke="#30363d"/>
+  <rect x="294" y="142" width="26" height="40" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <rect x="320" y="142" width="78" height="40" fill="url(#fAhatch)" stroke="#30363d"/>
+  <g font-size="12" fill="#e6edf3" text-anchor="middle">
+    <text x="203" y="167">0a</text><text x="229" y="167">00</text><text x="255" y="167">00</text><text x="281" y="167">00</text><text x="307" y="167">07</text>
+  </g>
+  <text class="sans" x="294" y="198" font-size="11.5" fill="#8b949e" text-anchor="middle">8 bytes: fields only</text>
+
+  <text x="470" y="134" font-size="12" fill="#3fb950">boxed: Box&lt;ProgressBar&gt;</text>
+  <rect x="470" y="142" width="208" height="40" fill="#161b22" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="574" y="167" font-size="12" fill="#e6edf3" text-anchor="middle">address</text>
+  <path d="M678 162 H720 V266 H684" fill="none" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#fAarrowP)"/>
+
+  <!-- heap -->
+  <text x="470" y="258" font-size="12" fill="#3fb950">the boxed ProgressBar</text>
+  <rect x="470" y="264" width="104" height="36" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <line x1="496" y1="265" x2="496" y2="299" stroke="#30363d"/><line x1="522" y1="265" x2="522" y2="299" stroke="#30363d"/><line x1="548" y1="265" x2="548" y2="299" stroke="#30363d"/>
+  <rect x="574" y="264" width="26" height="36" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <rect x="600" y="264" width="78" height="36" fill="url(#fAhatch)" stroke="#30363d"/>
+  <g font-size="12" fill="#e6edf3" text-anchor="middle">
+    <text x="483" y="287">04</text><text x="509" y="287">00</text><text x="535" y="287">00</text><text x="561" y="287">00</text><text x="587" y="287">03</text>
+  </g>
+
+  <!-- read-only data -->
+  <rect x="190" y="346" width="230" height="32" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="305" y="367" font-size="12" fill="#e6edf3" text-anchor="middle">"[", "/", "]"  format pieces</text>
+  <rect x="440" y="346" width="310" height="32" rx="3" fill="none" stroke="#d29922" stroke-dasharray="4 3"/>
+  <text class="sans" x="595" y="367" font-size="12" fill="#d29922" text-anchor="middle">vtables live here too, when a program has any</text>
+
+  <!-- code -->
+  <rect x="190" y="430" width="150" height="34" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="265" y="452" font-size="12" fill="#e6edf3" text-anchor="middle">fn main</text>
+  <rect x="356" y="430" width="230" height="34" rx="3" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="471" y="452" font-size="12" fill="#e6edf3" text-anchor="middle">fn ProgressBar::render</text>
+  <rect x="602" y="430" width="150" height="34" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="677" y="452" font-size="12" fill="#8b949e" text-anchor="middle">std: println, …</text>
+  <text class="sans" x="471" y="490" font-size="11.5" fill="#3fb950" text-anchor="middle">one copy, shared by every ProgressBar there will ever be</text>
+
+  <text class="sans" x="30" y="540" font-size="12.5" fill="#8b949e">Values carry data; functions live once, somewhere else. Nothing in <tspan font-family="'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#e6edf3">bar</tspan>'s bytes says where</text>
+  <text class="sans" x="30" y="559" font-size="12.5" fill="#8b949e"><tspan font-family="'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#e6edf3">render</tspan> is. The compiler knows, because it knows <tspan font-family="'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#e6edf3">bar</tspan>'s type, so it writes the call itself.</text>
+</svg>

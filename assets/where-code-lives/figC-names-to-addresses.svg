@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 452" width="800" height="452" role="img" aria-labelledby="figC-title figC-desc">
+  <title id="figC-title">From names to addresses, in three steps</title>
+  <desc id="figC-desc">Three steps: compiler, linker, loader. A direct call starts as a name, the linker turns it into a distance (call 0x0c20 bytes ahead), and the loader has nothing to fix. A stored address, like a vtable entry, starts as a name, becomes an offset (0x1a40) at link time, and the loader adds the program's load address (0x5600_0000_0000) at startup, then makes it read-only. The numbers are made up.</desc>
+  <defs>
+    <style>
+      text { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
+      .sans, .sans text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="800" height="452" fill="#0d1117"/>
+  <rect x="10" y="10" width="780" height="432" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text class="sans" x="30" y="42" font-size="15" fill="#e6edf3">From names to addresses, in three steps</text>
+  <text class="sans" x="30" y="64" font-size="13" fill="#8b949e">The numbers are made up; the steps are real.</text>
+
+  <g class="sans" text-anchor="middle">
+    <text x="150" y="100" font-size="13.5" font-weight="bold" fill="#e6edf3">1 · compiler</text>
+    <text x="400" y="100" font-size="13.5" font-weight="bold" fill="#e6edf3">2 · linker</text>
+    <text x="650" y="100" font-size="13.5" font-weight="bold" fill="#e6edf3">3 · loader, at startup</text>
+    <text x="150" y="119" font-size="11.5" fill="#8b949e">writes code, leaves names</text>
+    <text x="400" y="119" font-size="11.5" fill="#8b949e">lays out all the code</text>
+    <text x="650" y="119" font-size="11.5" fill="#8b949e">places the program in memory</text>
+  </g>
+
+  <!-- row A: a direct call -->
+  <text class="sans" x="30" y="152" font-size="12.5" fill="#e6edf3">A direct call, inside <tspan font-family="'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace">main</tspan></text>
+  <g fill="#1c2128" stroke="#30363d"><rect x="30" y="162" width="240" height="80" rx="6"/><rect x="280" y="162" width="240" height="80" rx="6"/></g>
+  <rect x="530" y="162" width="240" height="80" rx="6" fill="#1c2128" stroke="#3fb950"/>
+  <text x="44" y="192" font-size="12" fill="#e6edf3">call ProgressBar::render</text>
+  <text class="sans" x="44" y="216" font-size="12" fill="#d29922">a name, not an address yet</text>
+  <text x="294" y="192" font-size="12" fill="#e6edf3">render is at 0x1a40</text>
+  <text x="294" y="216" font-size="12" fill="#e6edf3">call 0x0c20 bytes ahead</text>
+  <text class="sans" x="544" y="188" font-size="12.5" fill="#3fb950">nothing to fix</text>
+  <text class="sans" x="544" y="208" font-size="12" fill="#8b949e">a distance works wherever</text>
+  <text class="sans" x="544" y="225" font-size="12" fill="#8b949e">the program lands</text>
+
+  <!-- row B: a stored address -->
+  <text class="sans" x="30" y="274" font-size="12.5" fill="#e6edf3">A stored address, like an entry in a vtable</text>
+  <g fill="#1c2128" stroke="#30363d"><rect x="30" y="284" width="240" height="98" rx="6"/><rect x="280" y="284" width="240" height="98" rx="6"/></g>
+  <rect x="530" y="284" width="240" height="98" rx="6" fill="#1c2128" stroke="#3fb950"/>
+  <text x="44" y="314" font-size="12" fill="#e6edf3">slot = address of render</text>
+  <text class="sans" x="44" y="338" font-size="12" fill="#d29922">a name, not an address yet</text>
+  <text x="294" y="314" font-size="12" fill="#e6edf3">slot = 0x1a40</text>
+  <text class="sans" x="294" y="338" font-size="12" fill="#8b949e">an offset from the program's start</text>
+  <text class="sans" x="544" y="308" font-size="12" fill="#8b949e">program placed at</text>
+  <text x="544" y="326" font-size="12" fill="#e6edf3">0x5600_0000_0000</text>
+  <text x="544" y="350" font-size="12" fill="#3fb950">slot = 0x5600_0000_1a40</text>
+  <text class="sans" x="544" y="370" font-size="12" fill="#8b949e">then made read-only</text>
+
+  <g class="sans" font-size="16" fill="#8b949e" text-anchor="middle">
+    <text x="275" y="208">›</text><text x="525" y="208">›</text>
+    <text x="275" y="339">›</text><text x="525" y="339">›</text>
+  </g>
+
+  <text class="sans" x="30" y="414" font-size="12.5" fill="#8b949e">A direct call is written as a distance, so nothing needs fixing at startup. A stored address is absolute, so the</text>
+  <text class="sans" x="30" y="432" font-size="12.5" fill="#8b949e">loader patches it, and the program may land somewhere different each run. Vtables are full of stored addresses.</text>
+</svg>

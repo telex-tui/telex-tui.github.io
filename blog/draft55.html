@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Where Your Rust Program Lives: Code, Data and Addresses - Telex</title>
+  <meta name="description" content="Where a running Rust program keeps its code and its data, what a method call really is, and how function names become addresses. Groundwork for What dyn Redacts.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Where Your Rust Program Lives: Code, Data and Addresses</h1>
+      <div class="post-meta">October 2026</div>
+<p>Before a vtable makes sense, it helps to picture where a running program keeps things. This post covers three ideas, each with one picture, and one small program to hang them on.</p>
+<p>It's the groundwork for <a href="draft54.html">What dyn Redacts</a>, and it stays at the level of diagrams on purpose. Tools like <code>objdump</code> can show every bit of it in a real binary, but that's a separate trip.</p>
+<p>The program was compiled with rustc 1.97.0, edition 2024, on x86_64. The pictures are simplified: real programs have more regions, and the addresses shown are made up.</p>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">struct</span> <span class="ty">ProgressBar</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">ProgressBar</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="cm">// One value on the stack, one on the heap</span>
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> boxed = <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">ProgressBar</span> { value: <span class="num">3</span>, max: <span class="num">4</span> });
+
+    <span class="cm">// Two values, one render function</span>
+    <span class="mac">println!</span>(<span class="str">"{} {}"</span>, bar.<span class="fn">render</span>(), boxed.<span class="fn">render</span>());
+
+    <span class="cm">// A method call is a function call that passes the value's address</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProgressBar</span>::<span class="fn">render</span>(&amp;bar));
+
+    <span class="cm">// The value holds its fields and nothing else</span>
+    <span class="mac">println!</span>(<span class="str">"ProgressBar is {} bytes"</span>, <span class="fn">size_of</span>::&lt;<span class="ty">ProgressBar</span>&gt;());
+}</code></pre>
+<p>Output:</p>
+<pre><code>[7/10] [3/4]
+[7/10]
+ProgressBar is 8 bytes</code></pre>
+<h2>1. Code and data live apart</h2>
+<figure>
+<div class="figure-scroll"><img src="../assets/where-code-lives/figA-memory-map.svg" width="800" height="600" alt="Four regions of a running program. The stack holds main's frame with bar, an 8-byte ProgressBar, and boxed, an address. The heap holds the ProgressBar that boxed points to. Read-only data holds constants, and vtables when there are any. The code region holds one copy of each function, including ProgressBar::render. Neither value contains a pointer to render."></div>
+<figcaption>Values carry data. Functions live once, in the code, and no value points at them.</figcaption>
+</figure>
+<p>A running program keeps different kinds of things in different places:</p>
+<ul>
+<li><strong>The stack</strong> holds each running function's local values. <code>bar</code> lives in <code>main</code>'s frame, and so does <code>boxed</code>, which is only an address.</li>
+<li><strong>The heap</strong> holds values that need to outlive a frame or be sized at run time. The <code>ProgressBar</code> that <code>boxed</code> owns lives there.</li>
+<li><strong>Read-only data</strong> holds constants, such as the pieces of the format string.</li>
+<li><strong>The code</strong> holds the compiled functions: <code>main</code>, <code>ProgressBar::render</code>, and whatever they use from std.</li>
+</ul>
+<p>The last line of output is the point: a <code>ProgressBar</code> is 8 bytes, which is exactly <code>max</code>, <code>value</code> and padding. There's no room for anything else, and nothing else is there. However many progress bars exist, there's one <code>render</code>, in the code.</p>
+<p>So how does <code>bar.render()</code> find <code>render</code>? Not through <code>bar</code>. The compiler knows <code>bar</code> is a <code>ProgressBar</code>, so it knows which <code>render</code> to call, and it writes that call into <code>main</code> itself.</p>
+<h2>2. A method is a function that gets an address</h2>
+<figure>
+<div class="figure-scroll"><img src="../assets/where-code-lives/figB-method-call.svg" width="800" height="390" alt="On the left, code: main calls ProgressBar::render, passing the address of bar. render reads max at self plus 0 and value at self plus 4. On the right, the stack: bar's 8 bytes, which self points at."></div>
+<figcaption><code>self</code> is the value's address, and each field sits at a fixed offset from it.</figcaption>
+</figure>
+<p>The second line of output comes from <code>ProgressBar::render(&amp;bar)</code>, and it matches the first, because that's what <code>bar.render()</code> means. A method is an ordinary function whose first argument, <code>self</code>, is the address of the value it was called on. The function finds each field at a fixed distance from that address: here <code>max</code> at 0 and <code>value</code> at 4, because rustc put <code>max</code> first.</p>
+<p>That's why one copy of <code>render</code> can serve every <code>ProgressBar</code>: each call simply passes a different address.</p>
+<h2>3. Names become addresses</h2>
+<figure>
+<div class="figure-scroll"><img src="../assets/where-code-lives/figC-names-to-addresses.svg" width="800" height="452" alt="Three steps: compiler, linker, loader. A direct call starts as a name, the linker turns it into a distance, and the loader has nothing to fix. A stored address, like a vtable entry, starts as a name, becomes an offset at link time, and the loader adds the program's load address at startup, then makes it read-only."></div>
+<figcaption>A direct call needs no fixing at startup; a stored address does.</figcaption>
+</figure>
+<p>Source code calls functions by name, but a processor jumps to addresses. Three steps get from one to the other:</p>
+<ol>
+<li><strong>The compiler</strong> turns each part of the program into machine code. Wherever it needs another function's address, it leaves a note saying which name goes there.</li>
+<li><strong>The linker</strong> puts all the code together, so every function now has a fixed place, and it fills in the notes.</li>
+<li><strong>The loader</strong> runs each time the program starts. It places the program in memory, often at a different address each run, and finishes any notes that need the final address.</li>
+</ol>
+<p>Which notes need that last step depends on how an address is written down. A direct call, like the one in <code>main</code>, is written as a distance from where the call sits: "the function is this many bytes ahead". The distance is the same wherever the program lands, so it's done once the linker has filled it in. A stored address, a pointer to a function kept as data, is absolute, so the loader adds the program's real position at startup. Tables that never change after that, like vtables, are then marked read-only.</p>
+<h2>Where this leads</h2>
+<p>Put the three ideas together. A value's bytes never contain its functions. The compiler finds the right function because it knows the value's type. And addresses that are stored as data are filled in by the linker and loader before <code>main</code> runs.</p>
+<p>Now take the type away. Code holding a value whose type it doesn't know can't find <code>render</code> by itself, so the right addresses have to come along with the value. A table of stored addresses, in read-only data, one per type: that's a vtable. <a href="draft54.html">What dyn Redacts</a> picks up from there.</p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

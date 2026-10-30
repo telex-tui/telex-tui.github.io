@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 630" width="800" height="630" role="img" aria-labelledby="fig1-title fig1-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 750" width="800" height="750" role="img" aria-labelledby="fig1-title fig1-desc">
   <title id="fig1-title">The same ProgressBar bytes behind a &amp;ProgressBar and behind a &amp;dyn Widget</title>
-  <desc id="fig1-desc">Top: a plain reference r points at a ProgressBar in memory; the compiler knows its type, size, alignment, fields and offsets. Bottom: a two-word reference w points at the same unchanged bytes, but the type and field names are blacked out; its second word points to a vtable holding drop, size 8, align 4 and the address of ProgressBar's render.</desc>
+  <desc id="fig1-desc">Top: a plain reference r points at a ProgressBar in memory; the compiler knows its type, size, alignment, fields and offsets. Bottom: a two-word reference w points at the same unchanged bytes, but the type and field names are blacked out; its second word points to a vtable in read-only data holding size 8, align 4 and two addresses, which point into the program's code at ProgressBar's drop and render functions.</desc>
   <defs>
     <style>
       text { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
@@ -18,7 +18,7 @@
     </marker>
   </defs>
 
-  <rect width="800" height="630" fill="#0d1117"/>
+  <rect width="800" height="750" fill="#0d1117"/>
 
   <!-- ===== Top: let r: &ProgressBar = &g; ===== -->
   <rect x="10" y="10" width="780" height="250" rx="8" fill="#161b22" stroke="#30363d"/>
@@ -55,7 +55,7 @@
   <text class="sans" x="30" y="226" font-size="12.5" fill="#8b949e">Known at compile time: the type, its size and alignment, its fields and offsets, all its methods and trait impls.</text>
 
   <!-- ===== Bottom: let w: &dyn Widget = &g; ===== -->
-  <rect x="10" y="280" width="780" height="330" rx="8" fill="#161b22" stroke="#30363d"/>
+  <rect x="10" y="280" width="780" height="455" rx="8" fill="#161b22" stroke="#30363d"/>
   <text x="30" y="312" font-size="15" fill="#e6edf3">let w: <tspan fill="#58a6ff">&amp;dyn Widget</tspan> = &amp;bar;</text>
   <text class="sans" x="30" y="334" font-size="13" fill="#8b949e">The bytes don't move. What the compiler knew about them is blacked out; the vtable carries what's left.</text>
 
@@ -90,7 +90,7 @@
     <text x="554" y="415">07</text>
   </g>
 
-  <text x="320" y="500" font-size="13" fill="#d29922">vtable: ProgressBar as Widget</text>
+  <text x="320" y="500" font-size="13" fill="#d29922">vtable: ProgressBar as Widget<tspan class="sans" dx="8" font-size="12" fill="#8b949e">in read-only data</tspan></text>
   <rect x="320" y="508" width="416" height="88" rx="4" fill="#1c2128" stroke="#d29922" stroke-width="1.5"/>
   <line x1="320" y1="530" x2="736" y2="530" stroke="#30363d"/>
   <line x1="320" y1="552" x2="736" y2="552" stroke="#30363d"/>
@@ -100,11 +100,21 @@
     <text x="332" y="523">drop</text><text x="332" y="545">size</text><text x="332" y="567">align</text><text x="332" y="589">render</text>
   </g>
   <g font-size="12.5" fill="#e6edf3">
-    <text x="420" y="523">→ drop_in_place::&lt;ProgressBar&gt;</text>
+    <text x="420" y="523">address</text>
     <text x="420" y="545">8</text>
     <text x="420" y="567">4</text>
-    <text x="420" y="589">→ &lt;ProgressBar as Widget&gt;::render</text>
+    <text x="420" y="589">address</text>
   </g>
+
+  <!-- the program's code: where the vtable's addresses lead -->
+  <text class="sans" x="320" y="628" font-size="12" fill="#8b949e">code: one copy of each function</text>
+  <rect x="320" y="636" width="428" height="86" rx="4" fill="#1c2128" stroke="#30363d"/>
+  <rect x="332" y="646" width="404" height="30" rx="3" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="344" y="666" font-size="12.5" fill="#e6edf3">fn &lt;ProgressBar as Widget&gt;::render</text>
+  <rect x="332" y="684" width="404" height="30" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="344" y="704" font-size="12.5" fill="#e6edf3">fn drop_in_place::&lt;ProgressBar&gt;</text>
+  <path d="M736 585 H766 V661 H740" fill="none" stroke="#d29922" stroke-width="1.5" marker-end="url(#arrowO)"/>
+  <path d="M736 519 H778 V699 H740" fill="none" stroke="#d29922" stroke-width="1.5" marker-end="url(#arrowO)"/>
 
   <text class="sans" x="30" y="540" font-size="12.5" fill="#8b949e">Known at compile time:</text>
   <text class="sans" x="30" y="557" font-size="12.5" fill="#8b949e">only “implements Widget”.</text>
