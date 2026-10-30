@@ -429,6 +429,13 @@ footer a:hover {
   color: var(--text-muted);
 }
 
+/* Colour key for figures: one meaning per colour */
+.post .key-data { color: var(--accent); }
+.post .key-addr { color: var(--purple); }
+.post .key-vtable { color: var(--orange); }
+.post .key-code { color: var(--green); }
+.post .key-bad { color: #f85149; }
+
 .post figcaption code {
   background: var(--bg-code);
   padding: 0.1em 0.35em;
