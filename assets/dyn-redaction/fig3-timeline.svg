@@ -26,11 +26,11 @@
   <g fill="#8b949e"><circle cx="200" cy="110" r="4"/><circle cx="430" cy="110" r="4"/><circle cx="660" cy="110" r="4"/></g>
 
   <!-- ===== Row A: O on the trait ===== -->
-  <text x="30" y="146" font-size="13" fill="#e6edf3">trait RenderTo&lt;<tspan fill="#3fb950">O</tspan>&gt; { fn render_to(&amp;self, out: &amp;mut O); }<tspan class="sans" dx="10" font-size="12.5" fill="#8b949e">O on the trait</tspan></text>
+  <text x="30" y="146" font-size="13" fill="#e6edf3">trait RenderTo&lt;O&gt; { fn render_to(&amp;self, out: &amp;mut O); }<tspan class="sans" dx="10" font-size="12.5" fill="#8b949e">O on the trait</tspan></text>
 
-  <rect x="115" y="158" width="170" height="104" rx="6" fill="#1c2128" stroke="#3fb950"/>
+  <rect x="115" y="158" width="170" height="104" rx="6" fill="#1c2128" stroke="#30363d"/>
   <text x="200" y="188" font-size="12.5" fill="#e6edf3" text-anchor="middle">dyn RenderTo&lt;String&gt;</text>
-  <text class="sans" x="200" y="214" font-size="12.5" fill="#3fb950" text-anchor="middle">O = String, in the type</text>
+  <text class="sans" x="200" y="214" font-size="12.5" fill="#e6edf3" text-anchor="middle">O = String, in the type</text>
   <text class="sans" x="200" y="236" font-size="12" fill="#8b949e" text-anchor="middle">picked before step 2</text>
 
   <rect x="320" y="158" width="220" height="104" rx="6" fill="#1c2128" stroke="#d29922"/>
@@ -40,9 +40,9 @@
   <g font-size="11" fill="#8b949e"><text x="343" y="197">drop</text><text x="343" y="215">size 8</text><text x="343" y="233">align 4</text></g>
   <text x="343" y="251" font-size="11" fill="#3fb950">render_to, O = String</text>
 
-  <rect x="575" y="158" width="170" height="104" rx="6" fill="#1c2128" stroke="#3fb950"/>
+  <rect x="575" y="158" width="170" height="104" rx="6" fill="#1c2128" stroke="#30363d"/>
   <text x="660" y="188" font-size="12.5" fill="#e6edf3" text-anchor="middle">a.render_to(&amp;mut s)</text>
-  <text class="sans" x="660" y="214" font-size="12.5" fill="#3fb950" text-anchor="middle">nothing left to pick</text>
+  <text class="sans" x="660" y="214" font-size="12.5" fill="#e6edf3" text-anchor="middle">✓ nothing left to pick</text>
   <text class="sans" x="660" y="236" font-size="12" fill="#8b949e" text-anchor="middle">one slot, already there</text>
 
   <!-- ===== Row B: O on the method ===== -->

@@ -67,6 +67,7 @@ ProgressBar is 8 bytes</code></pre>
 <div class="figure-scroll"><img src="../assets/where-code-lives/figA-memory-map.svg" width="800" height="600" alt="Four regions of a running program. The stack holds main's frame with bar, an 8-byte ProgressBar, and boxed, an address. The heap holds the ProgressBar that boxed points to. Read-only data holds constants, and vtables when there are any. The code region holds one copy of each function, including ProgressBar::render. Neither value contains a pointer to render."></div>
 <figcaption>Values carry data. Functions live once, in the code, and no value points at them.</figcaption>
 </figure>
+<div class="note">Colours in these pictures: <span class="key-data">blue</span> is a value's bytes, <span class="key-addr">purple</span> an address that points at a value, <span class="key-vtable">orange</span> a vtable, and <span class="key-code">green</span> code.</div>
 <p>A running program keeps different kinds of things in different places:</p>
 <ul>
 <li><strong>The stack</strong> holds each running function's local values. <code>bar</code> lives in <code>main</code>'s frame, and so does <code>boxed</code>, which is only an address.</li>

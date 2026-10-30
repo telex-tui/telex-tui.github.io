@@ -24,27 +24,27 @@
 
   <!-- row A: a direct call -->
   <text class="sans" x="30" y="152" font-size="12.5" fill="#e6edf3">A direct call, inside <tspan font-family="'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace">main</tspan></text>
-  <g fill="#1c2128" stroke="#30363d"><rect x="30" y="162" width="240" height="80" rx="6"/><rect x="280" y="162" width="240" height="80" rx="6"/></g>
+  <g fill="#1c2128" stroke="#3fb950"><rect x="30" y="162" width="240" height="80" rx="6"/><rect x="280" y="162" width="240" height="80" rx="6"/></g>
   <rect x="530" y="162" width="240" height="80" rx="6" fill="#1c2128" stroke="#3fb950"/>
   <text x="44" y="192" font-size="12" fill="#e6edf3">call ProgressBar::render</text>
-  <text class="sans" x="44" y="216" font-size="12" fill="#d29922">a name, not an address yet</text>
+  <text class="sans" x="44" y="216" font-size="12" fill="#8b949e">a name, not an address yet</text>
   <text x="294" y="192" font-size="12" fill="#e6edf3">render is at 0x1a40</text>
   <text x="294" y="216" font-size="12" fill="#e6edf3">call 0x0c20 bytes ahead</text>
-  <text class="sans" x="544" y="188" font-size="12.5" fill="#3fb950">nothing to fix</text>
+  <text class="sans" x="544" y="188" font-size="12.5" fill="#e6edf3">✓ nothing to fix</text>
   <text class="sans" x="544" y="208" font-size="12" fill="#8b949e">a distance works wherever</text>
   <text class="sans" x="544" y="225" font-size="12" fill="#8b949e">the program lands</text>
 
   <!-- row B: a stored address -->
   <text class="sans" x="30" y="274" font-size="12.5" fill="#e6edf3">A stored address, like an entry in a vtable</text>
-  <g fill="#1c2128" stroke="#30363d"><rect x="30" y="284" width="240" height="98" rx="6"/><rect x="280" y="284" width="240" height="98" rx="6"/></g>
-  <rect x="530" y="284" width="240" height="98" rx="6" fill="#1c2128" stroke="#3fb950"/>
+  <g fill="#1c2128" stroke="#d29922"><rect x="30" y="284" width="240" height="98" rx="6"/><rect x="280" y="284" width="240" height="98" rx="6"/></g>
+  <rect x="530" y="284" width="240" height="98" rx="6" fill="#1c2128" stroke="#d29922"/>
   <text x="44" y="314" font-size="12" fill="#e6edf3">slot = address of render</text>
-  <text class="sans" x="44" y="338" font-size="12" fill="#d29922">a name, not an address yet</text>
+  <text class="sans" x="44" y="338" font-size="12" fill="#8b949e">a name, not an address yet</text>
   <text x="294" y="314" font-size="12" fill="#e6edf3">slot = 0x1a40</text>
   <text class="sans" x="294" y="338" font-size="12" fill="#8b949e">an offset from the program's start</text>
   <text class="sans" x="544" y="308" font-size="12" fill="#8b949e">program placed at</text>
   <text x="544" y="326" font-size="12" fill="#e6edf3">0x5600_0000_0000</text>
-  <text x="544" y="350" font-size="12" fill="#3fb950">slot = 0x5600_0000_1a40</text>
+  <text x="544" y="350" font-size="12" fill="#e6edf3">slot = 0x5600_0000_1a40</text>
   <text class="sans" x="544" y="370" font-size="12" fill="#8b949e">then made read-only</text>
 
   <g class="sans" font-size="16" fill="#8b949e" text-anchor="middle">

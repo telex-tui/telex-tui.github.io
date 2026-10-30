@@ -30,9 +30,9 @@
   <text class="sans" x="30" y="64" font-size="13" fill="#8b949e">A method is a function whose first argument is the value's address.</text>
 
   <!-- code -->
-  <rect x="30" y="88" width="360" height="234" rx="6" fill="#1c2128" stroke="#30363d"/>
-  <text class="sans" x="44" y="106" font-size="12" fill="#8b949e">code</text>
-  <rect x="46" y="114" width="328" height="56" rx="4" fill="#161b22" stroke="#30363d"/>
+  <rect x="30" y="88" width="360" height="234" rx="6" fill="#1c2128" stroke="#3fb950" stroke-opacity="0.6"/>
+  <text class="sans" x="44" y="106" font-size="12" fill="#3fb950">code</text>
+  <rect x="46" y="114" width="328" height="56" rx="4" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
   <text x="58" y="132" font-size="11.5" fill="#8b949e">fn main</text>
   <text x="58" y="156" font-size="12.5" fill="#e6edf3">ProgressBar::render(<tspan fill="#bc8cff">&amp;bar</tspan>)</text>
   <line x1="120" y1="170" x2="120" y2="196" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fBarrowM)"/>
@@ -40,17 +40,17 @@
   <rect x="46" y="200" width="328" height="108" rx="4" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
   <text x="58" y="220" font-size="11.5" fill="#8b949e">fn ProgressBar::render(self: &amp;ProgressBar)</text>
   <text x="58" y="248" font-size="12" fill="#e6edf3">max   = 4 bytes at <tspan fill="#58a6ff">self + 0</tspan></text>
-  <text x="58" y="272" font-size="12" fill="#e6edf3">value = 1 byte  at <tspan fill="#3fb950">self + 4</tspan></text>
+  <text x="58" y="272" font-size="12" fill="#e6edf3">value = 1 byte  at <tspan fill="#58a6ff">self + 4</tspan></text>
   <text x="58" y="296" font-size="12" fill="#8b949e">build "[7/10]"</text>
 
   <!-- stack -->
-  <rect x="430" y="88" width="340" height="234" rx="6" fill="#1c2128" stroke="#30363d"/>
-  <text class="sans" x="444" y="106" font-size="12" fill="#8b949e">stack: main's frame</text>
-  <text x="470" y="132" font-size="12.5" fill="#3fb950">bar</text>
-  <g font-size="11" text-anchor="middle"><text x="538" y="152" fill="#58a6ff">max</text><text x="623" y="152" fill="#3fb950">value</text></g>
+  <rect x="430" y="88" width="340" height="234" rx="6" fill="#1c2128" stroke="#58a6ff" stroke-opacity="0.6"/>
+  <text class="sans" x="444" y="106" font-size="12" fill="#58a6ff">stack: main's frame</text>
+  <text x="470" y="132" font-size="12.5" fill="#e6edf3">bar</text>
+  <g font-size="11" text-anchor="middle"><text x="538" y="152" fill="#58a6ff">max</text><text x="623" y="152" fill="#58a6ff">value</text></g>
   <rect x="470" y="160" width="136" height="44" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
   <line x1="504" y1="161" x2="504" y2="203" stroke="#30363d"/><line x1="538" y1="161" x2="538" y2="203" stroke="#30363d"/><line x1="572" y1="161" x2="572" y2="203" stroke="#30363d"/>
-  <rect x="606" y="160" width="34" height="44" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <rect x="606" y="160" width="34" height="44" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
   <rect x="640" y="160" width="102" height="44" fill="url(#fBhatch)" stroke="#30363d"/>
   <g font-size="12" fill="#e6edf3" text-anchor="middle">
     <text x="487" y="187">0a</text><text x="521" y="187">00</text><text x="555" y="187">00</text><text x="589" y="187">00</text><text x="623" y="187">07</text>
@@ -60,7 +60,7 @@
   <!-- arrows: the address, then the two field reads -->
   <path d="M374 150 H440 V172 H466" fill="none" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#fBarrowP)"/>
   <path d="M374 244 H410 V190 H466" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#fBarrowB)"/>
-  <path d="M374 268 H420 V244 H623 V208" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#fBarrowG)"/>
+  <path d="M374 268 H420 V244 H623 V208" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#fBarrowB)"/>
   <text class="sans" x="470" y="276" font-size="11.5" fill="#bc8cff">self is bar's address</text>
   <text class="sans" x="470" y="294" font-size="11.5" fill="#8b949e">each field sits at a fixed offset from it</text>
 
