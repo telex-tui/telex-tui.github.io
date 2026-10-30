@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 530" width="800" height="530" role="img" aria-labelledby="fig3-title fig3-desc">
   <title id="fig3-title">When the writer type O is picked, relative to building the vtable</title>
-  <desc id="fig3-desc">Three moments: writing the dyn type, turning &amp;g into a dyn value (when the vtable is built), and each call. Top row, O on the trait: dyn RenderTo&lt;String&gt; picks O in the type, so the vtable built at step 2 has one render_to slot for O = String, and the call has nothing left to pick. Bottom row, O on the method: dyn Widget says nothing about O, so at step 2 the vtable would need a slot for every O anyone might use; O is only picked at step 3, too late.</desc>
+  <desc id="fig3-desc">Three moments: writing the dyn type, turning &amp;bar into a dyn value (when the vtable is built), and each call. Top row, O on the trait: dyn RenderTo&lt;String&gt; picks O in the type, so the vtable built at step 2 has one render_to slot for O = String, and the call has nothing left to pick. Bottom row, O on the method: dyn Widget says nothing about O, so at step 2 the vtable would need a slot for every O anyone might use; O is only picked at step 3, too late.</desc>
   <defs>
     <style>
       text { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
@@ -19,7 +19,7 @@
   <!-- the timeline -->
   <g class="sans" font-size="12.5" fill="#e6edf3" text-anchor="middle">
     <text x="200" y="96">1 · you write the dyn type</text>
-    <text x="430" y="96">2 · &amp;g becomes dyn: vtable built</text>
+    <text x="430" y="96">2 · &amp;bar becomes dyn: vtable built</text>
     <text x="660" y="96">3 · each call through it</text>
   </g>
   <line x1="110" y1="110" x2="772" y2="110" stroke="#8b949e" stroke-width="1.5" marker-end="url(#f3arrow)"/>
@@ -34,7 +34,7 @@
   <text class="sans" x="200" y="236" font-size="12" fill="#8b949e" text-anchor="middle">picked before step 2</text>
 
   <rect x="320" y="158" width="220" height="104" rx="6" fill="#1c2128" stroke="#d29922"/>
-  <text class="sans" x="335" y="176" font-size="12" fill="#d29922">vtable · Self = Gauge</text>
+  <text class="sans" x="335" y="176" font-size="12" fill="#d29922">vtable · Self = ProgressBar</text>
   <g stroke="#30363d" fill="none"><rect x="335" y="184" width="190" height="72"/>
     <line x1="335" y1="202" x2="525" y2="202"/><line x1="335" y1="220" x2="525" y2="220"/><line x1="335" y1="238" x2="525" y2="238"/></g>
   <g font-size="11" fill="#8b949e"><text x="343" y="197">drop</text><text x="343" y="215">size 8</text><text x="343" y="233">align 4</text></g>
@@ -54,7 +54,7 @@
   <text class="sans" x="200" y="390" font-size="12" fill="#8b949e" text-anchor="middle">nothing to pick yet</text>
 
   <rect x="320" y="312" width="220" height="146" rx="6" fill="#1c2128" stroke="#f85149"/>
-  <text class="sans" x="335" y="330" font-size="12" fill="#d29922">vtable · Self = Gauge</text>
+  <text class="sans" x="335" y="330" font-size="12" fill="#d29922">vtable · Self = ProgressBar</text>
   <g stroke="#30363d" fill="none"><rect x="335" y="338" width="190" height="54"/>
     <line x1="335" y1="356" x2="525" y2="356"/><line x1="335" y1="374" x2="525" y2="374"/></g>
   <g font-size="11" fill="#8b949e"><text x="343" y="351">drop</text><text x="343" y="369">size 8</text><text x="343" y="387">align 4</text></g>

@@ -41,37 +41,37 @@
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
 }
 
-<span class="kw">struct</span> <span class="ty">Gauge</span> {
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
 
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
         <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
     }
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="cm">// What the compiler knows about Gauge</span>
+    <span class="cm">// What the compiler knows about ProgressBar</span>
     <span class="mac">println!</span>(
-        <span class="str">"Gauge: size {}, align {}"</span>,
-        <span class="fn">size_of</span>::&lt;<span class="ty">Gauge</span>&gt;(),
-        <span class="fn">align_of</span>::&lt;<span class="ty">Gauge</span>&gt;()
+        <span class="str">"ProgressBar: size {}, align {}"</span>,
+        <span class="fn">size_of</span>::&lt;<span class="ty">ProgressBar</span>&gt;(),
+        <span class="fn">align_of</span>::&lt;<span class="ty">ProgressBar</span>&gt;()
     );
     <span class="mac">println!</span>(
         <span class="str">"  max at offset {}, value at offset {}"</span>,
-        <span class="mac">offset_of!</span>(<span class="ty">Gauge</span>, max),
-        <span class="mac">offset_of!</span>(<span class="ty">Gauge</span>, value)
+        <span class="mac">offset_of!</span>(<span class="ty">ProgressBar</span>, max),
+        <span class="mac">offset_of!</span>(<span class="ty">ProgressBar</span>, value)
     );
 
-    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
-    <span class="kw">let</span> r: &amp;<span class="ty">Gauge</span> = &amp;g;
-    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> r: &amp;<span class="ty">ProgressBar</span> = &amp;bar;
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
 
     <span class="cm">// The two pointers</span>
     <span class="mac">println!</span>(
-        <span class="str">"&amp;Gauge: {} bytes, &amp;dyn Widget: {} bytes"</span>,
+        <span class="str">"&amp;ProgressBar: {} bytes, &amp;dyn Widget: {} bytes"</span>,
         <span class="fn">size_of_val</span>(&amp;r),
         <span class="fn">size_of_val</span>(&amp;w)
     );
@@ -86,18 +86,18 @@
     );
 }</code></pre>
 <p>Output:</p>
-<pre><code>Gauge: size 8, align 4
+<pre><code>ProgressBar: size 8, align 4
   max at offset 0, value at offset 4
-&amp;Gauge: 8 bytes, &amp;dyn Widget: 16 bytes
+&amp;ProgressBar: 8 bytes, &amp;dyn Widget: 16 bytes
 same address: true
 through w: size 8, align 4, render [7/10]</code></pre>
 <p>rustc put <code>max</code> first and <code>value</code> after it, leaving three bytes of padding at the end. With the default layout the compiler may reorder fields like that; field order isn't part of a struct's contract.</p>
 <p>Both references point at the same address, but one is twice as wide. Here is what each one carries:</p>
 <figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig1-redaction.svg" width="800" height="630" alt="Top: a plain reference r points at a Gauge in memory, whose type, size, alignment, fields and offsets the compiler knows. Bottom: a two-word reference w points at the same unchanged bytes with the type and field names blacked out; its second word points at a vtable holding drop, size 8, align 4 and Gauge's render."></div>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig1-redaction.svg" width="800" height="630" alt="Top: a plain reference r points at a ProgressBar in memory, whose type, size, alignment, fields and offsets the compiler knows. Bottom: a two-word reference w points at the same unchanged bytes with the type and field names blacked out; its second word points at a vtable holding drop, size 8, align 4 and ProgressBar's render."></div>
 <figcaption>The same bytes behind both pointers. The plain reference leans on what the compiler knows; the <code>dyn</code> reference carries a second word that points at a vtable.</figcaption>
 </figure>
-<p>A <code>&amp;Gauge</code> is one word: the address. Everything else lives in the compiler's head, so <code>r.render()</code> compiles to a direct call to <code>Gauge</code>'s <code>render</code>. A <code>&amp;dyn Widget</code> is two words: the same address, plus a pointer to a <em>vtable</em>, a small read-only table the compiler builds for the pair <code>Gauge</code> and <code>Widget</code>. <code>w.render()</code> reads <code>render</code>'s address from that table and calls it.</p>
+<p>A <code>&amp;ProgressBar</code> is one word: the address. Everything else lives in the compiler's head, so <code>r.render()</code> compiles to a direct call to <code>ProgressBar</code>'s <code>render</code>. A <code>&amp;dyn Widget</code> is two words: the same address, plus a pointer to a <em>vtable</em>, a small read-only table the compiler builds for the pair <code>ProgressBar</code> and <code>Widget</code>. <code>w.render()</code> reads <code>render</code>'s address from that table and calls it.</p>
 <div class="note">The vtable layout shown (drop first, then size, alignment and the trait's methods) is how rustc does it today. The language doesn't guarantee that order, only that a <code>dyn</code> value can find these things. The hatched padding bytes have no defined value, which is why the figure doesn't show them as zeros.</div>
 <h3>What's redacted, and what survives</h3>
 <p>Through <code>w</code>, the compiler knows only that the value implements <code>Widget</code>, along with any supertraits <code>Widget</code> has. Blacked out:</p>
@@ -111,7 +111,7 @@ through w: size 8, align 4, render [7/10]</code></pre>
 <h2>2. Why redact: one type for many</h2>
 <p>Without the redaction, values of different types can't share a container. A <code>Vec</code> holds one type:</p>
 <p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">struct</span> <span class="ty">Gauge</span> {
+<pre><code><span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
@@ -121,20 +121,20 @@ through w: size 8, align 4, render [7/10]</code></pre>
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> screen = <span class="mac">vec!</span>[<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }, <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }];
+    <span class="kw">let</span> screen = <span class="mac">vec!</span>[<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }, <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }];
 }</code></pre>
 <pre><code>error[E0308]: mismatched types
   --&gt; main.rs:11:46
    |
-11 |     let screen = vec![Label { text: "CPU" }, Gauge { value: 7, max: 10 }];
-   |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Label`, found `Gauge`</code></pre>
+11 |     let screen = vec![Label { text: "CPU" }, ProgressBar { value: 7, max: 10 }];
+   |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Label`, found `ProgressBar`</code></pre>
 <p>Behind <code>dyn Widget</code>, they can:</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
 }
 
-<span class="kw">struct</span> <span class="ty">Gauge</span> {
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
@@ -143,7 +143,7 @@ through w: size 8, align 4, render [7/10]</code></pre>
     text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
 }
 
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
         <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
     }
@@ -163,7 +163,7 @@ through w: size 8, align 4, render [7/10]</code></pre>
 <span class="kw">fn</span> <span class="fn">main</span>() {
     <span class="kw">let</span> screen: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt; = <span class="mac">vec!</span>[
         <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }),
-        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }),
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }),
     ];
     <span class="kw">for</span> w <span class="kw">in</span> &amp;screen {
         <span class="fn">draw</span>(w.<span class="fn">as_ref</span>());
@@ -175,13 +175,13 @@ through w: size 8, align 4, render [7/10]</code></pre>
 [7/10]
 each element: 16 bytes</code></pre>
 <figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig2-one-shape.svg" width="800" height="560" alt="The vector's buffer holds two elements of identical shape, each a data word and a vtable word. Element 0 points at a 16-byte Label and its vtable (size 16, align 8); element 1 points at an 8-byte Gauge and its vtable (size 8, align 4)."></div>
-<figcaption>Every element is the same two words. The <code>Label</code> and the <code>Gauge</code> differ in size, layout and vtable, and the <code>Vec</code> doesn't need to know.</figcaption>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig2-one-shape.svg" width="800" height="560" alt="The vector's buffer holds two elements of identical shape, each a data word and a vtable word. Element 0 points at a 16-byte Label and its vtable (size 16, align 8); element 1 points at an 8-byte ProgressBar and its vtable (size 8, align 4)."></div>
+<figcaption>Every element is the same two words. The <code>Label</code> and the <code>ProgressBar</code> differ in size, layout and vtable, and the <code>Vec</code> doesn't need to know.</figcaption>
 </figure>
 <p>That's what erasing the type buys. Every <code>Box&lt;dyn Widget&gt;</code> has the same size, so one <code>Vec</code> holds them all, and <code>draw</code> is compiled once rather than once per widget type.</p>
 <p>The alternative is a generic <code>fn draw&lt;W: Widget&gt;(w: &amp;W)</code>. Nothing is redacted: the compiler makes one copy per type and calls <code>render</code> directly. But each copy takes one known <code>W</code>, so a list of mixed widgets is out of reach. Erasure trades that compile-time knowledge for one shape and one copy, paid for with an indirect call through the table.</p>
 <h2>3. The rule: picked before the vtable is built</h2>
-<p>The vtable is built at one specific moment: where a concrete value becomes a <code>dyn</code> value, as in <code>let w: &amp;dyn Widget = &amp;g;</code>. At that point the compiler still knows <code>Self</code> is <code>Gauge</code>, so it can fill in <code>Gauge</code>'s drop, size, alignment and methods. After that point, nothing can be added to the table.</p>
+<p>The vtable is built at one specific moment: where a concrete value becomes a <code>dyn</code> value, as in <code>let w: &amp;dyn Widget = &amp;bar;</code>. At that point the compiler still knows <code>Self</code> is <code>ProgressBar</code>, so it can fill in <code>ProgressBar</code>'s drop, size, alignment and methods. After that point, nothing can be added to the table.</p>
 <p>So every type a method depends on must be known by then. Generics are where this bites. Here a widget renders into any writer, and the caller picks the writer type at each call:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
@@ -190,27 +190,27 @@ each element: 16 bytes</code></pre>
     <span class="kw">fn</span> <span class="fn">render_to</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt;(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>);
 }
 
-<span class="kw">struct</span> <span class="ty">Gauge</span> {
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
 
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render_to</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt;(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>) {
         <span class="mac">write!</span>(out, <span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max).<span class="fn">unwrap</span>();
     }
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
-    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
     <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
     w.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s);
 }</code></pre>
 <pre><code>error[E0038]: the trait `Widget` is not dyn compatible
   --&gt; main.rs:20:17
    |
-20 |     let w: &amp;dyn Widget = &amp;g;
+20 |     let w: &amp;dyn Widget = &amp;bar;
    |                 ^^^^^^ `Widget` is not dyn compatible
    |
 note: for a trait to be dyn compatible it needs to allow building a vtable
@@ -222,10 +222,10 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
  4 |     fn render_to&lt;O: Write&gt;(&amp;self, out: &amp;mut O);
    |        ^^^^^^^^^ ...because method `render_to` has generic type parameters
    = help: consider moving `render_to` to another trait
-   = help: only type `Gauge` implements `Widget`; consider using it directly instead.</code></pre>
+   = help: only type `ProgressBar` implements `Widget`; consider using it directly instead.</code></pre>
 <p>The writer type <code>O</code> isn't erased: the caller knows it at every call. The problem is timing. Each <code>O</code> needs its own compiled copy of <code>render_to</code>, so the vtable would need a slot for every writer type anyone might ever pass, and the table was finished before any caller showed up.</p>
 <figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig3-timeline.svg" width="800" height="530" alt="Three moments: writing the dyn type, turning &amp;g into a dyn value (when the vtable is built), and each call. With O on the trait, dyn RenderTo&lt;String&gt; picks O in the type, so the vtable gets one render_to slot. With O on the method, the vtable would need a slot for every O, and O is only picked at the call, too late."></div>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig3-timeline.svg" width="800" height="530" alt="Three moments: writing the dyn type, turning &amp;bar into a dyn value (when the vtable is built), and each call. With O on the trait, dyn RenderTo&lt;String&gt; picks O in the type, so the vtable gets one render_to slot. With O on the method, the vtable would need a slot for every O, and O is only picked at the call, too late."></div>
 <figcaption>The same <code>O</code>, on the trait (top) and on the method (bottom). Only the top one is picked before the vtable is built.</figcaption>
 </figure>
 <p>There are three ways out, and each is about when <code>O</code> gets picked.</p>
@@ -234,7 +234,7 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
 
-<span class="kw">struct</span> <span class="ty">Gauge</span> {
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
@@ -244,7 +244,7 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
     <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>);
 }
 
-<span class="kw">impl</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt; <span class="ty">RenderTo</span>&lt;<span class="ty">O</span>&gt; <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt; <span class="ty">RenderTo</span>&lt;<span class="ty">O</span>&gt; <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>) {
         <span class="mac">write!</span>(out, <span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max).<span class="fn">unwrap</span>();
     }
@@ -255,20 +255,20 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
     <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="kw">dyn</span> <span class="ty">Write</span>);
 }
 
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="kw">dyn</span> <span class="ty">Write</span>) {
         <span class="mac">write!</span>(out, <span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max).<span class="fn">unwrap</span>();
     }
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
     <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
 
-    <span class="kw">let</span> a: &amp;<span class="kw">dyn</span> <span class="ty">RenderTo</span>&lt;<span class="ty">String</span>&gt; = &amp;g;
+    <span class="kw">let</span> a: &amp;<span class="kw">dyn</span> <span class="ty">RenderTo</span>&lt;<span class="ty">String</span>&gt; = &amp;bar;
     a.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s);
 
-    <span class="kw">let</span> b: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    <span class="kw">let</span> b: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
     b.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s);
 
     <span class="mac">println!</span>(<span class="str">"{s}"</span>);
@@ -291,23 +291,23 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
     }
 }
 
-<span class="kw">struct</span> <span class="ty">Gauge</span> {
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
 
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
         <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
     }
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
     <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
-    g.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// fine: Self is known to be Gauge</span>
+    bar.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// fine: Self is known to be ProgressBar</span>
 
-    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g; <span class="cm">// fine: render_to isn't in the vtable</span>
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar; <span class="cm">// fine: render_to isn't in the vtable</span>
     <span class="mac">println!</span>(<span class="str">"{s} {}"</span>, w.<span class="fn">render</span>());
 
     w.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// the one call that can't work</span>
@@ -329,12 +329,12 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
     <span class="kw">fn</span> <span class="fn">same_as</span>(&amp;<span class="kw">self</span>, other: &amp;<span class="kw">Self</span>) -&gt; <span class="ty">bool</span>;
 }
 
-<span class="kw">struct</span> <span class="ty">Gauge</span> {
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
     value: <span class="ty">u8</span>,
     max: <span class="ty">u32</span>,
 }
 
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
         <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
     }
@@ -345,14 +345,14 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
-    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
     <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="fn">render</span>());
 }</code></pre>
 <pre><code>error[E0038]: the trait `Widget` is not dyn compatible
   --&gt; main.rs:23:17
    |
-23 |     let w: &amp;dyn Widget = &amp;g;
+23 |     let w: &amp;dyn Widget = &amp;bar;
    |                 ^^^^^^ `Widget` is not dyn compatible
    |
 note: for a trait to be dyn compatible it needs to allow building a vtable
@@ -365,11 +365,11 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
  3 |     fn same_as(&amp;self, other: &amp;Self) -&gt; bool;
    |                              ^^^^^ ...because method `same_as` references the `Self` type in this parameter
    = help: consider moving `same_as` to another trait
-   = help: only type `Gauge` implements `Widget`; consider using it directly instead.</code></pre>
+   = help: only type `ProgressBar` implements `Widget`; consider using it directly instead.</code></pre>
 <p><code>&amp;Self</code> is just a pointer, so this isn't about size. It's about identity:</p>
 <figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig4-other-self.svg" width="800" height="470" alt="Two dyn Widget references: a points at a Gauge, b at a Label. a.same_as(b) would run Gauge's same_as, chosen by a's vtable, with b as other, so Gauge's code would read half of the Label's pointer as max and one byte of it as value."></div>
-<figcaption>Two <code>dyn Widget</code> values meet in one call. <code>a</code>'s vtable picks <code>Gauge</code>'s code, and <code>b</code> is a <code>Label</code>.</figcaption>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig4-other-self.svg" width="800" height="470" alt="Two dyn Widget references: a points at a ProgressBar, b at a Label. a.same_as(b) would run ProgressBar's same_as, chosen by a's vtable, with b as other, so ProgressBar's code would read half of the Label's pointer as max and one byte of it as value."></div>
+<figcaption>Two <code>dyn Widget</code> values meet in one call. <code>a</code>'s vtable picks <code>ProgressBar</code>'s code, and <code>b</code> is a <code>Label</code>.</figcaption>
 </figure>
 <p>Through <code>dyn</code>, <code>a</code> and <code>b</code> can hold different types, and the one thing that could tell the call whether they match is the type that was blacked out. Returning <code>Self</code> fails the same way: E0038's note says the method "references the <code>Self</code> type in its return type", because through <code>dyn</code> there's no telling what type would come back, or how big it is.</p>
 <p>The fix is the same escape hatch: <code>where Self: Sized</code> on <code>same_as</code> takes just that method out of the vtable. Where the clause goes matters. On a method, it removes that one method. On the trait, as <code>trait Widget: Sized</code>, it keeps the whole trait out of <code>dyn</code>, because a <code>dyn Widget</code> is never <code>Sized</code>; E0038 then says the trait "requires <code>Self: Sized</code>".</p>
