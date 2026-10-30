@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What dyn Redacts: Type Erasure in Rust - Telex</title>
+  <meta name="description" content="What Rust's type erasure hides, what survives in the vtable, and why that decides which traits, and which generics, can be used as dyn.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>What <code>dyn</code> Redacts: Type Erasure in Rust</h1>
+      <div class="post-meta">October 2026</div>
+<p>Picture a struct in memory: a known size, fields at fixed offsets, padding between them. The compiler knows all of it, along with every method the type has. Turn a reference to it into a <code>&amp;dyn Widget</code> and most of that knowledge is blacked out. The bytes don't change. What changes is what the code holding the pointer is allowed to know.</p>
+<p>That redaction is type erasure. This post shows exactly what it removes, what survives, and why that decides which traits can be used as <code>dyn</code> at all, including where generics can and can't go.</p>
+<p>Every example was compiled with rustc 1.97.0, edition 2024, on x86_64, so pointers are 8 bytes. A trait that can be used as <code>dyn</code> is called <em>dyn compatible</em>; older docs and many answers online call it <em>object safe</em>.</p>
+<h2>1. The redaction</h2>
+<p>Start with one widget, and ask rustc what it knows about it:</p>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">use</span> std::mem::offset_of;
+
+<span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="cm">// What the compiler knows about Gauge</span>
+    <span class="mac">println!</span>(
+        <span class="str">"Gauge: size {}, align {}"</span>,
+        <span class="fn">size_of</span>::&lt;<span class="ty">Gauge</span>&gt;(),
+        <span class="fn">align_of</span>::&lt;<span class="ty">Gauge</span>&gt;()
+    );
+    <span class="mac">println!</span>(
+        <span class="str">"  max at offset {}, value at offset {}"</span>,
+        <span class="mac">offset_of!</span>(<span class="ty">Gauge</span>, max),
+        <span class="mac">offset_of!</span>(<span class="ty">Gauge</span>, value)
+    );
+
+    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> r: &amp;<span class="ty">Gauge</span> = &amp;g;
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+
+    <span class="cm">// The two pointers</span>
+    <span class="mac">println!</span>(
+        <span class="str">"&amp;Gauge: {} bytes, &amp;dyn Widget: {} bytes"</span>,
+        <span class="fn">size_of_val</span>(&amp;r),
+        <span class="fn">size_of_val</span>(&amp;w)
+    );
+    <span class="mac">println!</span>(<span class="str">"same address: {}"</span>, std::ptr::<span class="fn">addr_eq</span>(r, w));
+
+    <span class="cm">// What survives, read through w</span>
+    <span class="mac">println!</span>(
+        <span class="str">"through w: size {}, align {}, render {}"</span>,
+        <span class="fn">size_of_val</span>(w),
+        <span class="fn">align_of_val</span>(w),
+        w.<span class="fn">render</span>()
+    );
+}</code></pre>
+<p>Output:</p>
+<pre><code>Gauge: size 8, align 4
+  max at offset 0, value at offset 4
+&amp;Gauge: 8 bytes, &amp;dyn Widget: 16 bytes
+same address: true
+through w: size 8, align 4, render [7/10]</code></pre>
+<p>rustc put <code>max</code> first and <code>value</code> after it, leaving three bytes of padding at the end. With the default layout the compiler may reorder fields like that; field order isn't part of a struct's contract.</p>
+<p>Both references point at the same address, but one is twice as wide. Here is what each one carries:</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig1-redaction.svg" width="800" height="630" alt="Top: a plain reference r points at a Gauge in memory, whose type, size, alignment, fields and offsets the compiler knows. Bottom: a two-word reference w points at the same unchanged bytes with the type and field names blacked out; its second word points at a vtable holding drop, size 8, align 4 and Gauge's render."></div>
+<figcaption>The same bytes behind both pointers. The plain reference leans on what the compiler knows; the <code>dyn</code> reference carries a second word that points at a vtable.</figcaption>
+</figure>
+<p>A <code>&amp;Gauge</code> is one word: the address. Everything else lives in the compiler's head, so <code>r.render()</code> compiles to a direct call to <code>Gauge</code>'s <code>render</code>. A <code>&amp;dyn Widget</code> is two words: the same address, plus a pointer to a <em>vtable</em>, a small read-only table the compiler builds for the pair <code>Gauge</code> and <code>Widget</code>. <code>w.render()</code> reads <code>render</code>'s address from that table and calls it.</p>
+<div class="note">The vtable layout shown (drop first, then size, alignment and the trait's methods) is how rustc does it today. The language doesn't guarantee that order, only that a <code>dyn</code> value can find these things. The hatched padding bytes have no defined value, which is why the figure doesn't show them as zeros.</div>
+<h3>What's redacted, and what survives</h3>
+<p>Through <code>w</code>, the compiler knows only that the value implements <code>Widget</code>, along with any supertraits <code>Widget</code> has. Blacked out:</p>
+<ul>
+<li>the type's name and identity;</li>
+<li>its size, alignment and layout, as compile-time facts;</li>
+<li>its fields and their offsets;</li>
+<li>its inherent methods and every other trait it implements. Auto traits like <code>Send</code> survive only if you write them in: <code>dyn Widget + Send</code>.</li>
+</ul>
+<p>What survives sits in the vtable: how to drop the value, its size and alignment, and one function address per method of the trait. That's how <code>size_of_val(w)</code> and <code>align_of_val(w)</code> printed 8 and 4 above, with no type in sight.</p>
+<h2>2. Why redact: one type for many</h2>
+<p>Without the redaction, values of different types can't share a container. A <code>Vec</code> holds one type:</p>
+<p><strong>Does not compile.</strong></p>
+<pre><code><span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">struct</span> <span class="ty">Label</span> {
+    text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> screen = <span class="mac">vec!</span>[<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }, <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }];
+}</code></pre>
+<pre><code>error[E0308]: mismatched types
+  --&gt; main.rs:11:46
+   |
+11 |     let screen = vec![Label { text: "CPU" }, Gauge { value: 7, max: 10 }];
+   |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Label`, found `Gauge`</code></pre>
+<p>Behind <code>dyn Widget</code>, they can:</p>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">struct</span> <span class="ty">Label</span> {
+    text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Label</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="kw">self</span>.text.<span class="fn">to_string</span>()
+    }
+}
+
+<span class="cm">// Compiled once, for every widget there will ever be</span>
+<span class="kw">fn</span> <span class="fn">draw</span>(w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span>) {
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="fn">render</span>());
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> screen: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt; = <span class="mac">vec!</span>[
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }),
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }),
+    ];
+    <span class="kw">for</span> w <span class="kw">in</span> &amp;screen {
+        <span class="fn">draw</span>(w.<span class="fn">as_ref</span>());
+    }
+    <span class="mac">println!</span>(<span class="str">"each element: {} bytes"</span>, <span class="fn">size_of</span>::&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt;());
+}</code></pre>
+<p>Output:</p>
+<pre><code>CPU
+[7/10]
+each element: 16 bytes</code></pre>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig2-one-shape.svg" width="800" height="560" alt="The vector's buffer holds two elements of identical shape, each a data word and a vtable word. Element 0 points at a 16-byte Label and its vtable (size 16, align 8); element 1 points at an 8-byte Gauge and its vtable (size 8, align 4)."></div>
+<figcaption>Every element is the same two words. The <code>Label</code> and the <code>Gauge</code> differ in size, layout and vtable, and the <code>Vec</code> doesn't need to know.</figcaption>
+</figure>
+<p>That's what erasing the type buys. Every <code>Box&lt;dyn Widget&gt;</code> has the same size, so one <code>Vec</code> holds them all, and <code>draw</code> is compiled once rather than once per widget type.</p>
+<p>The alternative is a generic <code>fn draw&lt;W: Widget&gt;(w: &amp;W)</code>. Nothing is redacted: the compiler makes one copy per type and calls <code>render</code> directly. But each copy takes one known <code>W</code>, so a list of mixed widgets is out of reach. Erasure trades that compile-time knowledge for one shape and one copy, paid for with an indirect call through the table.</p>
+<h2>3. The rule: picked before the vtable is built</h2>
+<p>The vtable is built at one specific moment: where a concrete value becomes a <code>dyn</code> value, as in <code>let w: &amp;dyn Widget = &amp;g;</code>. At that point the compiler still knows <code>Self</code> is <code>Gauge</code>, so it can fill in <code>Gauge</code>'s drop, size, alignment and methods. After that point, nothing can be added to the table.</p>
+<p>So every type a method depends on must be known by then. Generics are where this bites. Here a widget renders into any writer, and the caller picks the writer type at each call:</p>
+<p><strong>Does not compile.</strong></p>
+<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
+
+<span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render_to</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt;(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>);
+}
+
+<span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render_to</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt;(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>) {
+        <span class="mac">write!</span>(out, <span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max).<span class="fn">unwrap</span>();
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
+    w.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s);
+}</code></pre>
+<pre><code>error[E0038]: the trait `Widget` is not dyn compatible
+  --&gt; main.rs:20:17
+   |
+20 |     let w: &amp;dyn Widget = &amp;g;
+   |                 ^^^^^^ `Widget` is not dyn compatible
+   |
+note: for a trait to be dyn compatible it needs to allow building a vtable
+      for more information, visit &lt;https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility&gt;
+  --&gt; main.rs:4:8
+   |
+ 3 | trait Widget {
+   |       ------ this trait is not dyn compatible...
+ 4 |     fn render_to&lt;O: Write&gt;(&amp;self, out: &amp;mut O);
+   |        ^^^^^^^^^ ...because method `render_to` has generic type parameters
+   = help: consider moving `render_to` to another trait
+   = help: only type `Gauge` implements `Widget`; consider using it directly instead.</code></pre>
+<p>The writer type <code>O</code> isn't erased: the caller knows it at every call. The problem is timing. Each <code>O</code> needs its own compiled copy of <code>render_to</code>, so the vtable would need a slot for every writer type anyone might ever pass, and the table was finished before any caller showed up.</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig3-timeline.svg" width="800" height="530" alt="Three moments: writing the dyn type, turning &amp;g into a dyn value (when the vtable is built), and each call. With O on the trait, dyn RenderTo&lt;String&gt; picks O in the type, so the vtable gets one render_to slot. With O on the method, the vtable would need a slot for every O, and O is only picked at the call, too late."></div>
+<figcaption>The same <code>O</code>, on the trait (top) and on the method (bottom). Only the top one is picked before the vtable is built.</figcaption>
+</figure>
+<p>There are three ways out, and each is about when <code>O</code> gets picked.</p>
+<p><strong>Pick it earlier: put the parameter on the trait.</strong> Then <code>dyn RenderTo&lt;String&gt;</code> names <code>O</code> in the type itself, and the vtable built for it holds one <code>render_to</code>, for <code>String</code>.</p>
+<p><strong>Don't pick it at all: erase the argument too.</strong> A <code>&amp;mut dyn Write</code> is a writer with its own vtable, so one compiled <code>render_to</code> serves every writer, and it fits in the table.</p>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
+
+<span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="cm">// Way out 1: put the parameter on the trait. The dyn type picks it.</span>
+<span class="kw">trait</span> <span class="ty">RenderTo</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>);
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt; <span class="ty">RenderTo</span>&lt;<span class="ty">O</span>&gt; <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>) {
+        <span class="mac">write!</span>(out, <span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max).<span class="fn">unwrap</span>();
+    }
+}
+
+<span class="cm">// Way out 2: erase the argument too. One body serves every writer.</span>
+<span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="kw">dyn</span> <span class="ty">Write</span>);
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render_to</span>(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="kw">dyn</span> <span class="ty">Write</span>) {
+        <span class="mac">write!</span>(out, <span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max).<span class="fn">unwrap</span>();
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
+
+    <span class="kw">let</span> a: &amp;<span class="kw">dyn</span> <span class="ty">RenderTo</span>&lt;<span class="ty">String</span>&gt; = &amp;g;
+    a.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s);
+
+    <span class="kw">let</span> b: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    b.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s);
+
+    <span class="mac">println!</span>(<span class="str">"{s}"</span>);
+}</code></pre>
+<p>Output:</p>
+<pre><code>[7/10][7/10]</code></pre>
+<p>std has both designs. <code>Hash::hash&lt;H: Hasher&gt;</code> is generic over the hasher, so <code>&amp;dyn Hash</code> is E0038. <code>Display::fmt</code> takes a concrete <code>&amp;mut Formatter</code> instead, so <code>&amp;dyn Display</code> works.</p>
+<p><strong>Keep the method, but out of the table.</strong> <code>where Self: Sized</code> on a method removes it from the vtable. The rest of the trait works as <code>dyn</code>, and the method can still be called wherever the type is known; only a call through <code>dyn</code> fails:</p>
+<p><strong>Does not compile.</strong></p>
+<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
+
+<span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
+
+    <span class="kw">fn</span> <span class="fn">render_to</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt;(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>)
+    <span class="kw">where</span>
+        <span class="kw">Self</span>: <span class="ty">Sized</span>,
+    {
+        out.<span class="fn">write_str</span>(&amp;<span class="kw">self</span>.<span class="fn">render</span>()).<span class="fn">unwrap</span>();
+    }
+}
+
+<span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
+    g.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// fine: Self is known to be Gauge</span>
+
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g; <span class="cm">// fine: render_to isn't in the vtable</span>
+    <span class="mac">println!</span>(<span class="str">"{s} {}"</span>, w.<span class="fn">render</span>());
+
+    w.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// the one call that can't work</span>
+}</code></pre>
+<pre><code>error: the `render_to` method cannot be invoked on a trait object
+  --&gt; main.rs:33:7
+   |
+ 8 |         Self: Sized,
+   |               ----- this has a `Sized` requirement
+...
+33 |     w.render_to(&amp;mut s); // the one call that can't work
+   |       ^^^^^^^^^</code></pre>
+<p>Two things the rule allows. Associated types are fine, because the <code>dyn</code> type states them before the table is built: <code>dyn Iterator&lt;Item = u8&gt;</code>. Leave one out, as in plain <code>dyn Iterator</code>, and it's E0191. Lifetime parameters on methods are fine too. Lifetimes never produce separate compiled copies, so <code>fn first&lt;'a&gt;(&amp;self, a: &amp;'a str, b: &amp;'a str) -&gt; &amp;'a str</code> goes through <code>dyn</code> without trouble.</p>
+<h2>4. <code>Self</code> only in the receiver</h2>
+<p>The same rule covers <code>Self</code>, from the other side. <code>Self</code> is the one type <code>dyn</code> erases, so a method can't mention it anywhere but its receiver:</p>
+<p><strong>Does not compile.</strong></p>
+<pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
+    <span class="kw">fn</span> <span class="fn">same_as</span>(&amp;<span class="kw">self</span>, other: &amp;<span class="kw">Self</span>) -&gt; <span class="ty">bool</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">Gauge</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Gauge</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+
+    <span class="kw">fn</span> <span class="fn">same_as</span>(&amp;<span class="kw">self</span>, other: &amp;<span class="kw">Self</span>) -&gt; <span class="ty">bool</span> {
+        <span class="kw">self</span>.value == other.value &amp;&amp; <span class="kw">self</span>.max == other.max
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> g = <span class="ty">Gauge</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;g;
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="fn">render</span>());
+}</code></pre>
+<pre><code>error[E0038]: the trait `Widget` is not dyn compatible
+  --&gt; main.rs:23:17
+   |
+23 |     let w: &amp;dyn Widget = &amp;g;
+   |                 ^^^^^^ `Widget` is not dyn compatible
+   |
+note: for a trait to be dyn compatible it needs to allow building a vtable
+      for more information, visit &lt;https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility&gt;
+  --&gt; main.rs:3:30
+   |
+ 1 | trait Widget {
+   |       ------ this trait is not dyn compatible...
+ 2 |     fn render(&amp;self) -&gt; String;
+ 3 |     fn same_as(&amp;self, other: &amp;Self) -&gt; bool;
+   |                              ^^^^^ ...because method `same_as` references the `Self` type in this parameter
+   = help: consider moving `same_as` to another trait
+   = help: only type `Gauge` implements `Widget`; consider using it directly instead.</code></pre>
+<p><code>&amp;Self</code> is just a pointer, so this isn't about size. It's about identity:</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig4-other-self.svg" width="800" height="470" alt="Two dyn Widget references: a points at a Gauge, b at a Label. a.same_as(b) would run Gauge's same_as, chosen by a's vtable, with b as other, so Gauge's code would read half of the Label's pointer as max and one byte of it as value."></div>
+<figcaption>Two <code>dyn Widget</code> values meet in one call. <code>a</code>'s vtable picks <code>Gauge</code>'s code, and <code>b</code> is a <code>Label</code>.</figcaption>
+</figure>
+<p>Through <code>dyn</code>, <code>a</code> and <code>b</code> can hold different types, and the one thing that could tell the call whether they match is the type that was blacked out. Returning <code>Self</code> fails the same way: E0038's note says the method "references the <code>Self</code> type in its return type", because through <code>dyn</code> there's no telling what type would come back, or how big it is.</p>
+<p>The fix is the same escape hatch: <code>where Self: Sized</code> on <code>same_as</code> takes just that method out of the vtable. Where the clause goes matters. On a method, it removes that one method. On the trait, as <code>trait Widget: Sized</code>, it keeps the whole trait out of <code>dyn</code>, because a <code>dyn Widget</code> is never <code>Sized</code>; E0038 then says the trait "requires <code>Self: Sized</code>".</p>
+<h2>5. The whole story</h2>
+<ul>
+<li><strong>What's redacted:</strong> the concrete type, with its layout, fields, inherent methods and other traits. The bytes themselves are untouched.</li>
+<li><strong>What survives:</strong> a vtable, built where the value becomes <code>dyn</code>, holding drop, size, alignment and one address per trait method.</li>
+<li><strong>Why:</strong> so values of different types can share one type, and code over them is compiled once.</li>
+<li><strong>The rule it imposes:</strong> everything a method needs must be picked by the time the vtable is built. A trait's parameters and associated types are named in the <code>dyn</code> type, and <code>Self</code> is picked at the conversion. A method's own type parameters only arrive later, at each call, so they're out, and so is <code>Self</code> anywhere but the receiver. <code>where Self: Sized</code> takes a method out of the table instead.</li>
+<li><strong>The cost:</strong> an indirect call per method call, against one compiled copy per type for generics.</li>
+</ul>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
