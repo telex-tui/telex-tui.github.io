@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 470" width="800" height="470" role="img" aria-labelledby="fig4-title fig4-desc">
+  <title id="fig4-title">Why other: &amp;Self can't go through dyn</title>
+  <desc id="fig4-desc">Two dyn Widget references: a points at a Gauge and its vtable, b points at a Label. Calling a.same_as(b) would run Gauge's same_as, chosen by a's vtable, with b's address as other. Gauge's code would then read the first four bytes of the Label, half of a pointer, as max, and its fifth byte as value. Nothing at the call can check that b is a Gauge, because that is exactly what was erased.</desc>
+  <defs>
+    <style>
+      text { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
+      .sans, .sans text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    </style>
+    <pattern id="f4hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#161b22"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#30363d" stroke-width="2"/>
+    </pattern>
+    <marker id="f4arrowP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#bc8cff"/>
+    </marker>
+    <marker id="f4arrowO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d29922"/>
+    </marker>
+    <marker id="f4arrowR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f85149"/>
+    </marker>
+  </defs>
+
+  <rect width="800" height="470" fill="#0d1117"/>
+  <rect x="10" y="10" width="780" height="450" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="30" y="42" font-size="15" fill="#e6edf3">a.same_as(b)<tspan class="sans" dx="12" font-size="13" fill="#8b949e">where a and b are both &amp;dyn Widget</tspan></text>
+  <text class="sans" x="30" y="64" font-size="13" fill="#8b949e">a's vtable chooses Gauge's same_as. It reads other as a Gauge, but b points at a Label.</text>
+
+  <!-- a -->
+  <text x="72" y="104" font-size="13" fill="#8b949e">a</text>
+  <rect x="72" y="112" width="120" height="44" fill="#1c2128" stroke="#bc8cff" stroke-width="1.5"/>
+  <rect x="72" y="156" width="120" height="44" fill="#1c2128" stroke="#d29922" stroke-width="1.5"/>
+  <g font-size="12.5" fill="#e6edf3" text-anchor="middle"><text x="132" y="139">data</text><text x="132" y="183">vtable</text></g>
+
+  <text x="330" y="86"><tspan font-size="14" font-weight="bold" fill="#3fb950">Gauge</tspan><tspan class="sans" dx="10" font-size="12.5" fill="#8b949e">a's data</tspan></text>
+  <g font-size="11" text-anchor="middle"><text x="382" y="106" fill="#58a6ff">max</text><text x="447" y="106" fill="#3fb950">value</text></g>
+  <rect x="330" y="112" width="104" height="44" fill="#1c2128" stroke="#58a6ff" stroke-width="1.5"/>
+  <line x1="356" y1="113" x2="356" y2="155" stroke="#30363d"/>
+  <line x1="382" y1="113" x2="382" y2="155" stroke="#30363d"/>
+  <line x1="408" y1="113" x2="408" y2="155" stroke="#30363d"/>
+  <rect x="434" y="112" width="26" height="44" fill="#1c2128" stroke="#3fb950" stroke-width="1.5"/>
+  <rect x="460" y="112" width="78" height="44" fill="url(#f4hatch)" stroke="#30363d"/>
+  <g font-size="12" fill="#e6edf3" text-anchor="middle">
+    <text x="343" y="139">0a</text><text x="369" y="139">00</text><text x="395" y="139">00</text><text x="421" y="139">00</text><text x="447" y="139">07</text>
+  </g>
+  <line x1="192" y1="134" x2="324" y2="134" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#f4arrowP)"/>
+
+  <!-- the function a's vtable picks -->
+  <text class="sans" x="330" y="178" font-size="12" fill="#d29922">chosen by a's vtable</text>
+  <rect x="330" y="184" width="416" height="40" rx="4" fill="#1c2128" stroke="#d29922" stroke-width="1.5"/>
+  <text x="342" y="209" font-size="12.5" fill="#e6edf3">&lt;Gauge as Widget&gt;::same_as(self: a, other: b)</text>
+  <path d="M192 178 H300 V204 H324" fill="none" stroke="#d29922" stroke-width="1.5" marker-end="url(#f4arrowO)"/>
+
+  <!-- b -->
+  <text x="72" y="268" font-size="13" fill="#8b949e">b</text>
+  <rect x="72" y="276" width="120" height="44" fill="#1c2128" stroke="#bc8cff" stroke-width="1.5"/>
+  <rect x="72" y="320" width="120" height="44" fill="#1c2128" stroke="#d29922" stroke-width="1.5"/>
+  <g font-size="12.5" fill="#e6edf3" text-anchor="middle"><text x="132" y="303">data</text><text x="132" y="347">vtable</text></g>
+  <text class="sans" x="72" y="386" font-size="12" fill="#8b949e">b's vtable: never consulted</text>
+
+  <text x="530" y="250"><tspan font-size="14" font-weight="bold" fill="#3fb950">Label</tspan><tspan class="sans" dx="10" font-size="12.5" fill="#8b949e">b's data</tspan></text>
+  <g font-size="11" fill="#58a6ff" text-anchor="middle"><text x="486" y="268">text.ptr (to "CPU")</text><text x="642" y="268">text.len</text></g>
+  <rect x="330" y="276" width="208" height="44" fill="#1c2128" stroke="#58a6ff" stroke-width="1.5"/>
+  <rect x="538" y="276" width="208" height="44" fill="#1c2128" stroke="#58a6ff" stroke-width="1.5"/>
+  <g stroke="#30363d">
+    <line x1="356" y1="277" x2="356" y2="319"/><line x1="382" y1="277" x2="382" y2="319"/><line x1="408" y1="277" x2="408" y2="319"/>
+    <line x1="434" y1="277" x2="434" y2="319"/><line x1="460" y1="277" x2="460" y2="319"/><line x1="486" y1="277" x2="486" y2="319"/>
+    <line x1="512" y1="277" x2="512" y2="319"/>
+    <line x1="564" y1="277" x2="564" y2="319"/><line x1="590" y1="277" x2="590" y2="319"/><line x1="616" y1="277" x2="616" y2="319"/>
+    <line x1="642" y1="277" x2="642" y2="319"/><line x1="668" y1="277" x2="668" y2="319"/><line x1="694" y1="277" x2="694" y2="319"/>
+    <line x1="720" y1="277" x2="720" y2="319"/>
+  </g>
+  <g font-size="12" fill="#8b949e" text-anchor="middle">
+    <text x="343" y="303">··</text><text x="369" y="303">··</text><text x="395" y="303">··</text><text x="421" y="303">··</text>
+    <text x="447" y="303">··</text><text x="473" y="303">··</text><text x="499" y="303">··</text><text x="525" y="303">··</text>
+  </g>
+  <g font-size="12" fill="#e6edf3" text-anchor="middle">
+    <text x="551" y="303">03</text><text x="577" y="303">00</text><text x="603" y="303">00</text><text x="629" y="303">00</text>
+    <text x="655" y="303">00</text><text x="681" y="303">00</text><text x="707" y="303">00</text><text x="733" y="303">00</text>
+  </g>
+  <line x1="192" y1="298" x2="324" y2="298" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#f4arrowP)"/>
+
+  <!-- Gauge's view laid over the Label's bytes -->
+  <line x1="356" y1="224" x2="356" y2="268" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#f4arrowR)"/>
+  <g fill="none" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4 3">
+    <rect x="330" y="272" width="104" height="52"/>
+    <rect x="434" y="272" width="26" height="52"/>
+  </g>
+  <g font-size="12" fill="#f85149" text-anchor="middle"><text x="382" y="340">max?</text><text x="447" y="340">value?</text></g>
+  <text class="sans" x="330" y="366" font-size="12.5" fill="#f85149">Gauge's code would read half a pointer as max,</text>
+  <text class="sans" x="330" y="384" font-size="12.5" fill="#f85149">and one byte of that pointer as value.</text>
+
+  <text class="sans" x="30" y="424" font-size="12.5" fill="#8b949e">Nothing at the call can check that b is a Gauge too: that is exactly what was redacted. So a method</text>
+  <text class="sans" x="30" y="443" font-size="12.5" fill="#8b949e">that mentions <tspan fill="#e6edf3">Self</tspan> outside its receiver keeps the whole trait out of <tspan fill="#e6edf3">dyn</tspan>: error E0038.</text>
+</svg>
