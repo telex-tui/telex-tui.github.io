@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>What dyn Redacts: Type Erasure in Rust - Telex</title>
-  <meta name="description" content="What Rust's type erasure hides, what survives in the vtable, and why that decides which traits, and which generics, can be used as dyn.">
+  <meta name="description" content="Why an array can't hold values of different sizes, how Rust's 16-byte dyn handles give it one stride, and what the caller and the called method each still know.">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
@@ -29,109 +29,13 @@
     <article class="post">
       <h1>What <code>dyn</code> Redacts: Type Erasure in Rust</h1>
       <div class="post-meta">October 2026</div>
-<p>Picture a struct in memory: a known size, fields at fixed offsets, padding between them. The compiler knows all of it, along with every method the type has. Turn a reference to it into a <code>&amp;dyn Widget</code> and most of that knowledge is blacked out. The bytes don't change. What changes is what the code holding the pointer is allowed to know.</p>
-<p>That redaction is type erasure. This post shows exactly what it removes, what survives, and why that decides which traits can be used as <code>dyn</code> at all, including where generics can and can't go.</p>
-<p>It builds on two pieces of groundwork: a value's bytes don't contain its functions, and function names become addresses before a program runs. If either is new, start with <a href="draft55.html">Where Your Rust Program Lives</a>, a short illustrated post.</p>
-<p>Every example was compiled with rustc 1.97.0, edition 2024, on x86_64, so pointers are 8 bytes. A trait that can be used as <code>dyn</code> is called <em>dyn compatible</em>; older docs and many answers online call it <em>object safe</em>.</p>
-<h2>1. The redaction</h2>
-<p>Start with one widget, and ask rustc what it knows about it:</p>
-<p><strong>Compiles.</strong></p>
-<pre><code><span class="kw">use</span> std::mem::offset_of;
-
-<span class="kw">trait</span> <span class="ty">Widget</span> {
-    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
-    value: <span class="ty">u8</span>,
-    max: <span class="ty">u32</span>,
-}
-
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
-    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="cm">// What the compiler knows about ProgressBar</span>
-    <span class="mac">println!</span>(
-        <span class="str">"ProgressBar: size {}, align {}"</span>,
-        <span class="fn">size_of</span>::&lt;<span class="ty">ProgressBar</span>&gt;(),
-        <span class="fn">align_of</span>::&lt;<span class="ty">ProgressBar</span>&gt;()
-    );
-    <span class="mac">println!</span>(
-        <span class="str">"  max at offset {}, value at offset {}"</span>,
-        <span class="mac">offset_of!</span>(<span class="ty">ProgressBar</span>, max),
-        <span class="mac">offset_of!</span>(<span class="ty">ProgressBar</span>, value)
-    );
-
-    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
-    <span class="kw">let</span> r: &amp;<span class="ty">ProgressBar</span> = &amp;bar;
-    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
-
-    <span class="cm">// The two pointers</span>
-    <span class="mac">println!</span>(
-        <span class="str">"&amp;ProgressBar: {} bytes, &amp;dyn Widget: {} bytes"</span>,
-        <span class="fn">size_of_val</span>(&amp;r),
-        <span class="fn">size_of_val</span>(&amp;w)
-    );
-    <span class="mac">println!</span>(<span class="str">"same address: {}"</span>, std::ptr::<span class="fn">addr_eq</span>(r, w));
-
-    <span class="cm">// What survives, read through w</span>
-    <span class="mac">println!</span>(
-        <span class="str">"through w: size {}, align {}, render {}"</span>,
-        <span class="fn">size_of_val</span>(w),
-        <span class="fn">align_of_val</span>(w),
-        w.<span class="fn">render</span>()
-    );
-}</code></pre>
-<p>Output:</p>
-<pre><code>ProgressBar: size 8, align 4
-  max at offset 0, value at offset 4
-&amp;ProgressBar: 8 bytes, &amp;dyn Widget: 16 bytes
-same address: true
-through w: size 8, align 4, render [7/10]</code></pre>
-<p>rustc put <code>max</code> first and <code>value</code> after it, leaving three bytes of padding at the end. With the default layout the compiler may reorder fields like that; field order isn't part of a struct's contract.</p>
-<p>Both references point at the same address, but one is twice as wide. Here is what each one carries:</p>
-<figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig1-redaction.svg" width="800" height="750" alt="Top: a plain reference r points at a ProgressBar in memory, whose type, size, alignment, fields and offsets the compiler knows. Bottom: a two-word reference w points at the same unchanged bytes with the type and field names blacked out; its second word points at a vtable in read-only data holding size 8, align 4 and two addresses, which lead into the program's code: ProgressBar's render and its drop function."></div>
-<figcaption>The same bytes behind both pointers. The plain reference leans on what the compiler knows; the <code>dyn</code> reference carries a second word that points at a vtable, whose addresses lead into the program's code.</figcaption>
-</figure>
-<div class="note">Colours in these pictures: <span class="key-data">blue</span> is a value's bytes, <span class="key-addr">purple</span> an address that points at a value, <span class="key-vtable">orange</span> a vtable, <span class="key-code">green</span> code, and <span class="key-bad">red</span> something that can't work.</div>
-<p>A <code>&amp;ProgressBar</code> is one word: the address. Everything else lives in the compiler's head. It knows which <code>render</code> goes with these bytes, so <code>r.render()</code> becomes a <em>direct call</em>: a call to one fixed function, whose address is filled in when the program is linked.</p>
-<p>Why does <code>w</code> need a second word at all? Because the bytes never contained their functions. <code>render</code> lives in the program's code, one copy for every <code>ProgressBar</code>; the 8 bytes hold <code>max</code>, <code>value</code> and padding, and nothing else. Once the type is redacted, nothing in them leads to <code>render</code>. So a <code>&amp;dyn Widget</code> carries a pointer to a <em>vtable</em>: a small table in read-only data, one per type and trait, holding the addresses the redacted type would have supplied. <code>w.render()</code> is an <em>indirect call</em>: it loads <code>render</code>'s address from the table at run time, then calls it.</p>
-<div class="note">The vtable layout shown (drop first, then size, alignment and the trait's methods) is how rustc does it today. The language doesn't guarantee that order, only that a <code>dyn</code> value can find these things. The hatched padding bytes have no defined value, which is why the figure doesn't show them as zeros.</div>
-<h3>What's redacted, and what survives</h3>
-<p>Through <code>w</code>, the compiler knows only that the value implements <code>Widget</code>, along with any supertraits <code>Widget</code> has. Blacked out:</p>
-<ul>
-<li>the type's name and identity;</li>
-<li>its size, alignment and layout, as compile-time facts;</li>
-<li>its fields and their offsets;</li>
-<li>its inherent methods and every other trait it implements. Auto traits like <code>Send</code> survive only if you write them in: <code>dyn Widget + Send</code>.</li>
-</ul>
-<p>What survives sits in the vtable: how to drop the value, its size and alignment, and one function address per method of the trait. That's how <code>size_of_val(w)</code> and <code>align_of_val(w)</code> printed 8 and 4 above, with no type in sight.</p>
-<h2>2. Why redact: one type for many</h2>
-<p>Without the redaction, values of different types can't share a container. A <code>Vec</code> holds one type:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">struct</span> <span class="ty">ProgressBar</span> {
-    value: <span class="ty">u8</span>,
-    max: <span class="ty">u32</span>,
-}
-
-<span class="kw">struct</span> <span class="ty">Label</span> {
-    text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> screen = <span class="mac">vec!</span>[<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }, <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }];
-}</code></pre>
-<pre><code>error[E0308]: mismatched types
-  --&gt; main.rs:11:46
-   |
-11 |     let screen = vec![Label { text: "CPU" }, ProgressBar { value: 7, max: 10 }];
-   |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Label`, found `ProgressBar`</code></pre>
-<p>Behind <code>dyn Widget</code>, they can:</p>
+<p>A <code>Vec</code> stores its elements end to end, every one the same size. That's what makes <code>v[i]</code> a single calculation. So how does a <code>Vec&lt;Box&lt;dyn Widget&gt;&gt;</code> hold an 8-byte progress bar next to a 32-byte label?</p>
+<p>It doesn't put them next to each other. It holds an array of 16-byte handles, and the values live elsewhere. Type erasure is what makes that work: each handle drops its value's type and keeps exactly what's needed to use the value anyway. This post builds that up from memory layout: why an array needs one size, how the handle gives it one, and what the code on each side of a call still knows.</p>
+<p>It builds on <a href="draft55.html">Where Your Rust Program Lives</a>: a value's bytes don't contain its functions, and a method is a function that receives the value's address. Every example was compiled with rustc 1.97.0, edition 2024, on x86_64, where an address is 8 bytes. A trait that can be used as <code>dyn</code> is called <em>dyn compatible</em>; older docs and many answers online call it <em>object safe</em>.</p>
+<h2>1. Why mixed sizes break an array</h2>
+<p>An array, a slice and a <code>Vec</code>'s buffer all store their elements end to end, with nothing between them. To find element <code>i</code>, the compiled code does one calculation:</p>
+<pre><code>address of arr[i] = base + i × size_of::&lt;T&gt;()</code></pre>
+<p><code>size_of::&lt;T&gt;()</code> isn't looked up while the program runs. It's a constant, compiled into the instructions, so reaching any element costs one multiplication and one addition. Here are two widgets, and an array of each:</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
@@ -144,6 +48,8 @@ through w: size 8, align 4, render [7/10]</code></pre>
 
 <span class="kw">struct</span> <span class="ty">Label</span> {
     text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
+    col: <span class="ty">usize</span>,
+    row: <span class="ty">usize</span>,
 }
 
 <span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
@@ -154,38 +60,222 @@ through w: size 8, align 4, render [7/10]</code></pre>
 
 <span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Label</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
-        <span class="kw">self</span>.text.<span class="fn">to_string</span>()
+        <span class="mac">format!</span>(<span class="str">"{} at ({}, {})"</span>, <span class="kw">self</span>.text, <span class="kw">self</span>.col, <span class="kw">self</span>.row)
     }
 }
 
-<span class="cm">// Compiled once, for every widget there will ever be</span>
-<span class="kw">fn</span> <span class="fn">draw</span>(w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span>) {
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="fn">render</span>());
+<span class="cm">// Compiled once per W, with size_of::&lt;W&gt;() fixed in each copy</span>
+<span class="kw">fn</span> <span class="fn">show</span>&lt;<span class="ty">W</span>: <span class="ty">Widget</span>&gt;(name: &amp;<span class="ty">str</span>, items: &amp;[<span class="ty">W</span>]) {
+    <span class="mac">println!</span>(<span class="str">"{name}: each element is {} bytes"</span>, <span class="fn">size_of</span>::&lt;<span class="ty">W</span>&gt;());
+    <span class="kw">let</span> base = items.<span class="fn">as_ptr</span>() <span class="kw">as</span> <span class="ty">usize</span>;
+    <span class="kw">for</span> (i, item) <span class="kw">in</span> items.<span class="fn">iter</span>().<span class="fn">enumerate</span>() {
+        <span class="kw">let</span> start = item <span class="kw">as</span> *<span class="kw">const</span> <span class="ty">W</span> <span class="kw">as</span> <span class="ty">usize</span> - base;
+        <span class="mac">println!</span>(<span class="str">"  {name}[{i}] at base + {start}: {}"</span>, item.<span class="fn">render</span>());
+    }
 }
 
 <span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> screen: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt; = <span class="mac">vec!</span>[
-        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Label</span> { text: <span class="str">"CPU"</span> }),
-        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }),
+    <span class="kw">let</span> bars = [
+        <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> },
+        <span class="ty">ProgressBar</span> { value: <span class="num">3</span>, max: <span class="num">4</span> },
+        <span class="ty">ProgressBar</span> { value: <span class="num">9</span>, max: <span class="num">9</span> },
     ];
-    <span class="kw">for</span> w <span class="kw">in</span> &amp;screen {
-        <span class="fn">draw</span>(w.<span class="fn">as_ref</span>());
-    }
-    <span class="mac">println!</span>(<span class="str">"each element: {} bytes"</span>, <span class="fn">size_of</span>::&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt;());
+    <span class="kw">let</span> labels = [
+        <span class="ty">Label</span> {
+            text: <span class="str">"CPU"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">0</span>,
+        },
+        <span class="ty">Label</span> {
+            text: <span class="str">"MEM"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">1</span>,
+        },
+        <span class="ty">Label</span> {
+            text: <span class="str">"NET"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">2</span>,
+        },
+    ];
+    <span class="fn">show</span>(<span class="str">"bars"</span>, &amp;bars);
+    <span class="fn">show</span>(<span class="str">"labels"</span>, &amp;labels);
 }</code></pre>
 <p>Output:</p>
-<pre><code>CPU
-[7/10]
-each element: 16 bytes</code></pre>
+<pre><code>bars: each element is 8 bytes
+  bars[0] at base + 0: [7/10]
+  bars[1] at base + 8: [3/4]
+  bars[2] at base + 16: [9/9]
+labels: each element is 32 bytes
+  labels[0] at base + 0: CPU at (0, 0)
+  labels[1] at base + 32: MEM at (0, 1)
+  labels[2] at base + 64: NET at (0, 2)</code></pre>
+<p><code>show</code> is generic, so the compiler makes one copy of it for each type it's used with: one where the element size is 8, one where it's 32. Each copy works on an array of one type, because that type's size is built into the copy's code.</p>
 <figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig2-one-shape.svg" width="800" height="560" alt="The vector's buffer holds two elements of identical shape, each a data word and a vtable word. Element 0 points at a 16-byte Label and its vtable (size 16, align 8); element 1 points at an 8-byte ProgressBar and its vtable (size 8, align 4)."></div>
-<figcaption>Every element is the same two words. The <code>Label</code> and the <code>ProgressBar</code> differ in size, layout and vtable, and the <code>Vec</code> doesn't need to know.</figcaption>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig1-stride.svg" width="800" height="570" alt="Top: three 8-byte ProgressBars at offsets 0, 8 and 16, so bars[i] = base + i × 8. Middle: three 32-byte Labels at offsets 0, 32 and 64, so labels[i] = base + i × 32. Bottom: a mixed array of Label, ProgressBar, Label would put element 2 at 40, but 2 × 8 = 16 lands inside element 0 and 2 × 32 = 64 lands inside element 2."></div>
+<figcaption>Each array has one stride. A mixed one would need a different multiplier for every element.</figcaption>
 </figure>
-<p>That's what erasing the type buys. Every <code>Box&lt;dyn Widget&gt;</code> has the same size, so one <code>Vec</code> holds them all, and <code>draw</code> is compiled once rather than once per widget type.</p>
-<p>The alternative is a generic <code>fn draw&lt;W: Widget&gt;(w: &amp;W)</code>. Nothing is redacted: the compiler makes one copy per type and calls <code>render</code> directly. But each copy takes one known <code>W</code>, so a list of mixed widgets is out of reach. Erasure trades that compile-time knowledge for one shape and one copy, paid for with an indirect call through the table.</p>
-<h2>3. The rule: picked before the vtable is built</h2>
-<p>The vtable is built at one specific moment: where a concrete value becomes a <code>dyn</code> value, as in <code>let w: &amp;dyn Widget = &amp;bar;</code>. At that point the compiler still knows <code>Self</code> is <code>ProgressBar</code>, so it can fill in <code>ProgressBar</code>'s drop, size, alignment and methods. After that point, nothing can be added to the table.</p>
-<p>So every type a method depends on must be known by then. Generics are where this bites. Here a widget renders into any writer, and the caller picks the writer type at each call:</p>
+<div class="note">Colours in these pictures: <span class="key-data">blue</span> is a value's bytes, <span class="key-addr">purple</span> an address that points at a value, <span class="key-vtable">orange</span> a vtable, <span class="key-code">green</span> code, and <span class="key-bad">red</span> something that can't work.</div>
+<p>Now put both types in one array, as in the picture's bottom row. Element 1 would start at 32, after the label, but element 2 at 40: no single multiplier gives both. There's no stride to compile, so rustc refuses:</p>
+<p><strong>Does not compile.</strong></p>
+<pre><code><span class="kw">struct</span> <span class="ty">ProgressBar</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">struct</span> <span class="ty">Label</span> {
+    text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
+    col: <span class="ty">usize</span>,
+    row: <span class="ty">usize</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> screen = [
+        <span class="ty">Label</span> {
+            text: <span class="str">"CPU"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">0</span>,
+        },
+        <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> },
+        <span class="ty">Label</span> {
+            text: <span class="str">"MEM"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">1</span>,
+        },
+    ];
+}</code></pre>
+<pre><code>error[E0308]: mismatched types
+  --&gt; main.rs:19:9
+   |
+19 |         ProgressBar { value: 7, max: 10 },
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Label`, found `ProgressBar`</code></pre>
+<p>Generics don't get around this. <code>show</code> handles bars and labels, but each compiled copy takes one known type, so any one array still holds one type. To hold both, the array needs elements that are all the same size even when the values aren't.</p>
+<h2>2. The fix: an array of 16-byte handles</h2>
+<p>A <code>Vec&lt;Box&lt;dyn Widget&gt;&gt;</code> never puts differently sized values side by side. Each value lives in memory of its own, and the array holds a handle to it. Every handle is a <em>fat pointer</em>: two 8-byte words.</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig2-fat-pointer.svg" width="800" height="420" alt="The handle w is 16 bytes. Word 1, the data pointer, holds the address of bar, an 8-byte ProgressBar on the stack. Word 2, the vtable pointer, holds the address of a vtable in read-only data, which holds a null drop slot, size 8, align 4 and the address of ProgressBar's render function in the code."></div>
+<figcaption>One handle. Word 1 leads to the value, word 2 to its vtable.</figcaption>
+</figure>
+<ul>
+<li><strong>Word 1, the data pointer:</strong> the value's address, wherever it lives: on the stack for <code>&amp;bar</code>, on the heap for a <code>Box</code>.</li>
+<li><strong>Word 2, the vtable pointer:</strong> the address of a small table in read-only data, written by the compiler for one type and one trait. It holds the value's size and alignment, how to drop it, and the address of each trait method's code.</li>
+</ul>
+<p>Both words are addresses, so a handle is 16 bytes whether the value behind it is 8 bytes or 1,024. That's the whole trick: the array stores handles, and handles are all one size.</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig3-uniform-array.svg" width="800" height="590" alt="The Vec's buffer holds three 16-byte handles at offsets 0, 16 and 32, so screen[i] = base + i × 16. The data words point at values on the heap: two 32-byte Labels and an 8-byte ProgressBar, each wherever it was allocated. The vtable words point at vtables in read-only data: both Label handles at the Label vtable, the ProgressBar handle at the ProgressBar vtable."></div>
+<figcaption>The buffer has one stride, 16 bytes. The values behind it keep their own sizes.</figcaption>
+</figure>
+<p>Run the arithmetic again: <code>screen[i]</code> is at <code>base + i × 16</code>. The stride is a constant again, so indexing is the same multiplication and addition as before. Each value keeps its own size and is reached through its handle's word 1.</p>
+<p><strong>Compiles.</strong></p>
+<pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">struct</span> <span class="ty">Label</span> {
+    text: &amp;<span class="kw">'static</span> <span class="ty">str</span>,
+    col: <span class="ty">usize</span>,
+    row: <span class="ty">usize</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">Label</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"{} at ({}, {})"</span>, <span class="kw">self</span>.text, <span class="kw">self</span>.col, <span class="kw">self</span>.row)
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="cm">// One handle: two words, whatever it points at</span>
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
+    <span class="mac">println!</span>(<span class="str">"&amp;dyn Widget: {} bytes"</span>, <span class="fn">size_of</span>::&lt;&amp;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;());
+    <span class="mac">println!</span>(<span class="str">"word 1 is bar's address: {}"</span>, std::ptr::<span class="fn">addr_eq</span>(w, &amp;bar));
+
+    <span class="cm">// An array of handles: one stride, whatever each one points at</span>
+    <span class="kw">let</span> screen: <span class="ty">Vec</span>&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt; = <span class="mac">vec!</span>[
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Label</span> {
+            text: <span class="str">"CPU"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">0</span>,
+        }),
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">Label</span> {
+            text: <span class="str">"MEM"</span>,
+            col: <span class="num">0</span>,
+            row: <span class="num">1</span>,
+        }),
+        <span class="ty">Box</span>::<span class="fn">new</span>(<span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> }),
+    ];
+    <span class="mac">println!</span>(<span class="str">"each element: {} bytes"</span>, <span class="fn">size_of</span>::&lt;<span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt;&gt;());
+    <span class="kw">let</span> base = screen.<span class="fn">as_ptr</span>() <span class="kw">as</span> <span class="ty">usize</span>;
+    <span class="kw">for</span> (i, handle) <span class="kw">in</span> screen.<span class="fn">iter</span>().<span class="fn">enumerate</span>() {
+        <span class="kw">let</span> start = handle <span class="kw">as</span> *<span class="kw">const</span> <span class="ty">Box</span>&lt;<span class="kw">dyn</span> <span class="ty">Widget</span>&gt; <span class="kw">as</span> <span class="ty">usize</span> - base;
+        <span class="kw">let</span> size = <span class="fn">size_of_val</span>(handle.<span class="fn">as_ref</span>());
+        <span class="mac">println!</span>(
+            <span class="str">"  screen[{i}] at base + {start}, points at {size} bytes: {}"</span>,
+            handle.<span class="fn">render</span>()
+        );
+    }
+}</code></pre>
+<p>Output:</p>
+<pre><code>&amp;dyn Widget: 16 bytes
+word 1 is bar's address: true
+each element: 16 bytes
+  screen[0] at base + 0, points at 32 bytes: CPU at (0, 0)
+  screen[1] at base + 16, points at 32 bytes: MEM at (0, 1)
+  screen[2] at base + 32, points at 8 bytes: [7/10]</code></pre>
+<p>The elements sit 16 bytes apart, while the values behind them are 32, 32 and 8 bytes. <code>size_of_val</code> reads each value's size from its vtable, through word 2. There's nowhere else it could come from.</p>
+<div class="note">rustc puts the data pointer first and the vtable pointer second, and lays a vtable out as drop, size, alignment, then the methods. That's how rustc does it today; the language doesn't promise either order. A type with nothing to clean up, like these two, gets a null drop slot.</div>
+<h2>3. Who knows what: the caller and the callee</h2>
+<p>The handle makes the array uniform, and the price is that code holding a handle no longer knows its value's type. Yet <code>w.render()</code> still prints <code>[7/10]</code>, reading fields the caller can't name. That works because the two sides of the call know different things.</p>
+<h3>The caller: the type is erased</h3>
+<p>Code holding a <code>&amp;dyn Widget</code> knows only that the value implements <code>Widget</code>. It doesn't know the field names or the layout, it doesn't know the size as a compile-time constant, and it doesn't know which <code>render</code> to call. Ask it for a field and rustc says so:</p>
+<p><strong>Does not compile.</strong></p>
+<pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
+}
+
+<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
+    value: <span class="ty">u8</span>,
+    max: <span class="ty">u32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
+    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
+        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
+    }
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
+    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar;
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="fn">render</span>()); <span class="cm">// fine: render was compiled for ProgressBar</span>
+    <span class="mac">println!</span>(<span class="str">"{}"</span>, w.value); <span class="cm">// the caller doesn't know there is a value</span>
+}</code></pre>
+<pre><code>error[E0609]: no field `value` on type `&amp;dyn Widget`
+  --&gt; main.rs:20:22
+   |
+20 |     println!("{}", w.value); // the caller doesn't know there is a value
+   |                      ^^^^^ unknown field</code></pre>
+<p><code>offset_of!(dyn Widget, value)</code> fails with the same error: there are no offsets to ask about. And because the caller doesn't know which <code>render</code> applies, it can't compile a call to one fixed address. It compiles an <em>indirect call</em> instead: load word 2, load the <code>render</code> slot from that vtable, and call whatever address is there.</p>
+<h3>The callee: the type was never lost</h3>
+<p>So how does <code>render</code> read <code>value</code>? The function the vtable points to is <code>&lt;ProgressBar as Widget&gt;::render</code>, compiled like any other method, at a time when <code>ProgressBar</code> was a known type. Its machine code reads <code>max</code> 0 bytes from <code>self</code> and <code>value</code> 4 bytes from it: those offsets are constants in its instructions. All it needs at run time is <code>self</code>, the value's address, and the caller passes word 1 for that.</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig4-caller-callee.svg" width="800" height="480" alt="The caller follows the handle's word 2 to the vtable, reads the render slot and calls that address with self set to word 1. To the caller, bar's bytes have no field names. The callee, ProgressBar's render, was compiled when the type was known, and reads max at self + 0 and value at self + 4."></div>
+<figcaption>The caller knows the handle. The callee knows the type. The vtable connects them.</figcaption>
+</figure>
+<p>That's the division of labour. The vtable was filled in when the compiler still knew the type, so its slots lead to code compiled for that type. Nothing else about the type has to survive at run time: just those addresses, the size and the alignment. When the optimizer can see the concrete type, it may turn an indirect call back into a direct one; when it can't, the call goes through the vtable as shown.</p>
+<h3>What a vtable can hold</h3>
+<p>The compiler writes every vtable at compile time. The place where <code>&amp;ProgressBar</code> becomes <code>&amp;dyn Widget</code>, called the <em>coercion</em>, is the last place it knows the concrete type, so that's where it picks which vtable word 2 points at. Every slot in that table has to be filled by then. That one rule decides which traits can be used as <code>dyn</code>.</p>
+<p>A method with its own type parameter breaks it. Here a widget renders into any writer, and the caller picks the writer type <code>O</code> at each call:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
 
@@ -226,14 +316,12 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
    |        ^^^^^^^^^ ...because method `render_to` has generic type parameters
    = help: consider moving `render_to` to another trait
    = help: only type `ProgressBar` implements `Widget`; consider using it directly instead.</code></pre>
-<p>The writer type <code>O</code> isn't erased: the caller knows it at every call. The problem is timing. Each <code>O</code> needs its own compiled copy of <code>render_to</code>, so the vtable would need a slot for every writer type anyone might ever pass, and the table was finished before any caller showed up.</p>
+<p>Each <code>O</code> needs its own compiled copy of <code>render_to</code>, just as <code>show</code> needed one copy per type. The vtable would need a slot for every writer type anyone might pass, and <code>O</code> only becomes known at the call, after the table was picked.</p>
 <figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig3-timeline.svg" width="800" height="530" alt="Three moments: writing the dyn type, turning &amp;bar into a dyn value (when the vtable is built), and each call. With O on the trait, dyn RenderTo&lt;String&gt; picks O in the type, so the vtable gets one render_to slot. With O on the method, the vtable would need a slot for every O, and O is only picked at the call, too late."></div>
-<figcaption>The same <code>O</code>, on the trait (top) and on the method (bottom). Only the top one is picked before the vtable is built.</figcaption>
+<div class="figure-scroll"><img src="../assets/dyn-redaction/fig5-timeline.svg" width="800" height="530" alt="Three moments: writing the dyn type, turning &amp;bar into a dyn value (when its vtable is picked), and each call. With O on the trait, dyn RenderTo&lt;String&gt; names O in the type, so the vtable has one render_to slot. With O on the method, the vtable would need a slot for every O, and O is only picked at the call, too late."></div>
+<figcaption>The same <code>O</code>, on the trait (top) and on the method (bottom). Only the top one is known when the vtable is picked.</figcaption>
 </figure>
-<p>There are three ways out, and each is about when <code>O</code> gets picked.</p>
-<p><strong>Pick it earlier: put the parameter on the trait.</strong> Then <code>dyn RenderTo&lt;String&gt;</code> names <code>O</code> in the type itself, and the vtable built for it holds one <code>render_to</code>, for <code>String</code>.</p>
-<p><strong>Don't pick it at all: erase the argument too.</strong> A <code>&amp;mut dyn Write</code> is a writer with its own vtable, so one compiled <code>render_to</code> serves every writer, and it fits in the table.</p>
+<p>There are two ways out, and both are about when <code>O</code> is picked. Put the parameter on the trait, so the <code>dyn</code> type names it: <code>dyn RenderTo&lt;String&gt;</code> picks a vtable with one <code>render_to</code>, for <code>String</code>. Or erase the argument too: a <code>&amp;mut dyn Write</code> is itself a handle, so one compiled <code>render_to</code> serves every writer and fits in one slot.</p>
 <p><strong>Compiles.</strong></p>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
 
@@ -278,58 +366,11 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
 }</code></pre>
 <p>Output:</p>
 <pre><code>[7/10][7/10]</code></pre>
-<p>std has both designs. <code>Hash::hash&lt;H: Hasher&gt;</code> is generic over the hasher, so <code>&amp;dyn Hash</code> is E0038. <code>Display::fmt</code> takes a concrete <code>&amp;mut Formatter</code> instead, so <code>&amp;dyn Display</code> works.</p>
-<p><strong>Keep the method, but out of the table.</strong> <code>where Self: Sized</code> on a method removes it from the vtable. The rest of the trait works as <code>dyn</code>, and the method can still be called wherever the type is known; only a call through <code>dyn</code> fails:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Write</span>;
-
-<span class="kw">trait</span> <span class="ty">Widget</span> {
-    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
-
-    <span class="kw">fn</span> <span class="fn">render_to</span>&lt;<span class="ty">O</span>: <span class="ty">Write</span>&gt;(&amp;<span class="kw">self</span>, out: &amp;<span class="kw">mut</span> <span class="ty">O</span>)
-    <span class="kw">where</span>
-        <span class="kw">Self</span>: <span class="ty">Sized</span>,
-    {
-        out.<span class="fn">write_str</span>(&amp;<span class="kw">self</span>.<span class="fn">render</span>()).<span class="fn">unwrap</span>();
-    }
-}
-
-<span class="kw">struct</span> <span class="ty">ProgressBar</span> {
-    value: <span class="ty">u8</span>,
-    max: <span class="ty">u32</span>,
-}
-
-<span class="kw">impl</span> <span class="ty">Widget</span> <span class="kw">for</span> <span class="ty">ProgressBar</span> {
-    <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> bar = <span class="ty">ProgressBar</span> { value: <span class="num">7</span>, max: <span class="num">10</span> };
-    <span class="kw">let</span> <span class="kw">mut</span> s = <span class="ty">String</span>::<span class="fn">new</span>();
-    bar.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// fine: Self is known to be ProgressBar</span>
-
-    <span class="kw">let</span> w: &amp;<span class="kw">dyn</span> <span class="ty">Widget</span> = &amp;bar; <span class="cm">// fine: render_to isn't in the vtable</span>
-    <span class="mac">println!</span>(<span class="str">"{s} {}"</span>, w.<span class="fn">render</span>());
-
-    w.<span class="fn">render_to</span>(&amp;<span class="kw">mut</span> s); <span class="cm">// the one call that can't work</span>
-}</code></pre>
-<pre><code>error: the `render_to` method cannot be invoked on a trait object
-  --&gt; main.rs:33:7
-   |
- 8 |         Self: Sized,
-   |               ----- this has a `Sized` requirement
-...
-33 |     w.render_to(&amp;mut s); // the one call that can't work
-   |       ^^^^^^^^^</code></pre>
-<p>Two things the rule allows. Associated types are fine, because the <code>dyn</code> type states them before the table is built: <code>dyn Iterator&lt;Item = u8&gt;</code>. Leave one out, as in plain <code>dyn Iterator</code>, and it's E0191. Lifetime parameters on methods are fine too. Lifetimes never produce separate compiled copies, so <code>fn first&lt;'a&gt;(&amp;self, a: &amp;'a str, b: &amp;'a str) -&gt; &amp;'a str</code> goes through <code>dyn</code> without trouble.</p>
-<h2>4. <code>Self</code> only in the receiver</h2>
-<p>The same rule covers <code>Self</code>, from the other side. <code>Self</code> is the one type <code>dyn</code> erases, so a method can't mention it anywhere but its receiver:</p>
+<p>Returning <code>Self</code> runs into the wall from the other side:</p>
 <p><strong>Does not compile.</strong></p>
 <pre><code><span class="kw">trait</span> <span class="ty">Widget</span> {
     <span class="kw">fn</span> <span class="fn">render</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span>;
-    <span class="kw">fn</span> <span class="fn">same_as</span>(&amp;<span class="kw">self</span>, other: &amp;<span class="kw">Self</span>) -&gt; <span class="ty">bool</span>;
+    <span class="kw">fn</span> <span class="fn">duplicate</span>(&amp;<span class="kw">self</span>) -&gt; <span class="kw">Self</span>;
 }
 
 <span class="kw">struct</span> <span class="ty">ProgressBar</span> {
@@ -342,8 +383,11 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
         <span class="mac">format!</span>(<span class="str">"[{}/{}]"</span>, <span class="kw">self</span>.value, <span class="kw">self</span>.max)
     }
 
-    <span class="kw">fn</span> <span class="fn">same_as</span>(&amp;<span class="kw">self</span>, other: &amp;<span class="kw">Self</span>) -&gt; <span class="ty">bool</span> {
-        <span class="kw">self</span>.value == other.value &amp;&amp; <span class="kw">self</span>.max == other.max
+    <span class="kw">fn</span> <span class="fn">duplicate</span>(&amp;<span class="kw">self</span>) -&gt; <span class="kw">Self</span> {
+        <span class="ty">ProgressBar</span> {
+            value: <span class="kw">self</span>.value,
+            max: <span class="kw">self</span>.max,
+        }
     }
 }
 
@@ -353,36 +397,30 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
     <span class="mac">println!</span>(<span class="str">"{}"</span>, w.<span class="fn">render</span>());
 }</code></pre>
 <pre><code>error[E0038]: the trait `Widget` is not dyn compatible
-  --&gt; main.rs:23:17
+  --&gt; main.rs:26:17
    |
-23 |     let w: &amp;dyn Widget = &amp;bar;
+26 |     let w: &amp;dyn Widget = &amp;bar;
    |                 ^^^^^^ `Widget` is not dyn compatible
    |
 note: for a trait to be dyn compatible it needs to allow building a vtable
       for more information, visit &lt;https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility&gt;
-  --&gt; main.rs:3:30
+  --&gt; main.rs:3:28
    |
  1 | trait Widget {
    |       ------ this trait is not dyn compatible...
  2 |     fn render(&amp;self) -&gt; String;
- 3 |     fn same_as(&amp;self, other: &amp;Self) -&gt; bool;
-   |                              ^^^^^ ...because method `same_as` references the `Self` type in this parameter
-   = help: consider moving `same_as` to another trait
+ 3 |     fn duplicate(&amp;self) -&gt; Self;
+   |                            ^^^^ ...because method `duplicate` references the `Self` type in its return type
+   = help: consider moving `duplicate` to another trait
    = help: only type `ProgressBar` implements `Widget`; consider using it directly instead.</code></pre>
-<p><code>&amp;Self</code> is just a pointer, so this isn't about size. It's about identity:</p>
-<figure>
-<div class="figure-scroll"><img src="../assets/dyn-redaction/fig4-other-self.svg" width="800" height="470" alt="Two dyn Widget references: a points at a ProgressBar, b at a Label. a.same_as(b) would run ProgressBar's same_as, chosen by a's vtable, with b as other, so ProgressBar's code would read half of the Label's pointer as max and one byte of it as value."></div>
-<figcaption>Two <code>dyn Widget</code> values meet in one call. <code>a</code>'s vtable picks <code>ProgressBar</code>'s code, and <code>b</code> is a <code>Label</code>.</figcaption>
-</figure>
-<p>Through <code>dyn</code>, <code>a</code> and <code>b</code> can hold different types, and the one thing that could tell the call whether they match is the type that was blacked out. Returning <code>Self</code> fails the same way: E0038's note says the method "references the <code>Self</code> type in its return type", because through <code>dyn</code> there's no telling what type would come back, or how big it is.</p>
-<p>The fix is the same escape hatch: <code>where Self: Sized</code> on <code>same_as</code> takes just that method out of the vtable. Where the clause goes matters. On a method, it removes that one method. On the trait, as <code>trait Widget: Sized</code>, it keeps the whole trait out of <code>dyn</code>, because a <code>dyn Widget</code> is never <code>Sized</code>; E0038 then says the trait "requires <code>Self: Sized</code>".</p>
-<h2>5. The whole story</h2>
+<p>A caller has to set aside space for a return value before it makes the call. Through a <code>&amp;dyn Widget</code>, <code>duplicate</code> would return 8 bytes for a progress bar and 32 for a label, and the caller can't know which. For both problems there's a fix that keeps the method: <code>where Self: Sized</code> on it takes it out of the vtable, so the trait works as <code>dyn</code> and the method can still be called wherever the concrete type is known.</p>
+<h2>4. The whole story</h2>
 <ul>
-<li><strong>What's redacted:</strong> the concrete type, with its layout, fields, inherent methods and other traits. The bytes themselves are untouched.</li>
-<li><strong>What survives:</strong> a vtable, built where the value becomes <code>dyn</code>, holding drop, size, alignment and one address per trait method.</li>
-<li><strong>Why:</strong> so values of different types can share one type, and code over them is compiled once.</li>
-<li><strong>The rule it imposes:</strong> everything a method needs must be picked by the time the vtable is built. A trait's parameters and associated types are named in the <code>dyn</code> type, and <code>Self</code> is picked at the conversion. A method's own type parameters only arrive later, at each call, so they're out, and so is <code>Self</code> anywhere but the receiver. <code>where Self: Sized</code> takes a method out of the table instead.</li>
-<li><strong>The cost:</strong> an indirect call per method call, against one compiled copy per type for generics.</li>
+<li><strong>An array needs one size.</strong> Element <code>i</code> is at <code>base + i × size</code>, with the size compiled in, so values of different sizes can't share an array.</li>
+<li><strong>Type erasure gives it one.</strong> The array holds 16-byte handles: a data pointer to the value, wherever it lives, and a vtable pointer. The stride is 16, whatever the values are.</li>
+<li><strong>The caller loses the type.</strong> No field names, no layout, no direct call: it calls through the vtable.</li>
+<li><strong>The callee keeps it.</strong> The method was compiled for the concrete type, with its field offsets built into its instructions. It only needs <code>self</code>.</li>
+<li><strong>The vtable is fixed before the handle exists.</strong> So every method needs one compiled body per type: no type parameters of its own, and no returning <code>Self</code>, unless <code>where Self: Sized</code> takes the method out of the vtable.</li>
 </ul>
     </article>
   </main>

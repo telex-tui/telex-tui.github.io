@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 530" width="800" height="530" role="img" aria-labelledby="fig3-title fig3-desc">
   <title id="fig3-title">When the writer type O is picked, relative to building the vtable</title>
-  <desc id="fig3-desc">Three moments: writing the dyn type, turning &amp;bar into a dyn value (when the vtable is built), and each call. Top row, O on the trait: dyn RenderTo&lt;String&gt; picks O in the type, so the vtable built at step 2 has one render_to slot for O = String, and the call has nothing left to pick. Bottom row, O on the method: dyn Widget says nothing about O, so at step 2 the vtable would need a slot for every O anyone might use; O is only picked at step 3, too late.</desc>
+  <desc id="fig3-desc">Three moments: writing the dyn type, turning &amp;bar into a dyn value (when its vtable is picked; every vtable is written at compile time), and each call. Top row, O on the trait: dyn RenderTo&lt;String&gt; picks O in the type, so the vtable picked at step 2 has one render_to slot for O = String, and the call has nothing left to pick. Bottom row, O on the method: dyn Widget says nothing about O, so the vtable picked at step 2 would need a slot for every O anyone might use; O is only picked at step 3, too late.</desc>
   <defs>
     <style>
       text { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
@@ -13,13 +13,13 @@
 
   <rect width="800" height="530" fill="#0d1117"/>
   <rect x="10" y="10" width="780" height="510" rx="8" fill="#161b22" stroke="#30363d"/>
-  <text class="sans" x="30" y="42" font-size="15" fill="#e6edf3">A vtable can only hold what was picked before it was built.</text>
+  <text class="sans" x="30" y="42" font-size="15" fill="#e6edf3">A vtable is fixed before the handle exists.</text>
   <text class="sans" x="30" y="64" font-size="13" fill="#8b949e">The same writer type, O, picked at two different moments.</text>
 
   <!-- the timeline -->
   <g class="sans" font-size="12.5" fill="#e6edf3" text-anchor="middle">
     <text x="200" y="96">1 · you write the dyn type</text>
-    <text x="430" y="96">2 · &amp;bar becomes dyn: vtable built</text>
+    <text x="430" y="96">2 · &amp;bar becomes dyn: vtable picked</text>
     <text x="660" y="96">3 · each call through it</text>
   </g>
   <line x1="110" y1="110" x2="772" y2="110" stroke="#8b949e" stroke-width="1.5" marker-end="url(#f3arrow)"/>
@@ -71,8 +71,8 @@
   <text x="660" y="342" font-size="12.5" fill="#e6edf3" text-anchor="middle">w.render_to(&amp;mut s)</text>
   <text class="sans" x="660" y="368" font-size="12.5" fill="#f85149" text-anchor="middle">O = String, picked here</text>
   <text class="sans" x="660" y="390" font-size="12" fill="#8b949e" text-anchor="middle">too late: the table</text>
-  <text class="sans" x="660" y="406" font-size="12" fill="#8b949e" text-anchor="middle">was built at step 2</text>
+  <text class="sans" x="660" y="406" font-size="12" fill="#8b949e" text-anchor="middle">was fixed at step 2</text>
 
-  <text class="sans" x="30" y="490" font-size="12.5" fill="#8b949e">Step 2 can only fill in what's known at step 2. <tspan fill="#e6edf3">Self</tspan> is picked there; a method's own <tspan fill="#e6edf3">O</tspan> only arrives at step 3,</text>
+  <text class="sans" x="30" y="490" font-size="12.5" fill="#8b949e">The vtable picked at step 2 was written at compile time, for <tspan fill="#e6edf3">Self</tspan> = ProgressBar. A method's own <tspan fill="#e6edf3">O</tspan> arrives only at step 3,</text>
   <text class="sans" x="30" y="508" font-size="12.5" fill="#8b949e">and no finite table holds a body for every <tspan fill="#e6edf3">O</tspan>. So rustc refuses <tspan fill="#e6edf3">dyn Widget</tspan>: error E0038.</text>
 </svg>
