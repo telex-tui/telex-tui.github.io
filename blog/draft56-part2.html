@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inside an Iterator Chain, Part 2: Writing a Step - Telex</title>
+  <meta name="description" content="Writing an iterator step from scratch, giving it a dot with an extension trait, and finding that the slot-in rule is one line: a step fits when its input is the previous step&#x27;s Item.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Inside an Iterator Chain, Part 2: Writing a Step</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 2 of 4 in <a href="#series-index">Inside an Iterator Chain</a>.</p>
+      <p class="series-nav">Previous: <a href="draft56-part1.html">Part 1: How a Chain Runs</a> | Next: <a href="draft56-part3.html">Part 3: Beyond One In, One Out</a></p>
+<p><a href="draft56-part1.html">Part 1</a> took a chain apart. Each step holds the step before it and answers <code>next</code>. This part builds a step from nothing, then gives it a dot so it slots into a chain beside the built-ins.</p>
+<p>The job is the same as before: 1 to 5, add 1, multiply by 3, subtract 2, then label. No <code>map</code> allowed. By the end we'll have written it anyway.</p>
+<h2>1. A step is a struct that holds the step before it</h2>
+<p>An "add" step needs two things: the step it pulls from, and the amount to add.</p>
+<pre><code><span class="kw">struct</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt; {
+    inner: <span class="ty">I</span>,
+    amount: <span class="ty">i32</span>,
+}</code></pre>
+<p><code>I</code> is whatever comes before: a range, a <code>Map</code>, another <code>Plus</code>. The struct doesn't care what it is.</p>
+<h2>2. Its <code>next</code> pulls one value, changes it, and passes it on</h2>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">i32</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; {
+        <span class="kw">let</span> n = <span class="kw">self</span>.inner.<span class="fn">next</span>()?;
+        <span class="ty">Some</span>(n + <span class="kw">self</span>.amount)
+    }
+}</code></pre>
+<p>The header says when this works: <code>Plus&lt;I&gt;</code> is an iterator of <code>i32</code> whenever <code>I</code> is one. The <code>?</code> handles the ending. When the inner step says <code>None</code>, so does this one.</p>
+<p>It already works, called by hand:</p>
+<pre><code><span class="kw">let</span> <span class="kw">mut</span> step = <span class="ty">Plus</span> { inner: <span class="num">1</span>..=<span class="num">3</span>, amount: <span class="num">1</span> };</code></pre>
+<p>Calling <code>step.next()</code> four times gives:</p>
+<pre><code>Some(2) Some(3) Some(4) None</code></pre>
+<h2>3. Without a dot, a chain reads inside out</h2>
+<p><code>Times</code> and <code>Minus</code> are the same shape as <code>Plus</code>. Here's the whole job, built by hand:</p>
+<pre><code><span class="kw">let</span> chain = <span class="ty">Minus</span> {
+    inner: <span class="ty">Times</span> {
+        inner: <span class="ty">Plus</span> { inner: <span class="num">1</span>..=<span class="num">5</span>, amount: <span class="num">1</span> },
+        amount: <span class="num">3</span>,
+    },
+    amount: <span class="num">2</span>,
+};</code></pre>
+<p>Output, after <code>collect</code>:</p>
+<pre><code>[4, 7, 10, 13, 16]</code></pre>
+<p>Right answer, wrong way round. The last step is written first. It's the nesting from part 1, now in plain sight. The dot exists to undo exactly this.</p>
+<h2>4. A trait gives the step its dot</h2>
+<p>You can't add a method to <code>Iterator</code>. It belongs to the standard library. But you can write a trait of your own and implement it for every iterator at once.</p>
+<pre><code><span class="kw">trait</span> <span class="ty">Steps</span>: <span class="ty">Iterator</span> + <span class="ty">Sized</span> {
+    <span class="kw">fn</span> <span class="fn">plus</span>(<span class="kw">self</span>, amount: <span class="ty">i32</span>) -&gt; <span class="ty">Plus</span>&lt;<span class="kw">Self</span>&gt;
+    <span class="kw">where</span>
+        <span class="kw">Self</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
+    {
+        <span class="ty">Plus</span> { inner: <span class="kw">self</span>, amount }
+    }
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&gt; <span class="ty">Steps</span> <span class="kw">for</span> <span class="ty">I</span> {}</code></pre>
+<p>The method just wraps <code>self</code>, the chain so far, in a new <code>Plus</code>. The empty <code>impl</code> gives the method to every iterator there is. <code>Sized</code> is needed because <code>plus</code> takes <code>self</code> by value.</p>
+<p>The <code>where</code> line says <code>plus</code> is only for iterators of <code>i32</code>. Keep an eye on that line. It comes back in section 7.</p>
+<p>With <code>times</code> and <code>minus</code> added the same way, the chain reads in order:</p>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 7, 10, 13, 16]</code></pre>
+<p>And ours mix freely with the standard library's:</p>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">map</span>(|n| n * <span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">take</span>(<span class="num">3</span>).<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 7, 10]</code></pre>
+<h2>5. <code>times</code> and <code>minus</code> are the same shape, copy-pasted</h2>
+<p>Across the three structs, three impls and three methods, the only real difference is one line:</p>
+<pre><code><span class="ty">Some</span>(n + <span class="kw">self</span>.amount) <span class="cm">// Plus</span>
+<span class="ty">Some</span>(n * <span class="kw">self</span>.amount) <span class="cm">// Times</span>
+<span class="ty">Some</span>(n - <span class="kw">self</span>.amount) <span class="cm">// Minus</span></code></pre>
+<p>When code repeats like that, the part that changes wants to be a parameter.</p>
+<h2>6. Pass the change in as a closure</h2>
+<pre><code><span class="kw">struct</span> <span class="ty">Apply</span>&lt;<span class="ty">I</span>, <span class="ty">F</span>&gt; {
+    inner: <span class="ty">I</span>,
+    f: <span class="ty">F</span>,
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">I</span>, <span class="ty">F</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Apply</span>&lt;<span class="ty">I</span>, <span class="ty">F</span>&gt;
+<span class="kw">where</span>
+    <span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
+    <span class="ty">F</span>: <span class="ty">FnMut</span>(<span class="ty">i32</span>) -&gt; <span class="ty">i32</span>,
+{
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">i32</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; {
+        <span class="kw">let</span> n = <span class="kw">self</span>.inner.<span class="fn">next</span>()?;
+        <span class="ty">Some</span>((<span class="kw">self</span>.f)(n))
+    }
+}</code></pre>
+<p><code>(self.f)(n)</code> has the extra brackets because <code>self.f(n)</code> would look for a method called <code>f</code>. <code>FnMut</code> lets the closure update anything it captured.</p>
+<p>Its trait method follows the same pattern as <code>plus</code>. Now one struct does the job of three:</p>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>)
+    .<span class="fn">apply</span>(|n| n + <span class="num">1</span>)
+    .<span class="fn">apply</span>(|n| n * <span class="num">3</span>)
+    .<span class="fn">apply</span>(|n| n - <span class="num">2</span>)
+    .<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 7, 10, 13, 16]</code></pre>
+<h2>7. A step can change the item type</h2>
+<p>The last job is the label. That step takes an <code>i32</code> and hands out a <code>String</code>. The struct is the same shape. Only <code>Item</code> changes.</p>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Label</span>&lt;<span class="ty">I</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">String</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt; {
+        <span class="kw">let</span> n = <span class="kw">self</span>.inner.<span class="fn">next</span>()?;
+        <span class="ty">Some</span>(<span class="mac">format!</span>(<span class="str">"#{n:02}"</span>))
+    }
+}</code></pre>
+<p><code>Item</code> is what this step hands out, so it's what the next step receives.</p>
+<pre><code><span class="kw">let</span> labels: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">label</span>().<span class="fn">collect</span>();</code></pre>
+<pre><code>["#04", "#07", "#10", "#13", "#16"]</code></pre>
+<p>Now put the label too early:</p>
+<pre><code><span class="kw">let</span> bad: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">label</span>().<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">collect</span>();</code></pre>
+<p>The compiler's answer, trimmed:</p>
+<pre><code>error[E0271]: expected `Label&lt;RangeInclusive&lt;i32&gt;&gt;` to be an iterator that yields `i32`, but it yields `String`
+note: required by a bound in `Steps::plus`</code></pre>
+<p>That's the <code>where</code> line from section 4 doing its job. And it's the rule that lets any step slot in anywhere: a step fits after another when its input type is the other step's <code>Item</code>. Nothing else is checked, and nothing else needs to be.</p>
+<h2>8. Let the closure choose the output type, and you've rebuilt <code>map</code></h2>
+<p><code>Apply</code> only goes from <code>i32</code> to <code>i32</code>. Loosen both ends. Take whatever the inner step hands out, and hand out whatever the closure returns.</p>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>, <span class="ty">F</span>, <span class="ty">B</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Apply</span>&lt;<span class="ty">I</span>, <span class="ty">F</span>&gt;
+<span class="kw">where</span>
+    <span class="ty">I</span>: <span class="ty">Iterator</span>,
+    <span class="ty">F</span>: <span class="ty">FnMut</span>(<span class="ty">I</span>::<span class="ty">Item</span>) -&gt; <span class="ty">B</span>,
+{
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">B</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">B</span>&gt; {
+        <span class="kw">let</span> item = <span class="kw">self</span>.inner.<span class="fn">next</span>()?;
+        <span class="ty">Some</span>((<span class="kw">self</span>.f)(item))
+    }
+}</code></pre>
+<p><code>B</code> is the closure's return type, and it becomes the step's <code>Item</code>. The trait method drops its <code>i32</code> bound to match:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">apply</span>&lt;<span class="ty">B</span>, <span class="ty">F</span>&gt;(<span class="kw">self</span>, f: <span class="ty">F</span>) -&gt; <span class="ty">Apply</span>&lt;<span class="kw">Self</span>, <span class="ty">F</span>&gt;
+<span class="kw">where</span>
+    <span class="ty">F</span>: <span class="ty">FnMut</span>(<span class="kw">Self</span>::<span class="ty">Item</span>) -&gt; <span class="ty">B</span>,
+{
+    <span class="ty">Apply</span> { inner: <span class="kw">self</span>, f }
+}</code></pre>
+<p>Now one step does the arithmetic and the label:</p>
+<pre><code><span class="kw">let</span> labels: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>)
+    .<span class="fn">apply</span>(|n| n + <span class="num">1</span>)
+    .<span class="fn">apply</span>(|n| n * <span class="num">3</span>)
+    .<span class="fn">apply</span>(|n| n - <span class="num">2</span>)
+    .<span class="fn">apply</span>(|n| <span class="mac">format!</span>(<span class="str">"#{n:02}"</span>))
+    .<span class="fn">collect</span>();</code></pre>
+<pre><code>["#04", "#07", "#10", "#13", "#16"]</code></pre>
+<p>That's the chain from part 1, with <code>apply</code> where <code>map</code> was. Put <code>Apply</code> beside the standard library's <code>Map</code> and the real difference is the name. <code>map</code> is a struct that holds the step before it, and a closure.</p>
+<h2>What comes next</h2>
+<p>Every step so far takes one value and gives one back. <a href="draft56-part3.html">Part 3</a> breaks that: steps that drop values, steps that stop early, and steps that remember. Then it writes the two ends of a chain, the source and the consumer.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft56-part1.html">Part 1: How a Chain Runs</a></li>
+          <li><strong>Part 2: Writing a Step</strong></li>
+          <li><a href="draft56-part3.html">Part 3: Beyond One In, One Out</a></li>
+          <li><a href="draft56-part4.html">Part 4: Where the &amp; Comes From</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

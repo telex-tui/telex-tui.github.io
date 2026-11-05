@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inside an Iterator Chain, Part 1: How a Chain Runs - Telex</title>
+  <meta name="description" content="What an iterator chain really is: a recipe that runs when the last step pulls, one value at a time, through steps that each hold the step before them.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Inside an Iterator Chain, Part 1: How a Chain Runs</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 1 of 4 in <a href="#series-index">Inside an Iterator Chain</a>.</p>
+      <p class="series-nav">Previous: none | Next: <a href="draft56-part2.html">Part 2: Writing a Step</a></p>
+<p>Most writing about iterators is about syntax: which adapter does what. This series is about shape. Why do <code>map</code>, <code>filter</code> and <code>take</code> snap together in any order? And what would it take to write a step of your own that snaps in just as well?</p>
+<p>Part 1 only looks. No new code yet, just a chain we already know, taken apart. The examples were run with rustc 1.97.0, edition 2024.</p>
+<p>Here's the job for the whole series. Take the numbers 1 to 5. Add 1, multiply by 3, subtract 2. Then format each one as a two-digit label.</p>
+<pre><code><span class="kw">let</span> labels: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>)
+    .<span class="fn">map</span>(|n| n + <span class="num">1</span>)
+    .<span class="fn">map</span>(|n| n * <span class="num">3</span>)
+    .<span class="fn">map</span>(|n| n - <span class="num">2</span>)
+    .<span class="fn">map</span>(|n| <span class="mac">format!</span>(<span class="str">"#{n:02}"</span>))
+    .<span class="fn">collect</span>();</code></pre>
+<p>Output:</p>
+<pre><code>["#04", "#07", "#10", "#13", "#16"]</code></pre>
+<p>A source, four steps, and <code>collect</code> at the end. Everything in this series is about what happens at those dots.</p>
+<h2>1. A chain is a recipe, not a run</h2>
+<p>Building a chain doesn't compute anything. It describes the work. The work happens later, when something asks for values.</p>
+<pre><code><span class="kw">let</span> chain = (<span class="num">1</span>..=<span class="num">3</span>).<span class="fn">map</span>(|n| {
+    <span class="mac">println!</span>(<span class="str">"adding 1 to {n}"</span>);
+    n + <span class="num">1</span>
+});
+<span class="mac">println!</span>(<span class="str">"chain built"</span>);
+<span class="kw">let</span> added: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = chain.<span class="fn">collect</span>();</code></pre>
+<p>Output:</p>
+<pre><code>chain built
+adding 1 to 1
+adding 1 to 2
+adding 1 to 3</code></pre>
+<p><code>chain built</code> comes first. Every addition happens inside <code>collect</code>.</p>
+<h2>2. The last step pulls, one value at a time</h2>
+<p><code>collect</code> doesn't wait for the first step to finish its whole range. It asks for one value. The request travels back up the chain to the source, and one value travels down through every step.</p>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">3</span>)
+    .<span class="fn">map</span>(|n| { <span class="mac">println!</span>(<span class="str">"plus  {n}"</span>); n + <span class="num">1</span> })
+    .<span class="fn">map</span>(|n| { <span class="mac">println!</span>(<span class="str">"times {n}"</span>); n * <span class="num">3</span> })
+    .<span class="fn">map</span>(|n| { <span class="mac">println!</span>(<span class="str">"minus {n}"</span>); n - <span class="num">2</span> })
+    .<span class="fn">collect</span>();</code></pre>
+<p>Output:</p>
+<pre><code>plus  1
+times 2
+minus 6
+plus  2
+times 3
+minus 9
+plus  3
+times 4
+minus 12</code></pre>
+<p>Read it in groups of three. The first value goes all the way through before the second leaves the source. No step ever holds a list.</p>
+<h2>3. Each step holds the step before it</h2>
+<p>So if there's no list, where does the chain live? In the steps themselves. Each one wraps the one before it, and the type says so.</p>
+<pre><code><span class="kw">let</span> chain = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">map</span>(|n| n + <span class="num">1</span>).<span class="fn">map</span>(|n| n * <span class="num">3</span>);
+<span class="mac">println!</span>(<span class="str">"{}"</span>, std::any::<span class="fn">type_name_of_val</span>(&amp;chain));</code></pre>
+<p>Output:</p>
+<pre><code>core::iter::adapters::map::Map&lt;core::iter::adapters::map::Map&lt;core::ops::range::RangeInclusive&lt;i32&gt;, p1::main::{{closure}}&gt;, p1::main::{{closure}}&gt;</code></pre>
+<p>Strip the paths and the closure names, and the shape is plain:</p>
+<pre><code>Map&lt;Map&lt;RangeInclusive&lt;i32&gt;, F1&gt;, F2&gt;</code></pre>
+<p>Read it from the inside out. The range is innermost. The first <code>Map</code> holds the range and the first closure. The second <code>Map</code> holds the first <code>Map</code> and the second closure. The outermost step is the one you hold, and it's the one <code>collect</code> asks.</p>
+<h2>4. A step only has to answer one question: what's next?</h2>
+<p>Every step, built-in or not, implements the same trait. Stripped of its many provided methods, it's this:</p>
+<pre><code><span class="kw">trait</span> <span class="ty">Iterator</span> {
+    <span class="kw">type</span> <span class="ty">Item</span>;
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;;
+}</code></pre>
+<p><code>Some(value)</code> means "here's one". <code>None</code> means "I'm done". That's the whole contract. <code>Item</code> is the type of value the step hands out.</p>
+<p>You can call <code>next</code> by hand. It's all <code>collect</code> does, over and over, until it sees <code>None</code>.</p>
+<pre><code><span class="kw">let</span> <span class="kw">mut</span> chain = (<span class="num">1</span>..=<span class="num">2</span>).<span class="fn">map</span>(|n| n + <span class="num">1</span>).<span class="fn">map</span>(|n| n * <span class="num">3</span>);
+<span class="mac">println!</span>(<span class="str">"{:?}"</span>, chain.<span class="fn">next</span>());
+<span class="mac">println!</span>(<span class="str">"{:?}"</span>, chain.<span class="fn">next</span>());
+<span class="mac">println!</span>(<span class="str">"{:?}"</span>, chain.<span class="fn">next</span>());</code></pre>
+<p>Output:</p>
+<pre><code>Some(6)
+Some(9)
+None</code></pre>
+<p>Each call to the outer <code>Map</code> makes it call <code>next</code> on the inner <code>Map</code>, which calls <code>next</code> on the range. <code>next</code> takes <code>&amp;mut self</code> because every call moves the step along.</p>
+<h2>What comes next</h2>
+<p>Every step in a chain is a value that holds the step before it and answers <code>next</code>. That's all a step needs to be. <a href="draft56-part2.html">Part 2</a> writes one from nothing, with no <code>map</code>, and then gives it a dot so it slots in beside the built-ins.</p>
+<p>If you'd like a first look at implementing <code>Iterator</code> on your own type, <a href="rust-patterns-iterators.html">Rust Patterns #12: Custom Iterators</a> covers that. This series is about the middle of the chain.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><strong>Part 1: How a Chain Runs</strong></li>
+          <li><a href="draft56-part2.html">Part 2: Writing a Step</a></li>
+          <li><a href="draft56-part3.html">Part 3: Beyond One In, One Out</a></li>
+          <li><a href="draft56-part4.html">Part 4: Where the &amp; Comes From</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
