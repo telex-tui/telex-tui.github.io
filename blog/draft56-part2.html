@@ -49,7 +49,8 @@
         <span class="ty">Some</span>(n + <span class="kw">self</span>.amount)
     }
 }</code></pre>
-<p>The header says when this works: <code>Plus&lt;I&gt;</code> is an iterator of <code>i32</code> whenever <code>I</code> is one. The <code>?</code> handles the ending. When the inner step says <code>None</code>, so does this one.</p>
+<p>These are the two halves of the trip from part 1. The first line is the trip in: ask the step it holds. The second is the trip out: do the job and hand the value on. The <code>?</code> covers the last trip. When the inner step says <code>None</code>, this one says <code>None</code> too.</p>
+<p>The header says when all this works: <code>Plus&lt;I&gt;</code> is an iterator of <code>i32</code> whenever <code>I</code> is one.</p>
 <p>It already works, called by hand:</p>
 <pre><code><span class="kw">let</span> <span class="kw">mut</span> step = <span class="ty">Plus</span> { inner: <span class="num">1</span>..=<span class="num">3</span>, amount: <span class="num">1</span> };</code></pre>
 <p>Calling <code>step.next()</code> four times gives:</p>
@@ -168,7 +169,7 @@ note: required by a bound in `Steps::plus`</code></pre>
 <pre><code>["#04", "#07", "#10", "#13", "#16"]</code></pre>
 <p>That's the chain from part 1, with <code>apply</code> where <code>map</code> was. Put <code>Apply</code> beside the standard library's <code>Map</code> and the real difference is the name. <code>map</code> is a struct that holds the step before it, and a closure.</p>
 <h2>What comes next</h2>
-<p>Every step so far takes one value and gives one back. <a href="draft56-part3.html">Part 3</a> breaks that: steps that drop values, steps that stop early, and steps that remember. Then it writes the two ends of a chain, the source and the consumer.</p>
+<p>Every step so far takes one value and gives one back. <a href="draft56-part3.html">Part 3</a> breaks that: steps that drop values, steps that stop early, and steps that remember. Then it writes the source and the consumer.</p>
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>
         <ol>

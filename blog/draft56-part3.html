@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inside an Iterator Chain, Part 3: Beyond One In, One Out - Telex</title>
-  <meta name="description" content="Iterator steps that drop values, stop early and remember, then the two ends of a chain: a source with nothing before it, and a consumer that is just a loop calling next.">
+  <meta name="description" content="Iterator steps that drop values, stop early and remember, then the source, which holds no step, and the consumer, which is just a loop calling next.">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
@@ -32,7 +32,7 @@
       <p class="series-nav">Part 3 of 4 in <a href="#series-index">Inside an Iterator Chain</a>.</p>
       <p class="series-nav">Previous: <a href="draft56-part2.html">Part 2: Writing a Step</a> | Next: <a href="draft56-part4.html">Part 4: Where the &amp; Comes From</a></p>
 <p>Every step in <a href="draft56-part2.html">part 2</a> had the same rhythm: pull one, change it, pass it on. One in, one out. But <code>next</code> promises less than that. It only has to return the next value, or <code>None</code>. How it gets there is up to the step.</p>
-<p>This part uses that freedom three ways, then writes the two ends of a chain. The steps from part 2 are still here, and each new step gets a method on the same <code>Steps</code> trait.</p>
+<p>This part uses that freedom three ways, then writes the source and the consumer: the step at the centre and the loop that does the asking. The steps from part 2 are still here, and each new step gets a method on the same <code>Steps</code> trait.</p>
 <h2>1. A step can drop values by looping inside <code>next</code></h2>
 <p>To keep only even values, a step pulls until it finds one worth handing on.</p>
 <pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>, <span class="ty">P</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Keep</span>&lt;<span class="ty">I</span>, <span class="ty">P</span>&gt;
@@ -94,8 +94,8 @@
 <pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">running</span>().<span class="fn">collect</span>();</code></pre>
 <pre><code>[4, 11, 21, 34, 50]</code></pre>
 <p>The standard library's general version of this is <code>scan</code>.</p>
-<h2>4. The head of a chain is a step with nothing before it</h2>
-<p>A range is just an iterator that doesn't pull from anything. Its <code>next</code> makes values up. We can write our own.</p>
+<h2>4. The source is a step that holds no step</h2>
+<p>A range is just an iterator that holds no step, so it has nobody to ask. Its <code>next</code> makes values up. We can write our own.</p>
 <pre><code><span class="kw">struct</span> <span class="ty">Count</span> {
     at: <span class="ty">i32</span>,
     end: <span class="ty">i32</span>,
@@ -116,7 +116,7 @@
 <p>There's no <code>inner</code> field. That's the only thing that makes it a source rather than a step. With a small <code>count(from, to)</code> function to build one, it drops in where the range was. And since the blanket impl covers every iterator, <code>Count</code> gets <code>plus</code> and the rest for free.</p>
 <pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = <span class="fn">count</span>(<span class="num">1</span>, <span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">collect</span>();</code></pre>
 <pre><code>[4, 7, 10, 13, 16]</code></pre>
-<h2>5. The tail of a chain is a loop that calls <code>next</code></h2>
+<h2>5. The consumer is a loop that calls <code>next</code></h2>
 <p><code>collect</code>, <code>sum</code> and a <code>for</code> loop all do the same thing. They call <code>next</code> until it says <code>None</code>. Here's ours, as one more method on <code>Steps</code>:</p>
 <pre><code><span class="kw">fn</span> <span class="fn">total</span>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">i32</span>
 <span class="kw">where</span>
@@ -128,12 +128,12 @@
     }
     sum
 }</code></pre>
-<p>It returns a number, not another step, so the chain ends here. That's what makes it the tail.</p>
+<p>It returns a number, not another step, so nothing can be chained after it. That's what makes it a consumer: it does the asking, and nothing asks it.</p>
 <pre><code><span class="kw">let</span> sum = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">total</span>();</code></pre>
 <pre><code>50</code></pre>
 <p>A <code>for</code> loop is this same loop with the <code>next</code> calls written for you. <code>collect</code> is this loop pushing each value into a collection.</p>
 <h2>6. Now a whole chain can be ours</h2>
-<p>Source, steps and tail, with nothing from the standard library in the chain:</p>
+<p>Source, steps and consumer, with nothing from the standard library in the chain:</p>
 <pre><code><span class="kw">let</span> sum = <span class="fn">count</span>(<span class="num">1</span>, <span class="num">1_000_000</span>)
     .<span class="fn">plus</span>(<span class="num">1</span>)
     .<span class="fn">times</span>(<span class="num">3</span>)
@@ -142,7 +142,7 @@
     .<span class="fn">first</span>(<span class="num">3</span>)
     .<span class="fn">total</span>();</code></pre>
 <pre><code>30</code></pre>
-<p>The source could count to a million. It counts to five. <code>first</code> asks <code>keep</code> for three values. To find three even ones, <code>keep</code> pulls five from upstream. Then <code>first</code> says <code>None</code>, and nothing asks again.</p>
+<p>The source could count to a million. It counts to five. <code>first</code> asks <code>keep</code> for three values. To find three even ones, <code>keep</code> has to ask the steps it holds five times. Then <code>first</code> says <code>None</code>, and nothing asks again.</p>
 <h2>7. Once the shape is clear, <code>impl Iterator</code> can hide the struct</h2>
 <p>A struct per step is the honest version, and it's how the standard library does it. But once <code>map</code> exists, many new steps are one line long:</p>
 <pre><code><span class="kw">trait</span> <span class="ty">Steps</span>: <span class="ty">Iterator</span> + <span class="ty">Sized</span> {
