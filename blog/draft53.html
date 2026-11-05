@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Angle Brackets in Rust: Generics in Traits and Impls - Telex</title>
-  <meta name="description" content="Where a generic parameter can live in traits and impls, who picks it, how to read an impl header, and how to choose between the shapes.">
+  <title>Angle Brackets in Rust: Declare, Then Use - Telex</title>
+  <meta name="description" content="One rule for reading Rust&#x27;s angle brackets: brackets right after struct, fn or impl declare names, and brackets after a type or trait name use them. Plus the colon and the equals sign.">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
@@ -26,825 +26,89 @@
   </header>
 
   <main class="container">
-    <article class="post guide">
-      <h1>Angle Brackets in Rust: Generics in Traits and Impls</h1>
-      <div class="post-meta">October 2026</div>
-<p>This post is about one question: how generics work in traits and impls. Where can a <code>T</code> live, who picks it, and what does that decide?</p>
-<p>Angle-bracket syntax that has nothing to do with traits is left out: qualified paths, <code>for&lt;'a&gt;</code>, const generics, defaults and <code>&lt;</code> as an operator.</p>
-<p>Every example was compiled with rustc 1.97.0, edition 2024. A <code>&lt;…&gt;</code> that introduces names is a DECLARE list; one that fills someone else's names is a SUPPLY list. <code>::&lt;…&gt;</code>, the turbofish, is a SUPPLY list written where something is used: it's how a caller writes a type out instead of leaving it to inference. In the code, a caret line with a circled number below it marks a spot, usually a <code>&lt;…&gt;</code> list; the table after each program explains each spot by number.</p>
-<h2>1. Generic code is a template</h2>
-<p><code>&lt;T&gt;</code> turns a trait, an impl or a function into a template. The compiler checks the template once, against its bounds, then makes one copy per concrete type the program actually uses, with <code>T</code> replaced. By the time the program runs, no <code>T</code> is left.</p>
-<p>So a generic body can only use what its bounds promise, even if every real caller passes a type that could do more: write <code>fn largest&lt;T: PartialOrd + Copy&gt;</code> when the body compares with <code>&gt;</code>, not <code>fn largest&lt;T: Copy&gt;</code>, which fails with E0369. That one fact explains most bound errors in traits and impls.</p>
-<p>And every parameter must end up filled before code is made. If nothing fills it, compilation stops: given <code>fn make&lt;T: Default&gt;() -&gt; T</code>, <code>let thing = make();</code> fails with E0283 because nothing says what type <code>make</code> should return, while <code>let name: String = make();</code> compiles.</p>
-<h2>2. Where <code>T</code> lives in a trait decides who picks it</h2>
-<p>A DECLARE list belongs to what it's attached to, and that decides who has the final say. A trait's list is filled in each impl header, so the implementor decides which types exist and a call can only select one. A method's list is filled at each call, so the caller decides. In a trait there are four places a type can be left open:</p>
-<p><strong>Compiles.</strong></p>
-<pre><code><span class="kw">use</span> std::any::type_name_of_val;
-<span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
-
-<span class="kw">trait</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">T</span>&gt; {
-<span class="mk">//                ^^^</span>
-<span class="mk">//                ①</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">trait</span> <span class="ty">ProcessAny</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-<span class="mk">    //        ^^^^^^^^^^</span>
-<span class="mk">    //        ②</span>
-}
-
-<span class="kw">struct</span> <span class="ty">Logger</span>;
-<span class="kw">struct</span> <span class="ty">Echo</span>;
-
-<span class="kw">impl</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">u8</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
-<span class="mk">//               ^^^^</span>
-<span class="mk">//               ③</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">u8</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"u8 body: {input}"</span>)
-    }
-}
-
-<span class="kw">impl</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">String</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
-<span class="mk">//               ^^^^^^^^</span>
-<span class="mk">//               ④</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">String</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"String body: {input}"</span>)
-    }
-}
-
-<span class="kw">impl</span>&lt;<span class="ty">U</span>: <span class="ty">Debug</span>&gt; <span class="ty">ProcessOwned</span>&lt;<span class="ty">U</span>&gt; <span class="kw">for</span> <span class="ty">Echo</span> {
-<span class="mk">//  ^^^^^^^^^^             ^^^</span>
-<span class="mk">//  ⑤                      ⑥</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">U</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"passed on: {input:?}, U = {}"</span>, <span class="fn">type_name_of_val</span>(&amp;input))
-    }
-}
-
-<span class="kw">impl</span> <span class="ty">ProcessAny</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span> {
-<span class="mk">    //        ^^^^^^^^^^</span>
-<span class="mk">    //        ⑦</span>
-        <span class="mac">format!</span>(<span class="str">"one body: {input:?}, T = {}"</span>, <span class="fn">type_name_of_val</span>(&amp;input))
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="cm">// ProcessOwned: T belongs to the trait, so a call can only select one of Logger's impls</span>
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessOwned</span>::<span class="fn">process</span>(&amp;<span class="ty">Logger</span>, <span class="num">5</span>));
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessOwned</span>::&lt;<span class="ty">String</span>&gt;::<span class="fn">process</span>(&amp;<span class="ty">Logger</span>, <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hi"</span>)));
-<span class="mk">    //                           ^^^^^^^^</span>
-<span class="mk">    //                           ⑧</span>
-    <span class="cm">// Echo's impl passes the choice on, so the call picks any Debug type</span>
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessOwned</span>::&lt;<span class="ty">f32</span>&gt;::<span class="fn">process</span>(&amp;<span class="ty">Echo</span>, <span class="num">1.5</span>));
-<span class="mk">    //                           ^^^^^</span>
-<span class="mk">    //                           ⑨</span>
-    <span class="cm">// ProcessAny: T belongs to the method, so the caller fills it, implicitly or explicitly</span>
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessAny</span>::<span class="fn">process</span>(&amp;<span class="ty">Logger</span>, <span class="str">'c'</span>));
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessAny</span>::<span class="fn">process</span>::&lt;<span class="ty">u8</span>&gt;(&amp;<span class="ty">Logger</span>, <span class="num">5</span>));
-<span class="mk">    //                                  ^^^^</span>
-<span class="mk">    //                                  ⑩</span>
+    <article class="post">
+      <h1>Angle Brackets in Rust: Declare, Then Use</h1>
+      <div class="post-meta">November 2026</div>
+<p>Rust uses angle brackets for several jobs, and one line can hold three of them. Here's a line from <a href="draft56-part2.html">Inside an Iterator Chain, part 2</a>:</p>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt;</code></pre>
+<p>One rule sorts out most of it. Brackets right after <code>struct</code>, <code>fn</code> or <code>impl</code> declare names. Brackets after a type or trait name use them. This post builds that rule up one keyword at a time, then reads the line above, bracket by bracket.</p>
+<p>Left out: lifetimes, const generics and default types. Every example was compiled with rustc 1.97.0, edition 2024.</p>
+<h2>1. Brackets after <code>struct</code> declare a name</h2>
+<pre><code><span class="kw">struct</span> <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
+    a: <span class="ty">T</span>,
+    b: <span class="ty">T</span>,
 }</code></pre>
-<p>Output:</p>
-<pre><code>u8 body: 5
-String body: hi
-passed on: 1.5, U = f32
-one body: 'c', T = char
-one body: 5, T = u8</code></pre>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>#</th>
-<th>Position</th>
-<th>Label</th>
-<th>Arguments</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>①</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code></td>
-<td>DECLARE</td>
-<td></td>
-<td><code>T</code> belongs to the trait. Scope: to the trait's closing <code>}</code>.</td>
-</tr>
-<tr>
-<td>②</td>
-<td><code>&lt;</code> immediately after <code>process</code> in <code>trait ProcessAny</code></td>
-<td>DECLARE</td>
-<td></td>
-<td><code>T</code> belongs to the method. Scope: to the <code>;</code> that ends the declaration.</td>
-</tr>
-<tr>
-<td>③</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code> in <code>impl ProcessOwned&lt;u8&gt; for Logger</code></td>
-<td>SUPPLY</td>
-<td><code>u8</code>: concrete</td>
-<td>The implementor fills the trait's <code>T</code>, once, for this impl.</td>
-</tr>
-<tr>
-<td>④</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code> in <code>impl ProcessOwned&lt;String&gt; for Logger</code></td>
-<td>SUPPLY</td>
-<td><code>String</code>: concrete</td>
-<td>A second impl with its own <code>T</code> and its own body.</td>
-</tr>
-<tr>
-<td>⑤</td>
-<td><code>&lt;</code> immediately after <code>impl</code></td>
-<td>DECLARE</td>
-<td></td>
-<td>Declares a <code>U</code> for <code>Echo</code>'s impl. Scope: to the impl's closing <code>}</code>.</td>
-</tr>
-<tr>
-<td>⑥</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code> in <code>impl&lt;U: Debug&gt; ProcessOwned&lt;U&gt; for Echo</code></td>
-<td>SUPPLY</td>
-<td><code>U</code>: passed on, from <code>impl&lt;U: Debug&gt;</code></td>
-<td>Fills the trait's <code>T</code> with the impl's own <code>U</code>, so the choice passes to whoever uses the impl.</td>
-</tr>
-<tr>
-<td>⑦</td>
-<td><code>&lt;</code> immediately after <code>process</code> in <code>impl ProcessAny for Logger</code></td>
-<td>DECLARE</td>
-<td></td>
-<td>The method's own <code>T</code>. Scope: to the closing <code>}</code> of the method's body.</td>
-</tr>
-<tr>
-<td>⑧</td>
-<td><code>&lt;</code> immediately after <code>::</code> in <code>ProcessOwned::&lt;String&gt;</code></td>
-<td>SUPPLY (turbofish)</td>
-<td><code>String</code>: concrete</td>
-<td>Names the trait's <code>T</code>, which selects <code>impl ProcessOwned&lt;String&gt; for Logger</code>. It doesn't create anything: that impl already exists. Redundant here, because the <code>String</code> argument already selects this impl; it's written out to show where the trait's <code>T</code> goes.</td>
-</tr>
-<tr>
-<td>⑨</td>
-<td><code>&lt;</code> immediately after <code>::</code> in <code>ProcessOwned::&lt;f32&gt;</code></td>
-<td>SUPPLY (turbofish)</td>
-<td><code>f32</code>: concrete</td>
-<td>Names the trait's <code>T</code> for a call on <code>Echo</code>. <code>Echo</code>'s impl covers every <code>Debug</code> type, so <code>f32</code> is available, and <code>U</code> becomes <code>f32</code>.</td>
-</tr>
-<tr>
-<td>⑩</td>
-<td><code>&lt;</code> immediately after <code>::</code> in <code>ProcessAny::process::&lt;u8&gt;</code></td>
-<td>SUPPLY (turbofish)</td>
-<td><code>u8</code>: concrete</td>
-<td>Fills the method's <code>T</code> with <code>u8</code>, for this call only.</td>
-</tr>
-</tbody>
-</table></div>
-<p>Both traits give <code>Logger</code> a method called <code>process</code>, so each call names its trait; <code>Logger.process(5)</code> would be ambiguous (E0034).</p>
-<p>The calls in <code>main</code> look alike, but they mean different things.</p>
-<ul>
-<li><strong><code>T</code> after the trait's name (①): the implementor decides, and a call selects.</strong> <code>Logger</code>'s author wrote exactly two impls (③, ④), each with its own body; those are the only <code>T</code>s <code>Logger</code> has. A call's argument (<code>5</code>) or an explicit type after the trait's name (⑧) just picks one of them. The first two output lines are two different bodies.</li>
-<li><strong><code>T</code> after the method's name (②, ⑦): the caller fills it, at every call.</strong> Any type with <code>Debug</code> works, and one body serves them all, which is why it needs the bound <code>Debug</code> to print <code>input</code>. The caller usually fills <code>T</code> implicitly, through the argument's type (<code>'c'</code> gives <code>T = char</code>), or writes it out after the method's name (⑩). The last two output lines are one body, compiled twice, for <code>char</code> and <code>u8</code>.</li>
-<li><strong>A generic impl (⑤, ⑥): an implementor can pass the choice on.</strong> <code>Echo</code>'s impl fills the trait's <code>T</code> with its own <code>U</code>, so every <code>Debug</code> type is available and the call picks one: ⑨ asks for <code>f32</code>, so <code>U</code> becomes <code>f32</code>.</li>
-</ul>
-<p>Both <code>5</code>s became <code>u8</code>, for different reasons. In the first line, <code>u8</code> is the only integer type <code>Logger</code>'s author provided, so the call could only select that impl. In the last, the caller wrote <code>::&lt;u8&gt;</code> (⑩). Delete it and only the last line changes, to <code>T = i32</code>.</p>
-<p>Where an explicit type goes shows who owns <code>T</code>: after the trait's name for the trait's <code>T</code> (⑧, ⑨), after the method's name for the method's <code>T</code> (⑩).</p>
-<p>The difference shows when a caller asks the trait version for a type the implementor didn't provide:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">trait</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">T</span>&gt; {
-<span class="mk">//                ^^^</span>
-<span class="mk">//                ①</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">struct</span> <span class="ty">Logger</span>;
-
-<span class="kw">impl</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">u8</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
-<span class="mk">//               ^^^^</span>
-<span class="mk">//               ②</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">u8</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"u8 body: {input}"</span>)
-    }
-}
-
-<span class="kw">impl</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">String</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
-<span class="mk">//               ^^^^^^^^</span>
-<span class="mk">//               ③</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">String</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"String body: {input}"</span>)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessOwned</span>::&lt;<span class="ty">char</span>&gt;::<span class="fn">process</span>(&amp;<span class="ty">Logger</span>, <span class="str">'c'</span>));
-<span class="mk">    //                           ^^^^^^</span>
-<span class="mk">    //                           ④</span>
+<p><code>&lt;T&gt;</code> makes up a new name, <code>T</code>, for some type to be chosen later. Inside the struct, <code>T</code> can be used like any type. Outside, it means nothing.</p>
+<p>Without the declaration, the compiler has never heard of <code>T</code>:</p>
+<pre><code><span class="kw">struct</span> <span class="ty">Pair</span> {
+    a: <span class="ty">T</span>,
+    b: <span class="ty">T</span>,
 }</code></pre>
-<pre><code>error[E0277]: the trait bound `Logger: ProcessOwned&lt;char&gt;` is not satisfied
-  --&gt; main.rs:26:50
-   |
-26 |     println!("{}", ProcessOwned::&lt;char&gt;::process(&amp;Logger, 'c'));
-   |                    ----------------------------- ^^^^^^^ unsatisfied trait bound
-   |                    |
-   |                    required by a bound introduced by this call
-   |
-help: the trait `ProcessOwned&lt;char&gt;` is not implemented for `Logger`
-  --&gt; main.rs:7:1
-   |
- 7 | struct Logger;
-   | ^^^^^^^^^^^^^
-help: `Logger` implements trait `ProcessOwned&lt;T&gt;`
-  --&gt; main.rs:9:1
-   |
- 9 | impl ProcessOwned&lt;u8&gt; for Logger {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ProcessOwned&lt;u8&gt;`
-...
-17 | impl ProcessOwned&lt;String&gt; for Logger {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ProcessOwned&lt;String&gt;`</code></pre>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>#</th>
-<th>Position</th>
-<th>Label</th>
-<th>Arguments</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>①</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code></td>
-<td>DECLARE</td>
-<td></td>
-<td><code>T</code> belongs to the trait.</td>
-</tr>
-<tr>
-<td>②</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code> in <code>impl ProcessOwned&lt;u8&gt; for Logger</code></td>
-<td>SUPPLY</td>
-<td><code>u8</code>: concrete</td>
-<td>One of the two <code>T</code>s the implementor provided.</td>
-</tr>
-<tr>
-<td>③</td>
-<td><code>&lt;</code> immediately after <code>ProcessOwned</code> in <code>impl ProcessOwned&lt;String&gt; for Logger</code></td>
-<td>SUPPLY</td>
-<td><code>String</code>: concrete</td>
-<td>The other.</td>
-</tr>
-<tr>
-<td>④</td>
-<td><code>&lt;</code> immediately after <code>::</code> in <code>ProcessOwned::&lt;char&gt;</code></td>
-<td>SUPPLY (turbofish)</td>
-<td><code>char</code>: concrete</td>
-<td>Asks for the trait's <code>T = char</code>.</td>
-</tr>
-</tbody>
-</table></div>
-<p>No impl provides <code>T = char</code>; rustc's help lists the two that exist. Naming a type after the trait's name can only select an impl, not create one. The same <code>&lt;char&gt;</code> after the method's name, <code>ProcessAny::process::&lt;char&gt;(&amp;Logger, 'c')</code>, compiles: there the caller's <code>char</code> fills the method's <code>T</code>.</p>
-<p>The mirror image is an implementor trying to pick the method's <code>T</code>, the way <code>impl ProcessOwned&lt;u8&gt; for Logger</code> picked the trait's:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
-
-<span class="kw">trait</span> <span class="ty">ProcessAny</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">struct</span> <span class="ty">Logger</span>;
-
-<span class="kw">impl</span> <span class="ty">ProcessAny</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">u8</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"u8 body: {input}"</span>)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {}</code></pre>
-<pre><code>error[E0049]: method `process` has 0 type parameters but its trait declaration has 1 type parameter
-  --&gt; main.rs:10:15
-   |
- 4 |     fn process&lt;T: Debug&gt;(&amp;self, input: T) -&gt; String;
-   |                - expected 1 type parameter
-...
-10 |     fn process(&amp;self, input: u8) -&gt; String {
-   |               ^ found 0 type parameters</code></pre>
-<p>The trait promised every caller any <code>Debug</code> type, so the implementor can't settle on one. Keeping <code>&lt;T: Debug&gt;</code> but writing <code>input: u8</code> gives E0053 (expected type parameter <code>T</code>, found <code>u8</code>), and narrowing it to <code>&lt;T: Debug + Copy&gt;</code> gives E0276 (impl has extra requirement <code>T: Copy</code>): an impl can't demand more of a method's <code>T</code> than the trait promised its callers.</p>
-<p>From the call site, <code>Echo</code> looks like <code>ProcessAny</code>: any <code>Debug</code> type, one body, the call fills it. The difference is where the openness lives. It belongs to <code>Echo</code>'s impl, not to the trait, and generic code only sees the trait. A bound on <code>ProcessOwned</code> fixes one <code>T</code> per bound, even when the impl behind it would take anything:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
-
-<span class="kw">trait</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">T</span>&gt; {
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">trait</span> <span class="ty">ProcessAny</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">fn</span> <span class="fn">log_both_any</span>&lt;<span class="ty">P</span>: <span class="ty">ProcessAny</span>&gt;(p: &amp;<span class="ty">P</span>) {
-    p.<span class="fn">process</span>(<span class="num">1_u8</span>);
-    p.<span class="fn">process</span>(<span class="str">"two"</span>);
-}
-
-<span class="kw">fn</span> <span class="fn">log_both_owned</span>&lt;<span class="ty">P</span>: <span class="ty">ProcessOwned</span>&lt;<span class="ty">u8</span>&gt;&gt;(p: &amp;<span class="ty">P</span>) {
-    p.<span class="fn">process</span>(<span class="num">1_u8</span>);
-    p.<span class="fn">process</span>(<span class="str">"two"</span>);
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {}</code></pre>
-<pre><code>error[E0308]: mismatched types
-  --&gt; main.rs:18:15
-   |
-18 |     p.process("two");
-   |       ------- ^^^^^ expected `u8`, found `&amp;str`
-   |       |
-   |       arguments to this method are incorrect
-   |
-note: method defined here
-  --&gt; main.rs:4:8
-   |
- 4 |     fn process(&amp;self, input: T) -&gt; String;
-   |        ^^^^^^^        -----</code></pre>
-<p><code>log_both_any</code> compiles: <code>ProcessAny</code> promises that every implementor takes any <code>Debug</code> type, so the body can pass two different ones. <code>log_both_owned</code>'s bound promises only <code>ProcessOwned&lt;u8&gt;</code>, and the body is checked against that bound once, before any caller exists. <code>Echo</code> can't rescue it: its openness is in its impl, which generic code doesn't see.</p>
-<p>The third place is an associated type: a type inside the trait body that each impl sets once.</p>
-<p><strong>Compiles.</strong></p>
-<pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
-
-<span class="kw">trait</span> <span class="ty">Processor</span> {
-    <span class="kw">type</span> <span class="ty">Input</span>;
-<span class="mk">//  ^^^^^^^^^^</span>
-<span class="mk">//  ①</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="kw">Self</span>::<span class="ty">Input</span>);
-}
-
-<span class="kw">impl</span> <span class="ty">Processor</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">type</span> <span class="ty">Input</span> = <span class="ty">i32</span>;
-<span class="mk">//  ^^^^^^^^^^^^^^^^</span>
-<span class="mk">//  ②</span>
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">i32</span>) {
-        <span class="mac">println!</span>(<span class="str">"processed {input}"</span>);
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">feed_default</span>&lt;<span class="ty">P</span>: <span class="ty">Processor</span>&gt;(p: &amp;<span class="ty">P</span>)
-<span class="mk">//             ^^^^^^^^^^^^^^</span>
-<span class="mk">//             ③</span>
-<span class="kw">where</span>
-    <span class="ty">P</span>::<span class="ty">Input</span>: <span class="ty">Default</span>,
-<span class="mk">//  ^^^^^^^^</span>
-<span class="mk">//  ④</span>
-{
-    p.<span class="fn">process</span>(<span class="ty">P</span>::<span class="ty">Input</span>::<span class="fn">default</span>());
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="fn">feed_default</span>(&amp;<span class="ty">Logger</span>);
+<pre><code>error[E0425]: cannot find type `T` in this scope</code></pre>
+<p><code>enum</code> and <code>trait</code> declare names the same way.</p>
+<h2>2. Brackets after a type's name use it</h2>
+<pre><code><span class="kw">let</span> p: <span class="ty">Pair</span>&lt;<span class="ty">i32</span>&gt; = <span class="ty">Pair</span> { a: <span class="num">1</span>, b: <span class="num">2</span> };</code></pre>
+<p>Here <code>&lt;i32&gt;</code> fills the name. <code>Pair</code> alone isn't a complete type. <code>Pair&lt;i32&gt;</code> is: a pair of <code>i32</code>s.</p>
+<p>It's the difference between a function's parameters and the arguments you call it with. <code>struct Pair&lt;T&gt;</code> is the parameter. <code>Pair&lt;i32&gt;</code> is the argument.</p>
+<h2>3. Functions work the same way</h2>
+<pre><code><span class="kw">fn</span> <span class="fn">first</span>&lt;<span class="ty">T</span>&gt;(pair: <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt;) -&gt; <span class="ty">T</span> {
+    pair.a
 }</code></pre>
-<p>Output:</p>
-<pre><code>processed 0</code></pre>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>#</th>
-<th>Position</th>
-<th>Label</th>
-<th>Arguments</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>①</td>
-<td><code>type Input;</code> in <code>trait Processor</code></td>
-<td>declares, no <code>&lt;…&gt;</code></td>
-<td></td>
-<td>Declares an associated type. The trait leaves it open; each impl must set it.</td>
-</tr>
-<tr>
-<td>②</td>
-<td><code>type Input = i32;</code> in <code>impl Processor for Logger</code></td>
-<td>fills, no <code>&lt;…&gt;</code></td>
-<td><code>i32</code>: concrete</td>
-<td>The implementor sets it. This is <code>Logger</code>'s only <code>Input</code>.</td>
-</tr>
-<tr>
-<td>③</td>
-<td><code>&lt;</code> immediately after <code>feed_default</code></td>
-<td>DECLARE</td>
-<td></td>
-<td>Declares <code>P</code> with the bound <code>Processor</code>. Scope: to the closing <code>}</code> of <code>feed_default</code>'s body, including the <code>where</code> clause. The caller fills it: <code>feed_default(&amp;Logger)</code> gives <code>P = Logger</code>.</td>
-</tr>
-<tr>
-<td>④</td>
-<td><code>P::Input</code> in the <code>where</code> clause</td>
-<td>uses</td>
-<td></td>
-<td>Reaches the <code>Input</code> of whatever <code>P</code> is. Nobody names <code>i32</code> here.</td>
-</tr>
-</tbody>
-</table></div>
-<p><code>type Input;</code> has no brackets at all. The implementor sets it with <code>type Input = i32;</code>, once per implementing type: <code>Processor</code> has no parameter to tell two impls apart, so <code>Logger</code> has one impl and one <code>Input</code>. That's why <code>feed_default(&amp;Logger)</code> names no type: the caller picks <code>P</code> (③), and <code>P</code> alone determines <code>P::Input</code> (④). Try to give <code>Logger</code> a second <code>Input</code>, the way it got a second <code>ProcessOwned</code> impl:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
-
-<span class="kw">trait</span> <span class="ty">Processor</span> {
-    <span class="kw">type</span> <span class="ty">Input</span>;
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="kw">Self</span>::<span class="ty">Input</span>);
-}
-
-<span class="kw">impl</span> <span class="ty">Processor</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">type</span> <span class="ty">Input</span> = <span class="ty">i32</span>;
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">i32</span>) {
-        <span class="mac">println!</span>(<span class="str">"processed {input}"</span>);
+<p><code>&lt;T&gt;</code> right after <code>first</code> declares the name, for this function only. Then <code>Pair&lt;T&gt;</code> uses it, in the type of the parameter.</p>
+<p>To fill it by hand when calling, the brackets need a <code>::</code> in front:</p>
+<pre><code><span class="kw">let</span> n = first::&lt;<span class="ty">i32</span>&gt;(p);</code></pre>
+<p>Without the <code>::</code>, Rust reads <code>first&lt;i32&gt;</code> as "first is less than i32", and says so: "comparison operators cannot be chained". You rarely need either, though. <code>first(p)</code> works, because the compiler fills <code>T</code> from the argument.</p>
+<h2>4. An <code>impl</code> line often does both</h2>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">swap</span>(<span class="kw">self</span>) -&gt; <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
+        <span class="ty">Pair</span> { a: <span class="kw">self</span>.b, b: <span class="kw">self</span>.a }
     }
-}
-
-<span class="kw">impl</span> <span class="ty">Processor</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">type</span> <span class="ty">Input</span> = <span class="ty">String</span>;
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">String</span>) {
-        <span class="mac">println!</span>(<span class="str">"processed {input}"</span>);
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {}</code></pre>
-<pre><code>error[E0119]: conflicting implementations of trait `Processor` for type `Logger`
-  --&gt; main.rs:15:1
-   |
- 8 | impl Processor for Logger {
-   | ------------------------- first implementation here
-...
-15 | impl Processor for Logger {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `Logger`</code></pre>
-<p>With a trait parameter instead, the caller has to choose, because <code>Logger</code> has two <code>ProcessOwned</code> impls:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">struct</span> <span class="ty">Logger</span>;
-
-<span class="kw">trait</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">T</span>&gt; {
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">impl</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">u8</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">u8</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"u8 body: {input}"</span>)
-    }
-}
-
-<span class="kw">impl</span> <span class="ty">ProcessOwned</span>&lt;<span class="ty">String</span>&gt; <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>(&amp;<span class="kw">self</span>, input: <span class="ty">String</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"String body: {input}"</span>)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">feed_default</span>&lt;<span class="ty">P</span>: <span class="ty">ProcessOwned</span>&lt;<span class="ty">T</span>&gt;, <span class="ty">T</span>: <span class="ty">Default</span>&gt;(p: &amp;<span class="ty">P</span>) -&gt; <span class="ty">String</span> {
-    p.<span class="fn">process</span>(<span class="ty">T</span>::<span class="fn">default</span>())
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="fn">feed_default</span>(&amp;<span class="ty">Logger</span>));
 }</code></pre>
-<pre><code>error[E0283]: type annotations needed
-  --&gt; main.rs:24:20
-   |
-24 |     println!("{}", feed_default(&amp;Logger));
-   |                    ^^^^^^^^^^^^ ------- type must be known at this point
-   |                    |
-   |                    cannot infer type of the type parameter `T` declared on the function `feed_default`
-   |
-note: multiple `impl`s satisfying `Logger: ProcessOwned&lt;_&gt;` found
-  --&gt; main.rs:7:1
-   |
- 7 | impl ProcessOwned&lt;u8&gt; for Logger {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-...
-13 | impl ProcessOwned&lt;String&gt; for Logger {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required by a bound in `feed_default`
-  --&gt; main.rs:19:20
-   |
-19 | fn feed_default&lt;P: ProcessOwned&lt;T&gt;, T: Default&gt;(p: &amp;P) -&gt; String {
-   |                    ^^^^^^^^^^^^^^^ required by this bound in `feed_default`
-help: consider specifying the generic arguments
-   |
-24 |     println!("{}", feed_default::&lt;Logger, T&gt;(&amp;Logger));
-   |                                +++++++++++++</code></pre>
-<p>Writing the types out, <code>feed_default::&lt;Logger, u8&gt;(&amp;Logger)</code>, compiles and prints <code>u8 body: 0</code>. With an associated type there was nothing to choose.</p>
-<p>The fourth is <code>Self</code>, the parameter every trait has without writing it. It works like a parameter after the trait's name: each impl fills it with the type after <code>for</code> (<code>for Logger</code> and <code>for Echo</code> in the first program), and a call selects among those impls with its first argument, <code>&amp;Logger</code> or <code>&amp;Echo</code>. Ask for one that doesn't exist and you get the same error as for a missing <code>T</code>:</p>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
-
-<span class="kw">trait</span> <span class="ty">ProcessAny</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">struct</span> <span class="ty">Logger</span>;
-<span class="kw">struct</span> <span class="ty">Echo</span>;
-
-<span class="kw">impl</span> <span class="ty">ProcessAny</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"one body: {input:?}"</span>)
+<p><code>impl&lt;T&gt;</code> declares <code>T</code> for this block. <code>Pair&lt;T&gt;</code> then uses it. Read together: for any type <code>T</code>, here are methods for a pair of <code>T</code>s.</p>
+<p>It looks like saying <code>T</code> twice. But they're two jobs, and skipping the first one gets you the error from section 1:</p>
+<pre><code>error[E0425]: cannot find type `T` in this scope
+help: you might be missing a type parameter
+  |
+5 | impl&lt;T&gt; Pair&lt;T&gt; {
+  |     +++</code></pre>
+<p>When the type is one that already exists, there's nothing to declare:</p>
+<pre><code><span class="kw">impl</span> <span class="ty">Pair</span>&lt;<span class="ty">i32</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">add_up</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">i32</span> {
+        <span class="kw">self</span>.a + <span class="kw">self</span>.b
     }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, <span class="ty">ProcessAny</span>::<span class="fn">process</span>(&amp;<span class="ty">Echo</span>, <span class="str">'c'</span>));
 }</code></pre>
-<pre><code>error[E0277]: the trait bound `Echo: ProcessAny` is not satisfied
-  --&gt; main.rs:17:40
-   |
-17 |     println!("{}", ProcessAny::process(&amp;Echo, 'c'));
-   |                    ------------------- ^^^^^ unsatisfied trait bound
-   |                    |
-   |                    required by a bound introduced by this call
-   |
-help: the trait `ProcessAny` is not implemented for `Echo`
-  --&gt; main.rs:8:1
-   |
- 8 | struct Echo;
-   | ^^^^^^^^^^^
-help: the trait `ProcessAny` is implemented for `Logger`
-  --&gt; main.rs:10:1
-   |
-10 | impl ProcessAny for Logger {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^</code></pre>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>Where the type is left open</th>
-<th>Example</th>
-<th>Who picks it</th>
-<th>How often</th>
-<th>Separate body per type?</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>after the trait's name</td>
-<td><code>trait ProcessOwned&lt;T&gt;</code></td>
-<td>the implementor; a call only selects among the impls that exist</td>
-<td>per impl; a type can have many</td>
-<td>each impl has its own body; an impl can cover one type, like <code>Logger</code>'s, or every type, like <code>Echo</code>'s</td>
-</tr>
-<tr>
-<td>after a method's name</td>
-<td><code>fn process&lt;T: Debug&gt;(&amp;self, input: T)</code> in <code>ProcessAny</code></td>
-<td>the caller, implicitly through the argument's type or explicitly after the method's name</td>
-<td>per call</td>
-<td>no, one body for every <code>T</code></td>
-</tr>
-<tr>
-<td>an associated type</td>
-<td><code>type Input;</code> in <code>Processor</code></td>
-<td>the implementor</td>
-<td>once per implementing type</td>
-<td>not applicable</td>
-</tr>
-<tr>
-<td><code>Self</code></td>
-<td>every trait</td>
-<td>the implementor, with the type after <code>for</code>; a call selects through its first argument</td>
-<td>per impl</td>
-<td>each impl has its own body; an impl can cover one type or many</td>
-</tr>
-</tbody>
-</table></div>
-<h2>3. Reading an impl header</h2>
-<p>An impl header has up to three bracket lists, and they do different jobs:</p>
-<p><strong>Compiles.</strong></p>
+<p>No brackets after <code>impl</code>, because no new name is made. These methods exist only on <code>Pair&lt;i32&gt;</code>. Call <code>add_up</code> on a pair of strings and the compiler notes that "the method was found for <code>Pair&lt;i32&gt;</code>".</p>
+<h2>5. A colon in a declaration limits the type</h2>
 <pre><code><span class="kw">use</span> std::fmt::<span class="ty">Display</span>;
 
-<span class="kw">struct</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt;(<span class="ty">T</span>);
-<span class="mk">//            ^^^</span>
-<span class="mk">//            ①</span>
-
-<span class="kw">trait</span> <span class="ty">Convert</span>&lt;<span class="ty">T</span>&gt; {
-<span class="mk">//           ^^^</span>
-<span class="mk">//           ②</span>
-    <span class="kw">fn</span> <span class="fn">convert</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">T</span>;
-}
-
-<span class="kw">impl</span>&lt;<span class="ty">T</span>: <span class="ty">Display</span>&gt; <span class="ty">Convert</span>&lt;<span class="ty">String</span>&gt; <span class="kw">for</span> <span class="ty">Wrapper</span>&lt;<span class="ty">T</span>&gt; {
-<span class="mk">//  ^^^^^^^^^^^^        ^^^^^^^^            ^^^</span>
-<span class="mk">//  ③                   ④                   ⑤</span>
-    <span class="kw">fn</span> <span class="fn">convert</span>(&amp;<span class="kw">self</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"Wrapper({})"</span>, <span class="kw">self</span>.<span class="num">0</span>)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> w: <span class="ty">Wrapper</span>&lt;<span class="ty">u8</span>&gt; = <span class="ty">Wrapper</span>(<span class="num">7</span>);
-<span class="mk">    //            ^^^^</span>
-<span class="mk">    //            ⑥</span>
-    <span class="kw">let</span> s: <span class="ty">String</span> = w.<span class="fn">convert</span>();
-    <span class="mac">println!</span>(<span class="str">"{s}"</span>);
+<span class="kw">fn</span> <span class="fn">show</span>&lt;<span class="ty">T</span>: <span class="ty">Display</span>&gt;(pair: <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt;) -&gt; <span class="ty">String</span> {
+    <span class="mac">format!</span>(<span class="str">"{} and {}"</span>, pair.a, pair.b)
 }</code></pre>
-<p>Output:</p>
-<pre><code>Wrapper(7)</code></pre>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>#</th>
-<th>Position</th>
-<th>Label</th>
-<th>Arguments</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>①</td>
-<td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>struct Wrapper&lt;T&gt;(T);</code></td>
-<td>DECLARE</td>
-<td></td>
-<td>The struct's own <code>T</code>. Scope: to the <code>;</code>.</td>
-</tr>
-<tr>
-<td>②</td>
-<td><code>&lt;</code> immediately after <code>Convert</code> in <code>trait Convert&lt;T&gt;</code></td>
-<td>DECLARE</td>
-<td></td>
-<td>The trait's own <code>T</code>. Scope: to the trait's closing <code>}</code>.</td>
-</tr>
-<tr>
-<td>③</td>
-<td><code>&lt;</code> immediately after <code>impl</code></td>
-<td>DECLARE</td>
-<td></td>
-<td>The impl's own <code>T</code>, with the bound <code>Display</code>. Scope: to the impl's closing <code>}</code>.</td>
-</tr>
-<tr>
-<td>④</td>
-<td><code>&lt;</code> immediately after <code>Convert</code> in the impl header</td>
-<td>SUPPLY</td>
-<td><code>String</code>: concrete</td>
-<td>Fills the trait's <code>T</code>. The implementor chose <code>String</code>.</td>
-</tr>
-<tr>
-<td>⑤</td>
-<td><code>&lt;</code> immediately after <code>Wrapper</code> in the impl header</td>
-<td>SUPPLY</td>
-<td><code>T</code>: passed on, from <code>impl&lt;T: Display&gt;</code></td>
-<td>Fills the struct's <code>T</code> with the impl's <code>T</code>.</td>
-</tr>
-<tr>
-<td>⑥</td>
-<td><code>&lt;</code> immediately after <code>Wrapper</code> in <code>let w: Wrapper&lt;u8&gt;</code></td>
-<td>SUPPLY</td>
-<td><code>u8</code>: concrete</td>
-<td>Fills the struct's <code>T</code>. The author of this line chose <code>u8</code>.</td>
-</tr>
-</tbody>
-</table></div>
-<p>Read <code>impl&lt;T: Display&gt; Convert&lt;String&gt; for Wrapper&lt;T&gt;</code> left to right:</p>
-<ul>
-<li><strong><code>impl&lt;T: Display&gt;</code> (③) declares</strong> new names for this impl only. The struct's <code>T</code> (①) and the trait's <code>T</code> (②) are different parameters that happen to share a name.</li>
-<li><strong><code>Convert&lt;String&gt;</code> (④) supplies the trait's parameters.</strong> Here the implementor picks a concrete type; it could also pass the impl's <code>T</code> on.</li>
-<li><strong><code>for Wrapper&lt;T&gt;</code> (⑤) is the self type.</strong> It says which types this impl covers: every <code>Wrapper&lt;T&gt;</code> whose <code>T</code> implements <code>Display</code>.</li>
-<li><strong>Nobody ever writes the impl's <code>T</code> directly.</strong> The compiler finds it by matching: at <code>w.convert()</code>, <code>w</code> is a <code>Wrapper&lt;u8&gt;</code>, which matched against <code>Wrapper&lt;T&gt;</code> gives <code>T = u8</code>.</li>
-</ul>
-<p>Every rule about impl headers follows from that:</p>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>Rule</th>
-<th>Write this</th>
-<th>Not this</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>The struct's <code>T</code> doesn't carry into an impl; declare one after <code>impl</code>.</td>
-<td><code>impl&lt;T&gt; Wrapper&lt;T&gt; { … }</code></td>
-<td><code>impl Wrapper&lt;T&gt; { … }</code> (E0425)</td>
-</tr>
-<tr>
-<td>Matching can only fill a parameter that appears in the self type, the trait's SUPPLY list or an associated type binding.</td>
-<td><code>impl Wrapper&lt;i32&gt; { … }</code></td>
-<td><code>impl&lt;T&gt; Wrapper&lt;i32&gt; { … }</code> (E0207)</td>
-</tr>
-<tr>
-<td>The trait's <code>T</code> doesn't carry into an impl either: spell out what the header chose. With <code>struct Seconds(u64);</code>:</td>
-<td><code>impl Convert&lt;u64&gt; for Seconds { fn convert(&amp;self) -&gt; u64 { … } }</code></td>
-<td><code>fn convert(&amp;self) -&gt; T</code> in that impl (E0425)</td>
-</tr>
-<tr>
-<td>Two impls may not cover the same trait-and-type pair, including std's.</td>
-<td><code>impl&lt;T&gt; From&lt;T&gt; for Wrapper&lt;T&gt;</code></td>
-<td><code>impl&lt;T&gt; From&lt;Wrapper&lt;T&gt;&gt; for Wrapper&lt;T&gt;</code> (E0119: clashes with core's <code>impl&lt;T&gt; From&lt;T&gt; for T</code>)</td>
-</tr>
-<tr>
-<td>A struct's bounds must be repeated on its impls. With <code>struct Sorted&lt;T: Ord&gt;(Vec&lt;T&gt;);</code>:</td>
-<td><code>impl&lt;T: Ord&gt; Sorted&lt;T&gt;</code></td>
-<td><code>impl&lt;T&gt; Sorted&lt;T&gt;</code> (E0277)</td>
-</tr>
-</tbody>
-</table></div>
-<h2>4. What goes in a trait body</h2>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>In the trait body</th>
-<th>What it means for an impl</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>type Item;</code></td>
-<td>The implementor picks exactly one type per impl. Code using the trait can pin it with a binding: <code>I: Iterator&lt;Item = u8&gt;</code>, or constrain it with a bound: <code>I: Iterator&lt;Item: Display&gt;</code>.</td>
-</tr>
-<tr>
-<td><code>fn process&lt;T: Bound&gt;(&amp;self, input: T);</code></td>
-<td>The impl must accept every <code>T</code> the bound allows, with one body (§2: E0049, E0276).</td>
-</tr>
-<tr>
-<td>a default method body that uses <code>self</code> by value</td>
-<td><code>Self</code> has no automatic <code>Sized</code> bound, so write <code>fn consume(self) where Self: Sized { … }</code>, not <code>fn consume(self) { … }</code> (E0277).</td>
-</tr>
-</tbody>
-</table></div>
-<h2>5. Choosing where to put <code>T</code></h2>
-<p>Decide by asking who should choose the type, and how many types each implementing type needs. The first three rows are the contrasts compiled in §2.</p>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>The code that must work</th>
-<th>Write this</th>
-<th>Not this</th>
-<th>std does this</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>impl Processor&lt;i32&gt; for Logger { … }</code> and <code>impl Processor&lt;String&gt; for Logger { … }</code>, with different bodies</td>
-<td><code>trait Processor&lt;T&gt; { fn process(&amp;self, input: T); }</code></td>
-<td><code>trait Processor { fn process&lt;T&gt;(&amp;self, input: T); }</code></td>
-<td><code>impl From&lt;char&gt; for String</code> and <code>impl From&lt;&amp;str&gt; for String</code></td>
-</tr>
-<tr>
-<td><code>fn log_both&lt;P: Processor&gt;(p: &amp;P) { p.process(1_u8); p.process("two"); }</code></td>
-<td><code>trait Processor { fn process&lt;T: Debug&gt;(&amp;self, input: T); }</code></td>
-<td><code>trait Processor&lt;T&gt; { fn process(&amp;self, input: T); }</code></td>
-<td><code>fn hash&lt;H: Hasher&gt;(&amp;self, state: &amp;mut H);</code></td>
-</tr>
-<tr>
-<td><code>fn feed_default&lt;P: Processor&gt;(p: &amp;P) where P::Input: Default { … }</code></td>
-<td><code>trait Processor { type Input; fn process(&amp;self, input: Self::Input); }</code></td>
-<td><code>trait Processor&lt;T&gt; { … }</code> with <code>fn feed_default&lt;P: Processor&lt;T&gt;, T: Default&gt;</code></td>
-<td><code>type Item;</code> and <code>fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt;;</code></td>
-</tr>
-<tr>
-<td><code>let p: Box&lt;dyn Processor&lt;Input = i32&gt;&gt; = Box::new(Logger);</code>, or with a trait parameter <code>Box&lt;dyn Processor&lt;i32&gt;&gt;</code></td>
-<td><code>trait Processor { type Input; fn process(&amp;self, input: Self::Input); }</code> or <code>trait Processor&lt;T&gt; { fn process(&amp;self, input: T); }</code></td>
-<td><code>trait Processor { fn process&lt;T&gt;(&amp;self, input: T); }</code></td>
-<td><code>Box&lt;dyn Iterator&lt;Item = u8&gt;&gt;</code>; <code>Iterator</code>'s generic methods, like <code>map</code>, opt out with <code>where Self: Sized</code> (§6)</td>
-</tr>
-<tr>
-<td><code>let longer = m.scale(2.0);</code>, with no annotation, where <code>m: Meters</code></td>
-<td><code>trait Scale&lt;Rhs&gt; { type Output; fn scale(&amp;self, by: Rhs) -&gt; Self::Output; }</code></td>
-<td><code>trait Scale&lt;Rhs, Out&gt; { fn scale(&amp;self, by: Rhs) -&gt; Out; }</code>: a second impl with the same <code>Rhs</code> and another <code>Out</code> is allowed, and then every unannotated call is ambiguous (E0283). With <code>type Output</code>, that second impl is E0119.</td>
-<td><code>pub trait Add&lt;Rhs = Self&gt; { type Output; fn add(self, rhs: Rhs) -&gt; Self::Output; }</code></td>
-</tr>
-</tbody>
-</table></div>
-<p>The short form: an input the caller varies goes after the trait's name (several impls) or the method's name (one body). An output that each impl determines is an associated type.</p>
-<h2>6. What each choice costs</h2>
-<ul>
-<li><strong><code>dyn</code> fixes every type but one up front.</strong> A <code>dyn</code> value calls through one table of function pointers, so the trait's parameters and associated types must all be stated in the type: <code>dyn ProcessOwned&lt;u8&gt;</code>, <code>dyn Iterator&lt;Item = u8&gt;</code>, not <code>dyn Iterator</code> (E0191). The one it leaves open is <code>Self</code>: the code that creates the <code>dyn</code> value picks it, and the program finds that type's body while it runs. A method with its own <code>T</code> would need one table entry per possible <code>T</code>, so it keeps the whole trait out of <code>dyn</code>:</li>
-</ul>
-<p><strong>Does not compile.</strong></p>
-<pre><code><span class="kw">use</span> std::fmt::<span class="ty">Debug</span>;
-
-<span class="kw">trait</span> <span class="ty">ProcessAny</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span>;
-}
-
-<span class="kw">struct</span> <span class="ty">Logger</span>;
-
-<span class="kw">impl</span> <span class="ty">ProcessAny</span> <span class="kw">for</span> <span class="ty">Logger</span> {
-    <span class="kw">fn</span> <span class="fn">process</span>&lt;<span class="ty">T</span>: <span class="ty">Debug</span>&gt;(&amp;<span class="kw">self</span>, input: <span class="ty">T</span>) -&gt; <span class="ty">String</span> {
-        <span class="mac">format!</span>(<span class="str">"one body: {input:?}"</span>)
-    }
-}
-
-<span class="kw">fn</span> <span class="fn">main</span>() {
-    <span class="kw">let</span> p: &amp;<span class="kw">dyn</span> <span class="ty">ProcessAny</span> = &amp;<span class="ty">Logger</span>;
-    <span class="mac">println!</span>(<span class="str">"{}"</span>, p.<span class="fn">process</span>(<span class="str">'c'</span>));
+<p><code>T: Display</code> still declares <code>T</code>. The colon adds a limit: <code>T</code> can be any type, as long as it can be displayed. That's what lets the body print <code>pair.a</code>.</p>
+<p>Drop the limit and the body asks for something <code>T</code> hasn't promised:</p>
+<pre><code>error[E0277]: `T` doesn't implement `std::fmt::Display`</code></pre>
+<h2>6. An <code>=</code> after a trait's name fixes its associated type</h2>
+<pre><code><span class="kw">fn</span> <span class="fn">total</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt;(items: <span class="ty">I</span>) -&gt; <span class="ty">i32</span> {
+    items.<span class="fn">sum</span>()
 }</code></pre>
-<pre><code>error[E0038]: the trait `ProcessAny` is not dyn compatible
-  --&gt; main.rs:16:17
-   |
-16 |     let p: &amp;dyn ProcessAny = &amp;Logger;
-   |                 ^^^^^^^^^^ `ProcessAny` is not dyn compatible
-   |
-note: for a trait to be dyn compatible it needs to allow building a vtable
-      for more information, visit &lt;https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility&gt;
-  --&gt; main.rs:4:8
-   |
- 3 | trait ProcessAny {
-   |       ---------- this trait is not dyn compatible...
- 4 |     fn process&lt;T: Debug&gt;(&amp;self, input: T) -&gt; String;
-   |        ^^^^^^^ ...because method `process` has generic type parameters
-   = help: consider moving `process` to another trait
-   = help: only type `Logger` implements `ProcessAny`; consider using it directly instead.</code></pre>
-<p>The compiler's note gives the same reason. The trait-parameter version has no such problem: with the first program's definitions, <code>let p: &amp;dyn ProcessOwned&lt;u8&gt; = &amp;Logger;</code> compiles.</p>
-<ul>
-<li><strong>The escape hatch</strong> is <code>where Self: Sized</code> on that method: the rest of the trait works as <code>dyn</code>, but that one method can't be called through <code>dyn</code>.</li>
-<li><strong><code>impl Trait</code> is a generic with no name.</strong> In an argument, <code>fn total(items: impl Iterator&lt;Item = u8&gt;)</code> is a method-position <code>T</code> the caller fills, but nobody can name it. In a return type, <code>-&gt; impl Iterator&lt;Item = u32&gt;</code> is a type the function's author picks once, through the body, and every path must return that one type.</li>
-<li><strong>Generics cost compile time and code size; <code>dyn</code> costs a pointer lookup per call.</strong> Each concrete <code>T</code> gets its own compiled copy; a <code>dyn</code> value has one copy and decides which body to run while the program runs.</li>
-</ul>
+<p>The outer brackets declare <code>I</code>, limited to iterators. The inner brackets, after the trait name <code>Iterator</code>, use something. But not a parameter: <code>Iterator</code> doesn't have any. They fix its associated type, <code>Item</code>, to <code>i32</code>. That's why it's <code>=</code> and not <code>:</code>. It sets a value, not a limit.</p>
+<p>Write it as if <code>Iterator</code> had a parameter and the compiler corrects you:</p>
+<pre><code>error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied
+help: replace the generic bound with the associated type
+  |
+1 | fn total&lt;I: Iterator&lt;Item = i32&gt;&gt;(items: I) -&gt; i32 {
+  |                      ++++++</code></pre>
+<h2>7. Now the whole line reads plainly</h2>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt;</code></pre>
+<p>Bracket by bracket:</p>
+<pre><code>impl&lt;I: ...&gt;             declares I, for this impl          (section 4)
+I: Iterator              limits I to iterators              (section 5)
+Iterator&lt;Item = i32&gt;     fixes Item to i32                  (section 6)
+Iterator for             the trait being implemented, no brackets
+Plus&lt;I&gt;                  uses I                             (section 2)</code></pre>
+<p>Read aloud: for any type <code>I</code> that's an iterator of <code>i32</code>, here's how a <code>Plus</code> holding an <code>I</code> is an iterator.</p>
+<h2>What's not here</h2>
+<p>This post is about reading brackets. A harder question is where a type parameter should go: on a trait, as in <code>trait Process&lt;T&gt;</code>, or on one of its methods, as in <code>fn process&lt;T&gt;</code>. The two read alike and behave very differently. That needs a post of its own.</p>
     </article>
   </main>
 

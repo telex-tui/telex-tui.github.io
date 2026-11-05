@@ -50,7 +50,7 @@
     }
 }</code></pre>
 <p>These are the two halves of the trip from part 1. The first line is the trip in: ask the step it holds. The second is the trip out: do the job and hand the value on. The <code>?</code> covers the last trip. When the inner step says <code>None</code>, this one says <code>None</code> too.</p>
-<p>The header says when all this works: <code>Plus&lt;I&gt;</code> is an iterator of <code>i32</code> whenever <code>I</code> is one.</p>
+<p>The header says when all this works: <code>Plus&lt;I&gt;</code> is an iterator of <code>i32</code> whenever <code>I</code> is one. If the angle brackets in that line are a blur, <a href="draft53.html">Angle Brackets in Rust</a> reads it one bracket at a time.</p>
 <p>It already works, called by hand:</p>
 <pre><code><span class="kw">let</span> <span class="kw">mut</span> step = <span class="ty">Plus</span> { inner: <span class="num">1</span>..=<span class="num">3</span>, amount: <span class="num">1</span> };</code></pre>
 <p>Calling <code>step.next()</code> four times gives:</p>
