@@ -42,7 +42,7 @@
     .<span class="fn">collect</span>();</code></pre>
 <p>Output:</p>
 <pre><code>["#04", "#07", "#10", "#13", "#16"]</code></pre>
-<p>A range, four steps, and <code>collect</code>. Everything in this series is about what happens at those dots.</p>
+<p>A range, four steps, and <code>collect</code>. Everything in this series is about the steps in the middle: what they are, and why they fit together.</p>
 <h2>1. A chain is a recipe, not a run</h2>
 <p>Building a chain doesn't compute anything. It describes the work. The work happens later, when something asks for values.</p>
 <pre><code><span class="kw">let</span> chain = (<span class="num">1</span>..=<span class="num">3</span>).<span class="fn">map</span>(|n| {
@@ -112,7 +112,7 @@ None</code></pre>
 <p>Four calls, four trips. On the last one, the range has run out. It answers <code>None</code>, each step passes the <code>None</code> straight back out, and <code>collect</code> knows to stop.</p>
 <p><code>next</code> takes <code>&amp;mut self</code> because a step may change itself when asked. The range does, every time: it moves on to the next number.</p>
 <h2>What comes next</h2>
-<p>Every step in a chain holds the step before it and answers <code>next</code>. That's all a step needs to be. <a href="draft56-part2.html">Part 2</a> writes one from nothing, with no <code>map</code>, and gives it a dot so it slots in beside the built-ins. Its <code>next</code> turns out to be two lines: one for the trip in, one for the trip out.</p>
+<p>Every step in a chain holds the step before it and answers <code>next</code>. That's all a step needs to be. <a href="draft56-part2.html">Part 2</a> writes one from nothing, with no <code>map</code>, and turns it into a method you can chain beside the built-ins. Its <code>next</code> turns out to be two lines: one for the trip in, one for the trip out.</p>
 <p>If you'd like a first look at implementing <code>Iterator</code> on your own type, <a href="rust-patterns-iterators.html">Rust Patterns #12: Custom Iterators</a> covers that. This series is about the middle of the chain.</p>
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>
