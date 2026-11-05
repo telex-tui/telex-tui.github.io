@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inside an Iterator Chain, Part 3: Beyond One In, One Out - Telex</title>
+  <meta name="description" content="Iterator steps that drop values, stop early and remember, then the two ends of a chain: a source with nothing before it, and a consumer that is just a loop calling next.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Inside an Iterator Chain, Part 3: Beyond One In, One Out</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 3 of 4 in <a href="#series-index">Inside an Iterator Chain</a>.</p>
+      <p class="series-nav">Previous: <a href="draft56-part2.html">Part 2: Writing a Step</a> | Next: <a href="draft56-part4.html">Part 4: Where the &amp; Comes From</a></p>
+<p>Every step in <a href="draft56-part2.html">part 2</a> had the same rhythm: pull one, change it, pass it on. One in, one out. But <code>next</code> promises less than that. It only has to return the next value, or <code>None</code>. How it gets there is up to the step.</p>
+<p>This part uses that freedom three ways, then writes the two ends of a chain. The steps from part 2 are still here, and each new step gets a method on the same <code>Steps</code> trait.</p>
+<h2>1. A step can drop values by looping inside <code>next</code></h2>
+<p>To keep only even values, a step pulls until it finds one worth handing on.</p>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>, <span class="ty">P</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Keep</span>&lt;<span class="ty">I</span>, <span class="ty">P</span>&gt;
+<span class="kw">where</span>
+    <span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
+    <span class="ty">P</span>: <span class="ty">FnMut</span>(<span class="ty">i32</span>) -&gt; <span class="ty">bool</span>,
+{
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">i32</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; {
+        <span class="kw">loop</span> {
+            <span class="kw">let</span> n = <span class="kw">self</span>.inner.<span class="fn">next</span>()?;
+            <span class="kw">if</span> (<span class="kw">self</span>.test)(n) {
+                <span class="kw">return</span> <span class="ty">Some</span>(n);
+            }
+        }
+    }
+}</code></pre>
+<p>The loop is the new part. A value that fails the test never leaves this step. The <code>?</code> still handles the end: if the inner step runs out while we're looking, we're done too.</p>
+<p>The struct holds <code>inner</code> and <code>test</code>, and the trait method wraps <code>self</code> as before:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">keep</span>&lt;<span class="ty">P</span>&gt;(<span class="kw">self</span>, test: <span class="ty">P</span>) -&gt; <span class="ty">Keep</span>&lt;<span class="kw">Self</span>, <span class="ty">P</span>&gt;
+<span class="kw">where</span>
+    <span class="kw">Self</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
+    <span class="ty">P</span>: <span class="ty">FnMut</span>(<span class="ty">i32</span>) -&gt; <span class="ty">bool</span>,
+{
+    <span class="ty">Keep</span> { inner: <span class="kw">self</span>, test }
+}</code></pre>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">keep</span>(|n| n % <span class="num">2</span> == <span class="num">0</span>).<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 10, 16]</code></pre>
+<p>That's <code>filter</code>. With one difference: the standard library's <code>filter</code> hands its test a reference, not the value. <a href="draft56-part4.html">Part 4</a> explains why.</p>
+<h2>2. A step can stop before its source runs dry</h2>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">First</span>&lt;<span class="ty">I</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">i32</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; {
+        <span class="kw">if</span> <span class="kw">self</span>.left == <span class="num">0</span> {
+            <span class="kw">return</span> <span class="ty">None</span>;
+        }
+        <span class="kw">self</span>.left -= <span class="num">1</span>;
+        <span class="kw">self</span>.inner.<span class="fn">next</span>()
+    }
+}</code></pre>
+<p>Once its count runs out, <code>First</code> says <code>None</code>, however much the inner step has left. It doesn't even ask.</p>
+<p>That makes an endless source safe to use:</p>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">first</span>(<span class="num">3</span>).<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 7, 10]</code></pre>
+<p><code>1..</code> never ends. It doesn't need to. Nothing ever asks it for a fourth value. This is <code>take</code>.</p>
+<h2>3. A step can remember</h2>
+<p>A step's struct can hold more than the step before it. This one carries a running total from one call of <code>next</code> to the next.</p>
+<pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Running</span>&lt;<span class="ty">I</span>&gt; {
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">i32</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; {
+        <span class="kw">let</span> n = <span class="kw">self</span>.inner.<span class="fn">next</span>()?;
+        <span class="kw">self</span>.total += n;
+        <span class="ty">Some</span>(<span class="kw">self</span>.total)
+    }
+}</code></pre>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">running</span>().<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 11, 21, 34, 50]</code></pre>
+<p>The standard library's general version of this is <code>scan</code>.</p>
+<h2>4. The head of a chain is a step with nothing before it</h2>
+<p>A range is just an iterator that doesn't pull from anything. Its <code>next</code> makes values up. We can write our own.</p>
+<pre><code><span class="kw">struct</span> <span class="ty">Count</span> {
+    at: <span class="ty">i32</span>,
+    end: <span class="ty">i32</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Count</span> {
+    <span class="kw">type</span> <span class="ty">Item</span> = <span class="ty">i32</span>;
+
+    <span class="kw">fn</span> <span class="fn">next</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; {
+        <span class="kw">if</span> <span class="kw">self</span>.at &gt; <span class="kw">self</span>.end {
+            <span class="kw">return</span> <span class="ty">None</span>;
+        }
+        <span class="kw">let</span> n = <span class="kw">self</span>.at;
+        <span class="kw">self</span>.at += <span class="num">1</span>;
+        <span class="ty">Some</span>(n)
+    }
+}</code></pre>
+<p>There's no <code>inner</code> field. That's the only thing that makes it a source rather than a step. With a small <code>count(from, to)</code> function to build one, it drops in where the range was. And since the blanket impl covers every iterator, <code>Count</code> gets <code>plus</code> and the rest for free.</p>
+<pre><code><span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = <span class="fn">count</span>(<span class="num">1</span>, <span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">collect</span>();</code></pre>
+<pre><code>[4, 7, 10, 13, 16]</code></pre>
+<h2>5. The tail of a chain is a loop that calls <code>next</code></h2>
+<p><code>collect</code>, <code>sum</code> and a <code>for</code> loop all do the same thing. They call <code>next</code> until it says <code>None</code>. Here's ours, as one more method on <code>Steps</code>:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">total</span>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">i32</span>
+<span class="kw">where</span>
+    <span class="kw">Self</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
+{
+    <span class="kw">let</span> <span class="kw">mut</span> sum = <span class="num">0</span>;
+    <span class="kw">while</span> <span class="kw">let</span> <span class="ty">Some</span>(n) = <span class="kw">self</span>.<span class="fn">next</span>() {
+        sum += n;
+    }
+    sum
+}</code></pre>
+<p>It returns a number, not another step, so the chain ends here. That's what makes it the tail.</p>
+<pre><code><span class="kw">let</span> sum = (<span class="num">1</span>..=<span class="num">5</span>).<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">total</span>();</code></pre>
+<pre><code>50</code></pre>
+<p>A <code>for</code> loop is this same loop with the <code>next</code> calls written for you. <code>collect</code> is this loop pushing each value into a collection.</p>
+<h2>6. Now a whole chain can be ours</h2>
+<p>Source, steps and tail, with nothing from the standard library in the chain:</p>
+<pre><code><span class="kw">let</span> sum = <span class="fn">count</span>(<span class="num">1</span>, <span class="num">1_000_000</span>)
+    .<span class="fn">plus</span>(<span class="num">1</span>)
+    .<span class="fn">times</span>(<span class="num">3</span>)
+    .<span class="fn">minus</span>(<span class="num">2</span>)
+    .<span class="fn">keep</span>(|n| n % <span class="num">2</span> == <span class="num">0</span>)
+    .<span class="fn">first</span>(<span class="num">3</span>)
+    .<span class="fn">total</span>();</code></pre>
+<pre><code>30</code></pre>
+<p>The source could count to a million. It counts to five. <code>first</code> asks <code>keep</code> for three values. To find three even ones, <code>keep</code> pulls five from upstream. Then <code>first</code> says <code>None</code>, and nothing asks again.</p>
+<h2>7. Once the shape is clear, <code>impl Iterator</code> can hide the struct</h2>
+<p>A struct per step is the honest version, and it's how the standard library does it. But once <code>map</code> exists, many new steps are one line long:</p>
+<pre><code><span class="kw">trait</span> <span class="ty">Steps</span>: <span class="ty">Iterator</span> + <span class="ty">Sized</span> {
+    <span class="kw">fn</span> <span class="fn">plus</span>(<span class="kw">self</span>, amount: <span class="ty">i32</span>) -&gt; <span class="kw">impl</span> <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;
+    <span class="kw">where</span>
+        <span class="kw">Self</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
+    {
+        <span class="kw">self</span>.<span class="fn">map</span>(<span class="kw">move</span> |n| n + amount)
+    }
+}</code></pre>
+<p>The struct is still there. It's a <code>Map</code>. The return type just doesn't name it. The trade-off is that nobody else can name it either, which matters if you ever need to store the chain in a struct field.</p>
+<h2>What comes next</h2>
+<p>Every chain so far started from a range or our own <code>Count</code>, so every value was a plain <code>i32</code>. <a href="draft56-part4.html">Part 4</a> starts from a <code>Vec</code>, and the <code>&amp;</code> arrives.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft56-part1.html">Part 1: How a Chain Runs</a></li>
+          <li><a href="draft56-part2.html">Part 2: Writing a Step</a></li>
+          <li><strong>Part 3: Beyond One In, One Out</strong></li>
+          <li><a href="draft56-part4.html">Part 4: Where the &amp; Comes From</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
