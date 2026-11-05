@@ -32,7 +32,7 @@
       <p class="series-nav">Part 4 of 4 in <a href="#series-index">Inside an Iterator Chain</a>.</p>
       <p class="series-nav">Previous: <a href="draft56-part3.html">Part 3: Beyond One In, One Out</a> | Next: none</p>
 <p>Parts 1 to 3 kept references out on purpose. The source was a range, every value was a plain <code>i32</code>, and the slot-in rule could be seen on its own: a step fits when its input is the previous step's <code>Item</code>.</p>
-<p>Here the source becomes a <code>Vec</code>. That brings in ownership and references, but no new rule. Every <code>&amp;</code> in this part is part of an item type, and the same rule handles it. The <code>plus</code>, <code>times</code>, <code>minus</code> and <code>keep</code> steps are the ones from parts <a href="draft56-part2.html">2</a> and <a href="draft56-part3.html">3</a>.</p>
+<p>Here the values come from a <code>Vec</code>. That brings in ownership and references, but no new rule. Every <code>&amp;</code> in this part is part of an item type, and the same rule handles it. The <code>plus</code>, <code>times</code>, <code>minus</code> and <code>keep</code> steps are the ones from parts <a href="draft56-part2.html">2</a> and <a href="draft56-part3.html">3</a>.</p>
 <h2>1. <code>into_iter()</code> hands out the values, and gives up the <code>Vec</code></h2>
 <pre><code><span class="kw">let</span> nums = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
 <span class="kw">let</span> out: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = nums.<span class="fn">into_iter</span>().<span class="fn">plus</span>(<span class="num">1</span>).<span class="fn">times</span>(<span class="num">3</span>).<span class="fn">minus</span>(<span class="num">2</span>).<span class="fn">collect</span>();</code></pre>
@@ -91,7 +91,7 @@ note: `into_iter` takes ownership of the receiver `self`, which moves `nums`</co
 }</code></pre>
 <p><code>'a</code> names how long the borrowed values live. Apart from that, the step pulls a reference and hands on the value behind it. Our trait method is called <code>copy_out</code>, so it doesn't clash with the standard library's <code>copied</code>, and <code>nums.iter().copy_out()</code> gives the same output. For values that don't copy for free, <code>cloned()</code> is the same step with <code>.clone()</code> in place of <code>*</code>.</p>
 <h2>The whole series, in one rule</h2>
-<p>A chain is a set of steps. Each holds the step before it and answers <code>next</code>, one value at a time, when the tail asks. A step slots in when its input type is the previous step's <code>Item</code>.</p>
+<p>A chain is a set of steps. Each holds the step before it and answers <code>next</code>, one value at a time, when the consumer asks. A step slots in when its input type is the previous step's <code>Item</code>.</p>
 <p>References don't change that. They're part of the <code>Item</code>. <code>iter()</code> puts one there, <code>filter</code> lends one to its test, and <code>copied()</code> takes one away. Each is the same rule, applied.</p>
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>
