@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 238" width="800" height="238" role="img" aria-labelledby="abF1-title abF1-desc">
+  <title id="abF1-title">Parentheses name and fill blanks for values; angle brackets do it for types</title>
+  <desc id="abF1-desc">A grid with three columns: defining it (the brackets name a blank), using it (the brackets fill it in), and what you get (the blank, filled in). Values row: fn double(x: i32) -&gt; i32 { x * 2 } names a blank, x, in parentheses; double(5) fills it in; what you get is 5 * 2. Types row: struct Pair&lt;T&gt; { a: T, b: T } names a blank, T, in angle brackets; Pair&lt;i32&gt; fills it in; what you get is { a: i32, b: i32 }.</desc>
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+      .m { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
+    </style>
+    <marker id="abF1-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#8b949e"/>
+    </marker>
+  </defs>
+  <rect width="800" height="238" fill="#0d1117"/>
+  <rect x="10" y="10" width="780" height="218" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="124" y="44" font-size="14" font-weight="600" xml:space="preserve"><tspan fill="#d29922">Defining it</tspan></text>
+  <text x="124" y="64" font-size="12.5" xml:space="preserve"><tspan fill="#8b949e">names a blank</tspan></text>
+  <text x="470" y="44" font-size="14" font-weight="600" xml:space="preserve"><tspan fill="#58a6ff">Using it</tspan></text>
+  <text x="470" y="64" font-size="12.5" xml:space="preserve"><tspan fill="#8b949e">fills the blank in</tspan></text>
+  <text x="598" y="44" font-size="14" font-weight="600" xml:space="preserve"><tspan fill="#c9d1d9">What you get</tspan></text>
+  <text x="598" y="64" font-size="12.5" xml:space="preserve"><tspan fill="#8b949e">every blank, filled in</tspan></text>
+  <line x1="26" y1="82" x2="774" y2="82" stroke="#30363d"/>
+  <text x="36" y="128" font-size="14" font-weight="600" xml:space="preserve"><tspan fill="#e6edf3">Values</tspan></text>
+  <text class="m" x="36.0 43.8 51.6" y="148" font-size="13" fill="#8b949e" xml:space="preserve">( )</text>
+  <rect x="206.5" y="114.5" width="76.0" height="18.9" rx="4" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-width="1.4"/>
+  <text class="m" x="124.0 133.0 142.0 151.0 160.0 169.0 178.0 187.0 196.0 208.5 217.5 226.5 235.5 244.5 253.5 262.5 271.5 284.0 293.0 302.0 311.0 320.0 329.0 338.0 347.0 356.0 365.0" y="128" font-size="15" fill="#e6edf3" xml:space="preserve">fn double(x: i32) -&gt; i32 { </text>
+  <text class="m" x="374.0" y="128" font-size="15" fill="#d29922" xml:space="preserve">x</text>
+  <text class="m" x="383.0 392.0 401.0 410.0 419.0 428.0" y="128" font-size="15" fill="#e6edf3" xml:space="preserve"> * 2 }</text>
+  <rect x="525.5" y="114.5" width="31.0" height="18.9" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text class="m" x="470.0 479.0 488.0 497.0 506.0 515.0 527.5 536.5 545.5" y="128" font-size="15" fill="#e6edf3" xml:space="preserve">double(5)</text>
+  <text class="m" x="598.0" y="128" font-size="15" fill="#58a6ff" xml:space="preserve">5</text>
+  <text class="m" x="607.0 616.0 625.0 634.0" y="128" font-size="15" fill="#e6edf3" xml:space="preserve"> * 2</text>
+  <text x="36" y="198" font-size="14" font-weight="600" xml:space="preserve"><tspan fill="#e6edf3">Types</tspan></text>
+  <text class="m" x="36.0 43.8 51.6" y="218" font-size="13" fill="#8b949e" xml:space="preserve">&lt; &gt;</text>
+  <rect x="224.5" y="184.5" width="31.0" height="18.9" rx="4" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-width="1.4"/>
+  <text class="m" x="124.0 133.0 142.0 151.0 160.0 169.0 178.0 187.0 196.0 205.0 214.0 226.5 235.5 244.5 257.0 266.0 275.0 284.0 293.0 302.0" y="198" font-size="15" fill="#e6edf3" xml:space="preserve">struct Pair&lt;T&gt; { a: </text>
+  <text class="m" x="311.0" y="198" font-size="15" fill="#d29922" xml:space="preserve">T</text>
+  <text class="m" x="320.0 329.0 338.0 347.0 356.0" y="198" font-size="15" fill="#e6edf3" xml:space="preserve">, b: </text>
+  <text class="m" x="365.0" y="198" font-size="15" fill="#d29922" xml:space="preserve">T</text>
+  <text class="m" x="374.0 383.0" y="198" font-size="15" fill="#e6edf3" xml:space="preserve"> }</text>
+  <rect x="507.5" y="184.5" width="49.0" height="18.9" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text class="m" x="470.0 479.0 488.0 497.0 509.5 518.5 527.5 536.5 545.5" y="198" font-size="15" fill="#e6edf3" xml:space="preserve">Pair&lt;i32&gt;</text>
+  <text class="m" x="598.0 607.0 616.0 625.0 634.0" y="198" font-size="15" fill="#e6edf3" xml:space="preserve">{ a: </text>
+  <text class="m" x="643.0 652.0 661.0" y="198" font-size="15" fill="#58a6ff" xml:space="preserve">i32</text>
+  <text class="m" x="670.0 679.0 688.0 697.0 706.0" y="198" font-size="15" fill="#e6edf3" xml:space="preserve">, b: </text>
+  <text class="m" x="715.0 724.0 733.0" y="198" font-size="15" fill="#58a6ff" xml:space="preserve">i32</text>
+  <text class="m" x="742.0 751.0" y="198" font-size="15" fill="#e6edf3" xml:space="preserve"> }</text>
+  <line x1="36" y1="162" x2="764" y2="162" stroke="#21262d"/>
+</svg>
