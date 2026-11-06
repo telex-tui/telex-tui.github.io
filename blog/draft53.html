@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Angle Brackets in Rust: Declare, Then Fill In - Telex</title>
-  <meta name="description" content="One rule for reading Rust&#x27;s angle brackets: brackets on something you&#x27;re creating declare new names, and brackets on something you&#x27;re referring to fill them in. Plus the colon, the equals sign, and the places a limit can go.">
+  <meta name="description" content="One rule for reading Rust&#x27;s angle brackets: brackets on something you&#x27;re creating declare new names, and brackets on something you&#x27;re referring to fill in its names. Plus the colon, the equals sign, and the places a limit can go.">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
@@ -29,23 +29,23 @@
     <article class="post">
       <h1>Angle Brackets in Rust: Declare, Then Fill In</h1>
       <div class="post-meta">November 2026</div>
-<p>Rust uses angle brackets for several jobs. This line, from <a href="draft56-part2.html">Inside an Iterator Chain, part 2</a>, has three pairs, and each pair does a different job:</p>
+<p>Rust uses angle brackets for several jobs. This line, from <a href="draft56-part2.html">Inside an Iterator Chain, part 2</a>, has three pairs of angle brackets, and they don't all do the same job:</p>
 <pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt;</code></pre>
 <p>One rule sorts out most of it:</p>
 <blockquote>Brackets on something you're creating declare new names. Brackets on something you're referring to fill in its names.</blockquote>
-<p>Here's the rule applied to five lines from this post:</p>
+<p>Here's the rule applied to five lines of Rust:</p>
 <figure>
 <div class="figure-scroll"><img src="../assets/angle-brackets/fig1-declare-fill.svg" width="800" height="360" alt="Five lines of Rust. Circled, because each is on something being created: the brackets after Pair in struct Pair&lt;T&gt;, after first in fn first&lt;T&gt;, after impl in impl&lt;T&gt; Pair&lt;T&gt;, and the outer brackets after impl in the Plus line. Underlined, because each refers to something that already exists: Pair&lt;T&gt; in the function and in the impl, Pair&lt;i32&gt;, Iterator&lt;Item = i32&gt; and Plus&lt;I&gt;. impl Pair&lt;i32&gt; has no circle."></div>
 <figcaption>Circled brackets declare. Underlined brackets fill in. <code>impl Pair&lt;i32&gt;</code> creates an impl, but declares nothing.</figcaption>
 </figure>
 <p>This post builds the rule up one case at a time, then reads the last line, bracket by bracket.</p>
-<p>Left out: lifetimes, const generics and default types. Every example was compiled with rustc 1.97.0, edition 2024.</p>
+<p>Left out: lifetimes, const generics, default types, and qualified paths like <code>&lt;I as Iterator&gt;::Item</code>, which use angle brackets for another job. Every example was compiled with rustc 1.97.0, edition 2024, and compiler errors are trimmed to their key lines.</p>
 <h2>1. Brackets on a struct you're creating declare a name</h2>
 <pre><code><span class="kw">struct</span> <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
     a: <span class="ty">T</span>,
     b: <span class="ty">T</span>,
 }</code></pre>
-<p>This creates <code>Pair</code>, so <code>&lt;T&gt;</code> declares. It makes up a new name, <code>T</code>, for a type to be chosen later. Inside the struct, <code>T</code> can be used like any type. Outside, it means nothing.</p>
+<p>This creates <code>Pair</code>, so <code>&lt;T&gt;</code> declares. It makes up a new name, <code>T</code>, for a type to be chosen later. Inside the struct, <code>T</code> can be a field's type, like any other type. Outside the struct, there's no <code>T</code> in scope.</p>
 <p>Without the declaration, the compiler has never heard of <code>T</code>:</p>
 <pre><code><span class="kw">struct</span> <span class="ty">Pair</span> {
     a: <span class="ty">T</span>,
@@ -55,8 +55,9 @@
 <p>Creating an <code>enum</code> or a <code>trait</code> works the same way.</p>
 <h2>2. Brackets on a type you're referring to fill in its name</h2>
 <pre><code><span class="kw">let</span> p: <span class="ty">Pair</span>&lt;<span class="ty">i32</span>&gt; = <span class="ty">Pair</span> { a: <span class="num">1</span>, b: <span class="num">2</span> };</code></pre>
-<p>This doesn't create <code>Pair</code>. It refers to it. So <code>&lt;i32&gt;</code> fills in the name <code>Pair</code> declared: <code>T</code> becomes <code>i32</code>. <code>Pair</code> alone isn't a complete type. <code>Pair&lt;i32&gt;</code> is: a pair of <code>i32</code>s.</p>
-<p>It's the difference between a function's parameters and the arguments you call it with. <code>struct Pair&lt;T&gt;</code> is the parameter. <code>Pair&lt;i32&gt;</code> is the argument.</p>
+<p>This doesn't create <code>Pair</code>. It refers to it. So <code>&lt;i32&gt;</code> fills in the name <code>Pair</code> declared: <code>T</code> becomes <code>i32</code>. <code>Pair&lt;i32&gt;</code> is a complete type, a pair of <code>i32</code>s. <code>Pair</code> alone isn't: write <code>let p: Pair</code> and the compiler reports "missing generics for struct <code>Pair</code>".</p>
+<p>On the right of the <code>=</code>, <code>Pair { a: 1, b: 2 }</code> has no brackets either. There, the compiler works <code>T</code> out for itself.</p>
+<p>It's the difference between a function's parameters and the arguments you call it with. In <code>struct Pair&lt;T&gt;</code>, <code>T</code> is a parameter. In <code>Pair&lt;i32&gt;</code>, <code>i32</code> is an argument. Rust calls them generic parameters and generic arguments, and its error messages use those words.</p>
 <h2>3. Functions work the same way</h2>
 <pre><code><span class="kw">fn</span> <span class="fn">first</span>&lt;<span class="ty">T</span>&gt;(pair: <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt;) -&gt; <span class="ty">T</span> {
     pair.a
@@ -64,15 +65,15 @@
 <p>This creates <code>first</code>, so <code>&lt;T&gt;</code> declares a name, for this function only. <code>Pair&lt;T&gt;</code> refers to <code>Pair</code>, and fills in its name with this <code>T</code>.</p>
 <p>Calling <code>first</code> refers to it, so brackets there fill in its name. In an expression they need a <code>::</code> in front:</p>
 <pre><code><span class="kw">let</span> n = first::&lt;<span class="ty">i32</span>&gt;(p);</code></pre>
-<p>Without the <code>::</code>, Rust reads <code>first&lt;i32&gt;(p)</code> as two comparisons, <code>first &lt; i32</code> and then <code>&gt; (p)</code>, and says so: "comparison operators cannot be chained". You rarely need to fill the name by hand, though. <code>first(p)</code> works, because the compiler fills <code>T</code> from the argument.</p>
+<p>Without the <code>::</code>, Rust reads <code>first&lt;i32&gt;(p)</code> as two comparisons, <code>first &lt; i32</code> and then <code>&gt; (p)</code>, and says so: "comparison operators cannot be chained". Here you don't need to fill the name by hand, though. <code>first(p)</code> works, because the compiler fills <code>T</code> in from the argument.</p>
 <h2>4. An <code>impl</code> line often does both</h2>
 <pre><code><span class="kw">impl</span>&lt;<span class="ty">T</span>&gt; <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
     <span class="kw">fn</span> <span class="fn">swap</span>(<span class="kw">self</span>) -&gt; <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt; {
         <span class="ty">Pair</span> { a: <span class="kw">self</span>.b, b: <span class="kw">self</span>.a }
     }
 }</code></pre>
-<p>This creates an impl block, so <code>impl&lt;T&gt;</code> declares a name for the block. An impl has no name of its own, so its brackets go straight after the keyword. Then <code>Pair&lt;T&gt;</code> refers to <code>Pair</code> and fills in its name with that <code>T</code>. Read together: for any type <code>T</code>, here are methods for a pair of <code>T</code>s.</p>
-<p>It looks like saying <code>T</code> twice. It's two names that happen to share a letter: the impl's <code>T</code>, and the <code>T</code> that <code>Pair</code> declared. <code>impl&lt;U&gt; Pair&lt;U&gt;</code> means exactly the same. And skipping the declaration gets you the error from section 1:</p>
+<p>This creates an impl block, so <code>impl&lt;T&gt;</code> declares a name for the block. An impl has no name of its own. Its declaring brackets go straight after the keyword instead. Then <code>Pair&lt;T&gt;</code> refers to <code>Pair</code> and fills in its name with that <code>T</code>. Read together: for any type <code>T</code>, here are methods for a pair of <code>T</code>s.</p>
+<p>It looks like saying <code>T</code> twice, and it is. Both are the impl's <code>T</code>: the first declares it, and the second fills in <code>Pair</code>'s name with it. The <code>T</code> from <code>struct Pair&lt;T&gt;</code> isn't written here at all. It's the name being filled in. So the impl can use any letter: <code>impl&lt;U&gt; Pair&lt;U&gt;</code> means the same. Skip the declaration, and the <code>T</code> in <code>Pair&lt;T&gt;</code> has nothing to refer to:</p>
 <pre><code>error[E0425]: cannot find type `T` in this scope
 help: you might be missing a type parameter
   |
@@ -91,10 +92,10 @@ help: you might be missing a type parameter
 <span class="kw">fn</span> <span class="fn">show</span>&lt;<span class="ty">T</span>: <span class="ty">Display</span>&gt;(pair: <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt;) -&gt; <span class="ty">String</span> {
     <span class="mac">format!</span>(<span class="str">"{} and {}"</span>, pair.a, pair.b)
 }</code></pre>
-<p><code>T: Display</code> still declares <code>T</code>. The colon adds a limit: <code>T</code> can be any type, as long as it can be displayed. That's what lets the body print <code>pair.a</code>.</p>
+<p><code>T: Display</code> still declares <code>T</code>. The colon adds a limit: <code>T</code> can be any type, as long as it implements <code>Display</code>, the trait behind <code>{}</code> in <code>format!</code>. That's what lets the body print <code>pair.a</code>.</p>
 <p>Drop the limit and the body asks for something <code>T</code> hasn't promised:</p>
 <pre><code>error[E0277]: `T` doesn't implement `std::fmt::Display`</code></pre>
-<h2>6. The same limit can go in three places</h2>
+<h2>6. In a function, the same limit can go in three places</h2>
 <p>Section 5 put the limit inside the brackets that declare <code>T</code>. It can also go in a <code>where</code> clause:</p>
 <pre><code><span class="kw">fn</span> <span class="fn">show</span>&lt;<span class="ty">T</span>&gt;(pair: <span class="ty">Pair</span>&lt;<span class="ty">T</span>&gt;) -&gt; <span class="ty">String</span>
 <span class="kw">where</span>
@@ -108,11 +109,11 @@ help: you might be missing a type parameter
 }</code></pre>
 <p>Side by side:</p>
 <figure>
-<div class="figure-scroll"><img src="../assets/angle-brackets/fig2-limit-places.svg" width="800" height="260" alt="Three versions of fn show, each limiting its type to Display. Top: the limit sits inside the declaring brackets, show&lt;T: Display&gt;. Middle: the brackets only declare, show&lt;T&gt;, and the limit is in a where clause after the return type. Bottom: there are no declaring brackets. impl Display, inside Pair&#x27;s brackets, declares a type with no name and limits it in one go."></div>
+<div class="figure-scroll"><img src="../assets/angle-brackets/fig2-limit-places.svg" width="800" height="260" alt="Three versions of fn show, each limiting its type to Display. Top: the limit sits inside the declaring brackets, show&lt;T: Display&gt;. Middle: the brackets only declare, show&lt;T&gt;, and the limit is in a where clause after the return type. Bottom: nothing is circled, because no brackets declare. Inside Pair&#x27;s brackets, impl Display declares a type parameter with no name and limits it to Display."></div>
 <figcaption>The same limit in three places. Only the first two have brackets that declare.</figcaption>
 </figure>
 <p>All three accept the same calls, with one exception, at the end of this section.</p>
-<p>With a <code>where</code> clause, the brackets go back to one job: declaring. The limit moves after the return type, where a long one has room. A <code>where</code> clause can also limit things that aren't new names, which the brackets can't:</p>
+<p>With a <code>where</code> clause, the brackets go back to one job: declaring. The limit moves after the return type, which can be clearer when there are several. A <code>where</code> clause can also limit things that aren't new names, which the brackets can't:</p>
 <pre><code><span class="kw">fn</span> <span class="fn">widen</span>&lt;<span class="ty">T</span>&gt;(x: <span class="ty">T</span>) -&gt; <span class="ty">i64</span>
 <span class="kw">where</span>
     <span class="ty">i64</span>: <span class="ty">From</span>&lt;<span class="ty">T</span>&gt;,
@@ -120,7 +121,7 @@ help: you might be missing a type parameter
     <span class="ty">i64</span>::<span class="fn">from</span>(x)
 }</code></pre>
 <p>The limit is on <code>i64</code>, not on <code>T</code>: <code>widen</code> takes any <code>T</code> that an <code>i64</code> can be made from. There's no declaring bracket for that limit to go in.</p>
-<p><code>impl Display</code> in an argument declares a type and limits it in one go, with no brackets and no name. With no name, there's nothing to fill in by hand. Try the <code>::&lt;&gt;</code> from section 3, and the compiler counts no names at all:</p>
+<p><code>impl Display</code> in an argument declares a type parameter and limits it in one go, with no brackets and no name. It doesn't appear in the function's generic parameter list, which here is empty, so there's nothing to fill in by hand. Try the <code>::&lt;&gt;</code> from section 3, and the compiler says the function has none:</p>
 <pre><code>error[E0107]: function takes 0 generic arguments but 1 generic argument was supplied
 note: function defined here, with 0 generic parameters</code></pre>
 <h2>7. On an impl, where the limit goes decides which methods have it</h2>
@@ -141,28 +142,29 @@ note: function defined here, with 0 generic parameters</code></pre>
 <pre><code>error[E0277]: `Thing` doesn't implement `std::fmt::Display`
 note: required by a bound in `Pair::&lt;T&gt;::render`</code></pre>
 <p>Move the limit up to <code>impl&lt;T: Display&gt; Pair&lt;T&gt;</code>, and <code>swap</code> is limited too: "the method <code>swap</code> exists for struct <code>Pair&lt;Thing&gt;</code>, but its trait bounds were not satisfied".</p>
-<p>The strictest place is the struct itself: <code>struct Pair&lt;T: Display&gt;</code>. Then every impl, and every function that takes a <code>Pair&lt;T&gt;</code>, must repeat the limit, even where nothing is displayed. Leave it off and the compiler reports that "<code>T</code> doesn't implement <code>std::fmt::Display</code>", "required by a bound in <code>Pair</code>".</p>
+<p>The last place is the struct itself: <code>struct Pair&lt;T: Display&gt;</code>. Then every generic impl or function that names <code>Pair&lt;T&gt;</code> must repeat the limit, even where nothing is displayed. Leave it off and the compiler reports that "<code>T</code> doesn't implement <code>std::fmt::Display</code>", "required by a bound in <code>Pair</code>". An impl for one real type, like <code>impl Pair&lt;i32&gt;</code>, needs nothing, because <code>i32</code> implements <code>Display</code>.</p>
 <h2>8. An <code>=</code> fills in a trait's associated type</h2>
 <pre><code><span class="kw">fn</span> <span class="fn">total</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt;(items: <span class="ty">I</span>) -&gt; <span class="ty">i32</span> {
     items.<span class="fn">sum</span>()
 }</code></pre>
-<p>The outer brackets declare <code>I</code>, with a limit. The limit refers to <code>Iterator</code>, and the inner brackets fill in one of its names. Not a parameter: <code>Iterator</code> doesn't declare any. They fill its associated type, <code>Item</code>, which the trait declares inside its body with <code>type Item;</code>. An associated type is filled by name, so the name is written out: <code>Item = i32</code>.</p>
+<p>The outer brackets declare <code>I</code>, with a limit. The limit refers to <code>Iterator</code>, and the inner brackets fill in one of its names. Not a parameter: <code>Iterator</code> doesn't declare any. The name is <code>Item</code>, an associated type, which the trait declares inside its body with <code>type Item;</code>. Parameters are filled in by position, as in <code>Pair&lt;i32&gt;</code>. An associated type is filled in by name, so the name is written out: <code>Item = i32</code>.</p>
+<p>Filling in <code>Item</code> here doesn't set any iterator's <code>Item</code>. Each iterator's own impl does that. It narrows the limit: only iterators whose <code>Item</code> is <code>i32</code> qualify. Pass one that yields <code>u8</code>s, and the compiler reports: "expected <code>IntoIter&lt;u8&gt;</code> to be an iterator that yields <code>i32</code>, but it yields <code>u8</code>".</p>
 <p>Write it as if <code>Iterator</code> had a parameter and the compiler corrects you:</p>
 <pre><code>error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied
 help: replace the generic bound with the associated type
   |
 1 | fn total&lt;I: Iterator&lt;Item = i32&gt;&gt;(items: I) -&gt; i32 {
   |                      ++++++</code></pre>
-<p><code>=</code> fixes <code>Item</code> to one type. A colon works here too, and means what it meant in section 5: <code>Iterator&lt;Item: Display&gt;</code> accepts any iterator whose items can be displayed. Like any limit, it can move to a <code>where</code> clause: <code>where I: Iterator, I::Item: Display</code>.</p>
+<p>A colon works here too, and means what it meant in section 5: <code>Iterator&lt;Item: Display&gt;</code> accepts any iterator whose items implement <code>Display</code>. It can also move to a <code>where</code> clause: <code>where I: Iterator, I::Item: Display</code>.</p>
 <h2>9. Now the whole line reads plainly</h2>
 <pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt;</code></pre>
 <p>Bracket by bracket:</p>
 <pre><code>impl&lt;I: ...&gt;           creates an impl, so declares I        (section 4)
 I: Iterator&lt;...&gt;       limits I to iterators                 (section 5)
-Iterator&lt;Item = i32&gt;   fills Iterator's Item with i32        (section 8)
+Iterator&lt;Item = i32&gt;   fills in Item: i32 iterators only     (section 8)
 Iterator for           the trait being implemented
 Plus&lt;I&gt;                refers to Plus, fills its name with I (section 4)</code></pre>
-<p>The second <code>Iterator</code> has no brackets, because there's nothing to fill: it has no parameters, and for <code>Plus</code> its <code>Item</code> is set inside the block, with <code>type Item = i32;</code>. The word <code>for</code> marks the type that gets the trait.</p>
+<p>The second <code>Iterator</code> has no brackets. It has no parameters to fill in, and its <code>Item</code> can't be given here: an impl sets it inside the block, with <code>type Item = i32;</code>. Write <code>Iterator&lt;Item = i32&gt; for Plus&lt;I&gt;</code> and the compiler says associated item constraints "are not allowed here". The word <code>for</code> marks the type that gets the trait.</p>
 <p>Read aloud: for any type <code>I</code> that's an iterator of <code>i32</code>, here's how a <code>Plus</code> holding an <code>I</code> is an iterator.</p>
 <p>The limit can move to a <code>where</code> clause here too, as part 2 did for its <code>Apply</code> impl. Then the brackets after <code>impl</code> only declare:</p>
 <pre><code><span class="kw">impl</span>&lt;<span class="ty">I</span>&gt; <span class="ty">Iterator</span> <span class="kw">for</span> <span class="ty">Plus</span>&lt;<span class="ty">I</span>&gt;
@@ -170,7 +172,7 @@ Plus&lt;I&gt;                refers to Plus, fills its name with I (section 4)</
     <span class="ty">I</span>: <span class="ty">Iterator</span>&lt;<span class="ty">Item</span> = <span class="ty">i32</span>&gt;,
 {</code></pre>
 <h2>What's not here</h2>
-<p>This post is about reading brackets. A harder question is where a type parameter should go: on a trait, as in <code>trait Process&lt;T&gt;</code>, or on one of its methods, as in <code>fn process&lt;T&gt;</code>. The two read alike and behave very differently. That needs a post of its own.</p>
+<p>This post is about reading brackets. A harder question is where a type parameter should go: on a trait, as in <code>trait Process&lt;T&gt;</code>, or on one of its methods, as in <code>fn process&lt;T&gt;</code>. They look alike, but they aren't. On the trait, one type can implement it several times, once for each <code>T</code>. On the method, every implementation has to accept every <code>T</code> the method allows. Choosing between them needs a post of its own.</p>
     </article>
   </main>
 
