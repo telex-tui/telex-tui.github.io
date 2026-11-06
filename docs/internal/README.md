@@ -39,7 +39,7 @@ A post is hidden when its file is in `blog/` but it isn't listed in `blog/index.
 
 How it's organised:
 
-- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft56-part1.html` … `draft56-part4.html` (Inside an Iterator Chain, a four-part series), `draft53.html` (Angle Brackets in Rust: Generics in Traits and Impls), `draft54.html` (What dyn Redacts: Type Erasure in Rust; its figures are in `assets/dyn-redaction/`), `draft55.html` (Where Your Rust Program Lives, the groundwork for draft54; its figures are in `assets/where-code-lives/`), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
+- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft56-part1.html` … `draft56-part4.html` (Inside an Iterator Chain, a four-part series), `draft53.html` (Angle Brackets in Rust: Declare, Then Fill In; its figures are in `assets/angle-brackets/`), `draft54.html` (What dyn Redacts: Type Erasure in Rust; its figures are in `assets/dyn-redaction/`), `draft55.html` (Where Your Rust Program Lives, the groundwork for draft54; its figures are in `assets/where-code-lives/`), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
 - **Challenge series** — the two challenge series, each challenge with links to part A (problem + multiple choice) and part B (solution):
   - Rust Design Challenges 1–27 = `draft10a/b.html` … `draft36a/b.html`
   - Rust Idioms Challenges 1–14 = `draft37a/b.html` … `draft50a/b.html`
