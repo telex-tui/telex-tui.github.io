@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 380" width="800" height="380" role="img" aria-labelledby="abF2-title abF2-desc">
+  <title id="abF2-title">Every line so far, with its brackets marked and said aloud</title>
+  <desc id="abF2-desc">Five lines of Rust, each with a plain-English reading. Orange marks brackets that name a blank, read as 'for any type T'. Blue marks brackets that fill a blank in, read as 'of'. struct Pair&lt;T&gt; { a: T, b: T }: for any type T, a Pair holds two Ts, a and b. let p: Pair&lt;i32&gt;: p is a Pair of i32. fn first&lt;T&gt;(pair: Pair&lt;T&gt;) -&gt; T: for any type T, first takes a Pair of T and returns a T. impl&lt;T&gt; Pair&lt;T&gt;: for any type T, here are methods for a Pair of T. impl Pair&lt;i32&gt;: here are methods for a Pair of i32 only. In the function and the first impl, an arrow shows that the T named first is the same T that fills Pair's blank.</desc>
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+      .m { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
+    </style>
+    <marker id="abF2-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#8b949e"/>
+    </marker>
+  </defs>
+  <rect width="800" height="380" fill="#0d1117"/>
+  <rect x="10" y="10" width="780" height="360" rx="8" fill="#161b22" stroke="#30363d"/>
+  <rect x="36" y="33" width="30" height="18" rx="4" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-width="1.4"/>
+  <text x="76" y="46" font-size="13.5" xml:space="preserve"><tspan fill="#e6edf3">names a blank</tspan><tspan fill="#8b949e">  say “for any type T”</tspan></text>
+  <rect x="392" y="33" width="30" height="18" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text x="432" y="46" font-size="13.5" xml:space="preserve"><tspan fill="#e6edf3">fills a blank in</tspan><tspan fill="#8b949e">  say “of …”</tspan></text>
+  <line x1="26" y1="68" x2="774" y2="68" stroke="#30363d"/>
+  <rect x="136.5" y="104.5" width="31.0" height="18.9" rx="4" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-width="1.4"/>
+  <text class="m" x="36.0 45.0 54.0 63.0 72.0 81.0 90.0 99.0 108.0 117.0 126.0 138.5 147.5 156.5 169.0 178.0 187.0 196.0 205.0 214.0 223.0 232.0 241.0 250.0 259.0 268.0 277.0 286.0 295.0" y="118" font-size="15" fill="#e6edf3" xml:space="preserve">struct Pair&lt;T&gt; { a: T, b: T }</text>
+  <text x="360" y="118" font-size="14" xml:space="preserve"><tspan fill="#d29922">For any type T</tspan><tspan fill="#c9d1d9">, a Pair holds two Ts, a and b.</tspan></text>
+  <rect x="136.5" y="162.5" width="49.0" height="18.9" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text class="m" x="36.0 45.0 54.0 63.0 72.0 81.0 90.0 99.0 108.0 117.0 126.0 138.5 147.5 156.5 165.5 174.5" y="176" font-size="15" fill="#e6edf3" xml:space="preserve">let p: Pair&lt;i32&gt;</text>
+  <text x="360" y="176" font-size="14" xml:space="preserve"><tspan fill="#c9d1d9">p is a Pair </tspan><tspan fill="#58a6ff">of i32</tspan><tspan fill="#c9d1d9">.</tspan></text>
+  <rect x="109.5" y="220.5" width="31.0" height="18.9" rx="4" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-width="1.4"/>
+  <rect x="242.5" y="220.5" width="31.0" height="18.9" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text class="m" x="36.0 45.0 54.0 63.0 72.0 81.0 90.0 99.0 111.5 120.5 129.5 142.0 151.0 160.0 169.0 178.0 187.0 196.0 205.0 214.0 223.0 232.0 244.5 253.5 262.5 275.0 284.0 293.0 302.0 311.0 320.0" y="234" font-size="15" fill="#e6edf3" xml:space="preserve">fn first&lt;T&gt;(pair: Pair&lt;T&gt;) -&gt; T</text>
+  <path d="M125.0,218.5 C125.0,202.5 258.0,202.5 258.0,216.5" fill="none" stroke="#8b949e" stroke-width="1.2" marker-end="url(#abF2-arrow)"/>
+  <text x="191.5" y="202.5" font-size="11" text-anchor="middle" xml:space="preserve"><tspan fill="#8b949e">same T</tspan></text>
+  <text x="360" y="234" font-size="14" xml:space="preserve"><tspan fill="#d29922">For any type T</tspan><tspan fill="#c9d1d9">, first takes a Pair </tspan><tspan fill="#58a6ff">of T</tspan><tspan fill="#c9d1d9"> and returns a T.</tspan></text>
+  <rect x="73.5" y="278.5" width="31.0" height="18.9" rx="4" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-width="1.4"/>
+  <rect x="152.5" y="278.5" width="31.0" height="18.9" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text class="m" x="36.0 45.0 54.0 63.0 75.5 84.5 93.5 106.0 115.0 124.0 133.0 142.0 154.5 163.5 172.5" y="292" font-size="15" fill="#e6edf3" xml:space="preserve">impl&lt;T&gt; Pair&lt;T&gt;</text>
+  <path d="M89.0,276.5 C89.0,260.5 168.0,260.5 168.0,274.5" fill="none" stroke="#8b949e" stroke-width="1.2" marker-end="url(#abF2-arrow)"/>
+  <text x="128.5" y="260.5" font-size="11" text-anchor="middle" xml:space="preserve"><tspan fill="#8b949e">same T</tspan></text>
+  <text x="360" y="292" font-size="14" xml:space="preserve"><tspan fill="#d29922">For any type T</tspan><tspan fill="#c9d1d9">, here are methods for a Pair </tspan><tspan fill="#58a6ff">of T</tspan><tspan fill="#c9d1d9">.</tspan></text>
+  <rect x="118.5" y="336.5" width="49.0" height="18.9" rx="4" fill="#58a6ff" fill-opacity="0.14" stroke="#58a6ff" stroke-width="1.4"/>
+  <text class="m" x="36.0 45.0 54.0 63.0 72.0 81.0 90.0 99.0 108.0 120.5 129.5 138.5 147.5 156.5" y="350" font-size="15" fill="#e6edf3" xml:space="preserve">impl Pair&lt;i32&gt;</text>
+  <text x="360" y="350" font-size="14" xml:space="preserve"><tspan fill="#c9d1d9">Here are methods for a Pair </tspan><tspan fill="#58a6ff">of i32</tspan><tspan fill="#c9d1d9"> only.</tspan></text>
+</svg>
