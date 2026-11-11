@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Stepper</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --miss: #f85149; --good: #3fb950; --dial: #bc8cff;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .top { display: flex; gap: 14px; align-items: flex-start; }
+  .top svg { flex: 1; min-width: 0; }
+  .log { width: 112px; flex: none; font-size: 12.5px; }
+  .log h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 500; margin: 6px 0 6px; }
+  .log ol { list-style: none; margin: 0; padding: 0; font-variant-numeric: tabular-nums; }
+  .log li { padding: 2px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+  .log li span { color: var(--muted); font-size: 11px; }
+  @media (max-width: 460px) { .top { flex-direction: column; } .log { width: 100%; } .log ol { display: flex; flex-wrap: wrap; gap: 4px 12px; } .log li { border: 0; } }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; margin: 10px 0 8px; }
+  .btn { background: transparent; color: var(--text); border: 1px solid var(--sticker); border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .chk { font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .chk input { accent-color: var(--accent); }
+  .slider { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; }
+  .slider label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--sticker); min-width: 120px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <svg id="v" aria-label="The frequency ring with a fixed ratio dial; the ring's root sits at the top"></svg>
+    <div class="log"><h3>Root and opposite</h3><ol id="log"></ol></div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="step">Next root &#9654;</button>
+    <label class="chk"><input type="checkbox" id="wrong" checked> Try a plain rotation first</label>
+  </div>
+  <div class="controls">
+    <div class="slider">
+      <label for="root">Root, in slow motion</label>
+      <input id="root" type="range" min="0" max="1200" value="0" step="1" aria-label="The ring's root, sliding continuously from C to the next C">
+    </div>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule"><b>Rule:</b> each note sits at its ratio to the ring's root, folded into one octave: ×1½ is half a turn. The purple dial never moves. Whatever sits under ×1½ is the root's opposite. Piano tuning.</p>
+</div>
+
+<script>
+(() => {
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const C4 = 261.6256;
+  // the frequency ring's rule, for a root anywhere (r in keys above C, not necessarily whole)
+  const theta = (j, r) => 360 * (2 ** ((((j - r) % 12) + 12) % 12 / 12) - 1);
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = {}; ['text','muted','border','sticker','accent','miss','good','dial','code','card'].forEach(k => COL[k] = cv('--' + k));
+
+  let r = 0;                       // the ring's root
+  let override = null;             // angles shown during the step animation (null = follow the rule)
+  let phase = 'rule';              // 'rule' | 'rigid'
+  let busy = false;
+  const log = [];
+
+  let ac;
+  function pluck(f, when = 0) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime + 0.02 + when, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.12, t + 0.01); out.gain.exponentialRampToValueAtTime(0.0005, t + 1.6);
+      out.connect(ac.destination);
+      for (let n = 1; n <= 8; n++) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f * n; g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t); o.stop(t + 1.7); }
+    } catch (e) {}
+  }
+
+  const polar = (cx, cy, R, d) => [cx + R * Math.sin(d * Math.PI / 180), cy - R * Math.cos(d * Math.PI / 180)];
+  const angles = () => override || NAMES.map((_, j) => theta(j, r));
+
+  function draw() {
+    const svg = $('v'); svg.replaceChildren();
+    const w = Math.max(240, Math.round(svg.getBoundingClientRect().width || 500));
+    const R = Math.min(w / 2 - 40, 140), cx = w / 2, cy = R + 34, H = 2 * R + 70;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: COL.border, 'stroke-width': 2 }, svg);
+    // the fixed dial
+    for (const [q, lab] of [[0, '×1'], [90, '×1¼'], [180, '×1½'], [270, '×1¾']]) {
+      const [a1, b1] = polar(cx, cy, R - 8, q), [a2, b2] = polar(cx, cy, R + 8, q), [lx, ly] = polar(cx, cy, R - 26, q);
+      el('line', { x1: a1, y1: b1, x2: a2, y2: b2, stroke: COL.dial, 'stroke-width': 2 }, svg);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 11.5, fill: COL.dial }, svg, lab);
+    }
+    const [tx, ty] = polar(cx, cy, R, 0), [bx, by] = polar(cx, cy, R, 180);
+    el('line', { x1: tx, y1: ty, x2: bx, y2: by, stroke: COL.dial, 'stroke-width': 1, 'stroke-dasharray': '4 4', 'stroke-opacity': 0.7 }, svg);
+    const A = angles();
+    const near = d => Math.min(Math.abs(d), 360 - Math.abs(d));
+    for (let j = 0; j < 12; j++) {
+      const d = A[j], [x, y] = polar(cx, cy, R, d), [lx, ly] = polar(cx, cy, R + 20, d);
+      const atTop = near(d) < 0.8, atBottom = Math.abs(d - 180) < 3;
+      const fill = j === 0 ? COL.sticker : atTop ? COL.accent : COL.text;
+      el('circle', { cx: x, cy: y, r: atTop || j === 0 ? 6.5 : 5, fill, stroke: atBottom && phase === 'rule' ? COL.good : atTop ? COL.accent : '#0d1117', 'stroke-width': atBottom && phase === 'rule' ? 3 : 1 }, svg);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 12, fill: atTop || atBottom ? COL.text : COL.muted, 'font-weight': atTop || atBottom ? 600 : 400 }, svg, NAMES[j]);
+    }
+  }
+
+  const name = k => NAMES[((Math.round(k) % 12) + 12) % 12];
+  function describe() {
+    const A = angles();
+    if (phase === 'rigid') {
+      // what the half turn points at after a plain rotation
+      const order = A.map((d, j) => [d, j]).sort((a, b) => a[0] - b[0]);
+      let lo = order[0], hi = order[order.length - 1];
+      for (const p of order) { if (p[0] <= 180) lo = p; if (p[0] > 180) { hi = p; break; } }
+      const want = name(r + 1 + 7);
+      return `Plain rotation: ${name(r + 1)} is at the top, but the half turn now points between <b>${NAMES[lo[1]]}</b> and <b>${NAMES[hi[1]]}</b> (${(180 - lo[0]).toFixed(1)}° past ${NAMES[lo[1]]}). ${want}, the note that really belongs there, is ${Math.abs(A[(Math.round(r) + 8) % 12] - 180).toFixed(1)}° off. The spacing still belongs to ${name(r)}’s ring.`;
+    }
+    const whole = Math.abs(r - Math.round(r)) < 0.005;
+    if (whole) {
+      const opp = (Math.round(r) + 7) % 12, d = theta(opp, r);
+      return `Root <b>${name(r)}</b>. Its opposite, under ×1½, is <b>${NAMES[opp]}</b>, ${(180 - d).toFixed(1)}° short of the exact half turn.` + (Math.round(r) % 12 ? ` On ${name(r)}’s ring the notes crowd together just after the top and spread out before it, the same pattern as C’s ring.` : ` Press Next root to move the top to C♯.`) + ``;
+    }
+    const lo = Math.floor(r), frac = r - lo;
+    return `The root is ${Math.round(frac * 100)}% of the way from ${name(lo)} to ${name(lo + 1)}: a frequency with no key of its own. Nothing sits at ×1 or ×1½. Watch the dots: those just before the top move twice as fast as those just after it.`;
+  }
+
+  function update() {
+    draw();
+    $('out').innerHTML = describe();
+    $('log').replaceChildren(...log.map(([a, b]) => { const li = document.createElement('li'); li.innerHTML = `${a} – ${b} <span>7 keys</span>`; return li; }));
+    try { parent.postMessage({ tuningEmbed: 'stepper', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  function record() {
+    if (Math.abs(r - Math.round(r)) > 0.005) return;
+    const a = name(r), b = name(r + 7);
+    if (!log.length || log[log.length - 1][0] !== a) { log.push([a, b]); if (log.length > 13) log.shift(); }
+  }
+
+  const ease = u => u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+  function tween(from, to, ms) {
+    return new Promise(res => {
+      const t0 = performance.now();
+      const stepf = t => {
+        const u = Math.min(1, (t - t0) / ms), e = ease(u);
+        override = from.map((a, j) => { let d = ((to[j] - a + 540) % 360) - 180; return a + d * e; });
+        update();
+        if (u < 1) requestAnimationFrame(stepf); else res();
+      };
+      requestAnimationFrame(stepf);
+    });
+  }
+  const wait = ms => new Promise(res => setTimeout(res, ms));
+
+  async function step() {
+    if (busy) return; busy = true; $('step').disabled = true;
+    const start = Math.round(r) % 12, next = (start + 1) % 12;
+    const now = NAMES.map((_, j) => theta(j, start));
+    if ($('wrong').checked) {
+      const rigid = now.map(a => (a - now[next] + 360) % 360);
+      phase = 'rigid'; r = start;
+      await tween(now, rigid, 700);
+      await wait(1900);
+      phase = 'rule';
+      const target = NAMES.map((_, j) => theta(j, next));
+      await tween(rigid, target, 1100);
+    } else {
+      // slide the root continuously: the rule holds at every moment
+      await new Promise(res => {
+        const t0 = performance.now();
+        const f = t => { const u = Math.min(1, (t - t0) / 1300); r = start + ease(u); override = null; update(); if (u < 1) requestAnimationFrame(f); else res(); };
+        requestAnimationFrame(f);
+      });
+    }
+    override = null; phase = 'rule'; r = next; $('root').value = next * 100;
+    record(); update();
+    pluck(C4 * 2 ** (next / 12)); pluck(C4 * 2 ** ((next + 7) / 12), 0.35);
+    busy = false; $('step').disabled = false;
+  }
+
+  $('step').addEventListener('click', step);
+  $('root').addEventListener('input', e => { if (busy) return; r = e.target.value / 100; if (r >= 12) r = 0; override = null; phase = 'rule'; record(); update(); });
+  $('root').addEventListener('change', e => { if (busy) return; const k = Math.round(e.target.value / 100) % 12; const from = angles(); const to = NAMES.map((_, j) => theta(j, k)); busy = true; tween(from, to, 300).then(() => { override = null; r = k; e.target.value = k * 100; record(); update(); busy = false; }); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  record(); update();
+})();
+</script>
+</body>
+</html>
