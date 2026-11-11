@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tune It Yourself</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --good: #3fb950; --hit: #f85149; --warn: #d29922; --chain: #f0883e;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .now { display: flex; gap: 14px; align-items: center; }
+  .pulse { width: 74px; height: 74px; border-radius: 50%; flex: none; background: var(--hit); opacity: .25; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--bg); }
+  .title { font-size: 15px; font-weight: 600; }
+  .sub { font-size: 13px; color: var(--muted); }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
+  .slider label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 120px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 0; }
+  .btn { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+  .btn.main { border-color: var(--sticker); }
+  .btn.go { border-color: var(--good); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.small { font-size: 12px; padding: 3px 9px; color: var(--muted); }
+  ol.chain { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  ol.chain li { background: var(--code); border-radius: 6px; padding: 5px 8px; border: 1px solid transparent; cursor: pointer; }
+  ol.chain li.cur { border-color: var(--accent); }
+  ol.chain li.todo { color: var(--muted); cursor: default; }
+  ol.chain li .r { float: right; }
+  .ok { color: var(--good); } .bad { color: var(--hit); } .meh { color: var(--warn); }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; margin-top: 10px; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="now">
+    <div class="pulse" id="pulse" aria-hidden="true"></div>
+    <div>
+      <div class="title" id="title"></div>
+      <div class="sub" id="sub"></div>
+    </div>
+  </div>
+  <div class="slider">
+    <label for="knob">Tuning peg</label>
+    <input id="knob" type="range" min="-250" max="250" value="0" aria-label="Turn the tuning peg of the upper note">
+  </div>
+  <div class="row">
+    <button class="btn main" id="sound">&#9654; Sound on</button>
+    <button class="btn go" id="next" disabled>Next fifth &#9654;</button>
+    <button class="btn small" id="cheat">Tune this one for me</button>
+    <button class="btn" id="share" hidden>Share the leftover out</button>
+    <button class="btn small" id="restart">Start again</button>
+  </div>
+  <ol class="chain" id="chain"></ol>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule"><b>Rule:</b> each fifth’s lower note is the note you tuned before, moved into the octave above middle C. Turning the peg changes the upper note. The circle pulses at the wavering rate: the gap between the lower note’s harmonic 3 and the upper note’s harmonic 2. Eleven fifths reach every key; the twelfth must land on the C above middle C, which is already fixed.</p>
+</div>
+
+<script>
+(() => {
+  const C4 = 261.6256, C5 = 2 * C4;
+  const NAMES = ['C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'C♯', 'G♯', 'D♯', 'A♯', 'F', 'C'];
+  const intoOctave = f => { while (f >= C5 * 0.9999) f /= 2; while (f < C4 * 0.9999) f *= 2; return f; };
+  // State: notes[k] is the tuned frequency of the k-th note in the chain, in the octave above middle C.
+  let notes = [C4], k = 0, shared = false, phase = 'tune';     // phase: 'tune' | 'close' | 'shared'
+  let offsets = [];                                              // the starting mistuning for each fifth
+  const rnd = () => (Math.random() < .5 ? -1 : 1) * (6 + Math.random() * 14);
+  offsets = Array.from({ length: 11 }, rnd);
+  let peg = 0;                                                    // tenths of a hundredth of a key
+  const $ = id => document.getElementById(id);
+
+  const upper = (lowF, cents) => lowF * 1.5 * 2 ** (cents / 1200);
+  const waver = (lowF, upF) => Math.abs(3 * lowF - 2 * upF);
+  const centsOf = (lowF, upF) => 1200 * Math.log2(upF / lowF / 1.5);
+  // the fifth currently being heard
+  function current() {
+    if (phase === 'tune') { const lo = notes[k]; return [lo, upper(lo, offsets[k] + peg / 10)]; }
+    if (phase === 'close') { const lo = notes[11]; return [lo, C5]; }
+    return null;
+  }
+
+  // ---- Continuous sound for the fifth being tuned ----
+  let ac, voices = null, on = false;
+  function startSound() {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    const out = ac.createGain(); out.gain.value = 0; out.connect(ac.destination);
+    out.gain.linearRampToValueAtTime(0.06, ac.currentTime + 0.1);
+    const mk = () => Array.from({ length: 8 }, (_, i) => { const o = ac.createOscillator(), g = ac.createGain(); g.gain.value = 1 / (i + 1); o.connect(g); g.connect(out); o.start(); return o; });
+    voices = { out, a: mk(), b: mk() };
+    retune();
+  }
+  function stopSound() {
+    if (!voices) return;
+    const v = voices; voices = null;
+    v.out.gain.cancelScheduledValues(ac.currentTime); v.out.gain.setValueAtTime(v.out.gain.value, ac.currentTime);
+    v.out.gain.linearRampToValueAtTime(0, ac.currentTime + 0.15);
+    setTimeout(() => { [...v.a, ...v.b].forEach(o => { try { o.stop(); } catch (e) {} }); v.out.disconnect(); }, 250);
+  }
+  function retune(pair) {
+    if (!voices) return;
+    const p = pair || current(); if (!p) return;
+    const t = ac.currentTime;
+    voices.a.forEach((o, i) => o.frequency.setTargetAtTime(p[0] * (i + 1), t, 0.02));
+    voices.b.forEach((o, i) => o.frequency.setTargetAtTime(p[1] * (i + 1), t, 0.02));
+  }
+
+  // ---- Pulse at the wavering rate ----
+  let shown = null;
+  function frame(t) {
+    const p = shown;
+    if (p) {
+      const w = waver(p[0], p[1]);
+      const e = Math.abs(Math.cos(Math.PI * w * t / 1000));
+      $('pulse').style.opacity = (0.15 + 0.85 * (w < 0.02 ? 1 : e)).toFixed(3);
+      $('pulse').style.background = w < 0.15 ? 'var(--good)' : w > 4 ? 'var(--hit)' : 'var(--warn)';
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function fifthLabel(i) { return NAMES[i] + '–' + NAMES[i + 1]; }
+  function render() {
+    let p = current();
+    const list = $('chain'); list.replaceChildren();
+    for (let i = 0; i < 12; i++) {
+      const li = document.createElement('li');
+      let pair = null;
+      if (phase === 'shared') pair = [notes[i], notes[i] * 2 ** (7 / 12)];
+      else if (i < k) pair = [notes[i], fixedUp[i]];
+      else if (phase === 'close' && i === 11) pair = [notes[11], C5];
+      let txt = '';
+      if (pair) {
+        const w = waver(pair[0], pair[1]);
+        txt = `<span class="r ${w < 0.15 ? 'ok' : w > 4 ? 'bad' : 'meh'}">${w < 0.15 ? 'steady' : w.toFixed(1) + '/s'}</span>`;
+        li.addEventListener('click', () => { shown = pair; retune(pair); describe(pair, fifthLabel(i)); });
+      } else if (!(phase === 'tune' && i === k)) li.className = 'todo';
+      if ((phase === 'tune' && i === k) || (phase === 'close' && i === 11)) li.className = 'cur';
+      li.innerHTML = `${i + 1}. ${fifthLabel(i)} ${txt}`;
+      list.appendChild(li);
+    }
+    if (p) { shown = p; describe(p, fifthLabel(phase === 'close' ? 11 : k)); }
+    $('next').hidden = phase !== 'tune';
+    $('cheat').hidden = phase !== 'tune';
+    $('share').hidden = phase !== 'close';
+    $('knob').disabled = phase !== 'tune';
+    if (phase === 'tune') $('next').disabled = waver(p[0], p[1]) > 0.15;
+    post();
+  }
+
+  function describe(p, label) {
+    const w = waver(p[0], p[1]), c = centsOf(p[0], p[1]);
+    $('title').textContent = (phase === 'tune' ? `Fifth ${k + 1} of 11: ` : '') + label;
+    $('sub').innerHTML = w < 0.05 ? '<span class="ok">Steady: a pure fifth.</span>'
+      : `Wavering ${w < 1 ? w.toFixed(2) : w.toFixed(1)} times a second · ${Math.abs(c).toFixed(1)} hundredths of a key ${c > 0 ? 'wide' : 'narrow'}`;
+    let msg;
+    if (phase === 'tune') msg = w < 0.15
+      ? `That’s it: the wavering has stopped. Press <b>Next fifth</b>. The note you just tuned becomes the bottom of the next fifth.`
+      : `Turn on the sound and move the <b>tuning peg</b> slowly. The wavering gets slower as you get closer. When it stops, the fifth is pure.`;
+    else if (phase === 'close') msg = `Eleven pure fifths have reached every key. The twelfth, F up to C, has to land on the C that’s already there, and it comes out <b>${Math.abs(c).toFixed(1)} hundredths of a key narrow</b>, wavering about ${Math.round(w)} times a second. That’s the wolf. Press <b>Share the leftover out</b>.`;
+    else { const ws = notes.map(n => waver(n, n * 2 ** (7 / 12))); msg = `Every fifth is now 2 hundredths of a key narrow: the piano’s tuning. None is pure, but none howls. Each wavers gently, between ${Math.min(...ws).toFixed(1)} and ${Math.max(...ws).toFixed(1)} times a second, faster for higher notes. Tap any fifth to hear it.`; }
+    $('out').innerHTML = msg;
+  }
+
+  const fixedUp = [];
+  function lock() {                                   // keep the tuned upper note and move to the next fifth
+    const [lo, up] = current();
+    fixedUp[k] = up;
+    notes[k + 1] = intoOctave(up);
+    k++; peg = 0; $('knob').value = 0;
+    if (k === 11) phase = 'close';
+    render(); retune();
+  }
+  $('next').addEventListener('click', lock);
+  $('cheat').addEventListener('click', () => { peg = Math.round(-offsets[k] * 10); $('knob').value = Math.max(-250, Math.min(250, peg)); peg = -offsets[k] * 10; render(); retune(); });
+  $('knob').addEventListener('input', e => { peg = +e.target.value; render(); retune(); });
+  $('share').addEventListener('click', () => {
+    phase = 'shared';
+    for (let i = 0; i <= 11; i++) notes[i] = C4 * 2 ** (((i * 7) % 12) / 12);
+    render(); shown = [notes[0], notes[0] * 2 ** (7 / 12)]; retune(shown); describe(shown, fifthLabel(0));
+  });
+  $('sound').addEventListener('click', () => {
+    on = !on; $('sound').innerHTML = on ? '&#9632; Sound off' : '&#9654; Sound on';
+    try { if (on) startSound(); else stopSound(); } catch (e) {}
+  });
+  $('restart').addEventListener('click', () => { notes = [C4]; k = 0; phase = 'tune'; peg = 0; $('knob').value = 0; offsets = Array.from({ length: 11 }, rnd); fixedUp.length = 0; render(); retune(); });
+
+  function post() { try { parent.postMessage({ tuningEmbed: 'tune', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {} }
+  new ResizeObserver(post).observe(document.querySelector('.wrap'));
+  render();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

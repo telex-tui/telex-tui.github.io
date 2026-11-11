@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clock Hands</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --band: #d29922;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 0; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button, .seg button, .play { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .chips button { border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; }
+  .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: var(--code); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .play { border: 1px solid var(--sticker); color: var(--text); border-radius: 6px; padding: 5px 12px; }
+  .slider { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; }
+  .slider label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--sticker); min-width: 120px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="dial" aria-label="A dial with two hands: C's hand and a second note's hand, each turning at its note's frequency"></svg>
+  <div class="row">
+    <div class="slider">
+      <label for="time">Time</label>
+      <input id="time" type="range" min="0" max="1000" value="0" aria-label="Time, measured in turns of C's hand">
+    </div>
+  </div>
+  <div class="row"><span>Second hand</span><div class="chips" id="notes"></div></div>
+  <div class="row">
+    <span>Tuning</span>
+    <div class="seg" role="group" aria-label="Tuning of the second note">
+      <button data-t="exact" aria-pressed="true">Exact ratio</button>
+      <button data-t="piano" aria-pressed="false">Piano</button>
+      <button data-t="off" aria-pressed="false">Slightly off</button>
+    </div>
+    <button class="play" id="play">&#9654; Listen together</button>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- Rules ----
+  const C4 = 261.6256;
+  // second-hand notes: name, keys above C, exact ratio as [top, bottom]
+  const CHOICES = [
+    ['E', 4, [5, 4]], ['F', 5, [4, 3]], ['G', 7, [3, 2]], ['A', 9, [5, 3]], ['C′', 12, [2, 1]]
+  ];
+  const OFF = 0.994;                       // "slightly off": 0.6% flat of the exact ratio
+  let pick = 2, tune = 'exact', t = 0;     // t = turns of C's hand
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = { text: cv('--text'), muted: cv('--muted'), border: cv('--border'), sticker: cv('--sticker'), accent: cv('--accent'), band: cv('--band'), code: cv('--code') };
+
+  const ratioOf = () => {
+    const [, keys, [p, q]] = CHOICES[pick];
+    return tune === 'exact' ? p / q : tune === 'piano' ? 2 ** (keys / 12) : (p / q) * OFF;
+  };
+  const maxTurns = () => CHOICES[pick][2][1];   // C turns until an exact pair meets again
+
+  // ---- Sound ----
+  let ac, playing = null;
+  function tone(f, t0, dur, out) {
+    for (let n = 1; n <= 8; n++) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = f * n; g.gain.value = 1 / n;
+      o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + dur + 0.1);
+    }
+  }
+  function listen() {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      if (playing) { try { playing.disconnect(); } catch (e) {} }
+      const t0 = ac.currentTime + 0.02, dur = 4, out = ac.createGain();
+      out.gain.setValueAtTime(0, t0); out.gain.linearRampToValueAtTime(0.07, t0 + 0.05);
+      out.gain.setValueAtTime(0.07, t0 + dur - 0.6); out.gain.linearRampToValueAtTime(0, t0 + dur);
+      out.connect(ac.destination);
+      tone(C4, t0, dur, out); tone(C4 * ratioOf(), t0, dur, out);
+      playing = out;
+    } catch (e) {}
+  }
+
+  function hand(svg, cx, cy, len, turns, color, width) {
+    const a = 2 * Math.PI * turns;
+    const x = cx + len * Math.sin(a), y = cy - len * Math.cos(a);
+    el('line', { x1: cx, y1: cy, x2: x, y2: y, stroke: color, 'stroke-width': width, 'stroke-linecap': 'round' }, svg);
+    el('circle', { cx: x, cy: y, r: width + 2.5, fill: color }, svg);
+  }
+
+  function draw() {
+    const w = Math.max(280, Math.round($('dial').getBoundingClientRect().width || 600));
+    const R = Math.min(w / 2 - 50, 130), cx = w / 2, cy = R + 30, H = 2 * R + 60;
+    const svg = $('dial'); svg.replaceChildren();
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: COL.border, 'stroke-width': 1.5 }, svg);
+    // ratio ticks: a hand that has turned 1¼ times points a quarter turn round, and so on
+    for (const [q, lab] of [[0, '×1'], [0.25, '×1¼'], [0.5, '×1½'], [0.75, '×1¾']]) {
+      const a = 2 * Math.PI * q, sx = Math.sin(a), sy = -Math.cos(a);
+      el('line', { x1: cx + sx * (R - 6), y1: cy + sy * (R - 6), x2: cx + sx * (R + 6), y2: cy + sy * (R + 6), stroke: COL.muted, 'stroke-width': 1.5 }, svg);
+      el('text', { x: cx + sx * (R + 24), y: cy + sy * (R + 24) + 4, 'text-anchor': 'middle', 'font-size': 11.5, fill: COL.muted }, svg, lab);
+    }
+    const r = ratioOf(), name = CHOICES[pick][0];
+    // after exactly one turn of C, mark where the second hand pointed: that is the note's place on the ring
+    if (t >= 1) {
+      const a = 2 * Math.PI * r;
+      el('line', { x1: cx, y1: cy, x2: cx + R * Math.sin(a), y2: cy - R * Math.cos(a), stroke: COL.accent, 'stroke-width': 1, 'stroke-dasharray': '3 3', 'stroke-opacity': 0.7 }, svg);
+      el('circle', { cx: cx + R * Math.sin(a), cy: cy - R * Math.cos(a), r: 5, fill: COL.card || '#161b22', stroke: COL.accent, 'stroke-width': 1.5 }, svg);
+    }
+    hand(svg, cx, cy, R * 0.92, t * r, COL.accent, 3);
+    hand(svg, cx, cy, R * 0.68, t, COL.sticker, 4.5);
+    el('circle', { cx, cy, r: 4, fill: COL.text }, svg);
+    el('text', { x: 8, y: 16, 'font-size': 12, fill: COL.sticker }, svg, 'C’s hand');
+    el('text', { x: 8, y: 32, 'font-size': 12, fill: COL.accent }, svg, name + '’s hand');
+  }
+
+  function update() {
+    draw();
+    const r = ratioOf(), [name, , [p, q]] = CHOICES[pick];
+    const other = t * r;
+    let msg = `C has turned <b>${t.toFixed(2)}</b> times, ${name} <b>${other.toFixed(3)}</b> times.`;
+    if (t < 0.995) msg += ` Drag on to one full turn of C.`;
+    else if (t < 1.005) {
+      const deg = ((r % 1) * 360);
+      msg += ` After one turn of C, ${name}’s hand points <b>${deg.toFixed(1)}°</b> round. ` + (tune === 'piano'
+        ? `That is exactly where the piano’s ${name} sits on the frequency ring.`
+        : tune === 'exact' ? `That is exactly where a note at ${p}:${q} sits on the frequency ring.` : `On the frequency ring, that is where this slightly-off ${name} would sit.`);
+    } else if (t >= maxTurns() - 0.005) {
+      const miss = (other - Math.round(other)) * 360;
+      msg += tune === 'exact'
+        ? ` Both hands are back at the top together: ${q} turns of C take exactly as long as ${p} turns of ${name}.`
+        : ` ${name}’s hand misses the top by <b>${Math.abs(miss).toFixed(1)}°</b>, so the two hands never quite meet again.`;
+    } else msg += ` The dashed line marks where ${name}’s hand pointed after one turn of C.`;
+    $('out').innerHTML = msg;
+    $('rule').innerHTML = `<b>Rule:</b> each hand turns once for every vibration, so ${name}’s hand turns ×${r.toFixed(4)} as fast as C’s. ` +
+      (tune === 'exact' ? `Exact ratio: ${p}:${q}.` : tune === 'piano' ? `Piano: ${CHOICES[pick][1]} keys up, each ×1.0595.` : `Slightly off: 0.6% below ${p}:${q}.`) +
+      ` Time runs from 0 to ${maxTurns()} turns of C.`;
+    [...$('notes').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === pick)));
+    document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === tune)));
+    try { parent.postMessage({ tuningEmbed: 'hands', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  CHOICES.forEach((c, i) => {
+    const b = document.createElement('button'); b.textContent = c[0];
+    b.addEventListener('click', () => { pick = i; t = Math.min(t, maxTurns()); $('time').value = t / maxTurns() * 1000; update(); });
+    $('notes').appendChild(b);
+  });
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { tune = b.dataset.t; update(); }));
+  $('time').addEventListener('input', e => {
+    t = e.target.value / 1000 * maxTurns();
+    if (Math.abs(t - Math.round(t)) < 0.03) t = Math.round(t);   // whole turns of C click into place
+    update();
+  });
+  $('play').addEventListener('click', listen);
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>

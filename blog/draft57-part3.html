@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Frequency Ring, Part 3: Harmonics: Why the Ring Works - Telex</title>
+  <meta name="description" content="Every note hides quieter notes at 2, 3, 4 times its frequency. Dropped onto the frequency ring, they fall into halves, quarters and eighths, which is why G lands half a turn from C.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>The Frequency Ring, Part 3: Harmonics: Why the Ring Works</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 3 of 7 in <a href="#series-index">The Frequency Ring</a>.</p>
+      <p class="series-nav">Previous: <a href="draft57-part2.html">Part 2: One Octave, Rolled into a Ring</a> | Next: <a href="draft57-part4.html">Part 4: Each Note's Ring</a></p>
+<p><a href="draft57-part2.html">Part 2</a> left a question open. C and G at an exact two-against-three sound smooth and steady. Move G by less than a hundredth and the sound wavers. Why should a simple count matter so much?</p>
+<p>The answer is that no note is just one vibration.</p>
+
+<h2>1. The notes hiding inside a note</h2>
+<p>Pluck a string and it vibrates as a whole, swinging back and forth between its two ends. But at the same time, it also vibrates in two halves, each half swinging twice as fast. And in three thirds, three times as fast. And in quarters, fifths, and so on.</p>
+<p>Each of these extra vibrations is a quieter note of its own, called a <strong>harmonic</strong>. Harmonic 1 is the whole string: the note you think you're hearing. Harmonic 2 vibrates exactly twice as fast, harmonic 3 exactly three times as fast, and so on. You don't hear them as separate notes. Together, they're what makes a piano sound like a piano rather than a whistle.</p>
+<aside class="note"><strong>Musicians:</strong> these are the harmonic series, also called overtones or partials. Harmonic 2 is the first overtone, harmonic 3 the second, and so on. On a real piano the strings are slightly stiff, which pushes the upper harmonics a little sharp. This series treats them as exact for now. Part 7 comes back to the difference.</aside>
+
+<h2>2. Part 1, run backwards</h2>
+<p>In Part 1, evenly spaced stickers on the keyboard spread out unevenly on the tuner's chart. Harmonics go the other way. On the tuner's chart, where every hertz is the same width, they're perfectly evenly spaced: each one is the same 130.8 Hz above the last. So what happens when they land on the keyboard?</p>
+<p>Below, the harmonics of C3 sit on the tuner's chart, joined by threads to where they land on the keys. Drag <strong>Harmonics</strong> from 1 to 16, and tap any harmonic to hear it on its own.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/backwards.html" title="Harmonics of C3 on the tuner's chart and on the keyboard" height="520" loading="lazy"></iframe>
+</figure>
+<p>The even spacing turns into bunching. Harmonic 2 is a whole octave up. Harmonic 3 lands on G, and 4 is the next C. Then E, G again, a B♭ that's noticeably flat, and C. After that they crowd in more and more tightly, less than one key apart.</p>
+<p>Some harmonics land almost exactly on a key: G is only 2 hundredths of a key sharp. Others miss: harmonic 5 lands 14 hundredths flat of E, and harmonic 7 lands 31 hundredths flat of B♭. Harmonic 11 lands almost halfway between F and F♯, nowhere near any key at all.</p>
+<p>Press <strong>The whole note</strong> and you hear all of them at once, blended into a single C.</p>
+<aside class="note"><strong>Musicians:</strong> a hundredth of a key is a cent. Harmonic 5 is 14 cents flat of the equal-tempered major third, and harmonic 7 is the 31-cent-flat "harmonic seventh".</aside>
+
+<h2>3. Harmonic rain</h2>
+<p>Now drop the same harmonics onto the frequency ring from Part 2. Each harmonic is halved until it fits inside the octave from C to the next C, the same way Part 2's next octave landed at the same angles as the first. Then it lands at its place by the ring's rule: ×1½ is half a turn.</p>
+<p>Drag <strong>Harmonics</strong> slowly and watch where each one falls.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/rain.html" title="Harmonic rain: harmonics landing on the frequency ring" height="640" loading="lazy"></iframe>
+</figure>
+<p>Harmonic 2 lands on top, on C. Harmonic 3 lands exactly half a turn round. Harmonics 5 and 7 land exactly on the quarter turns. Harmonics 9, 11, 13 and 15 land exactly on the eighths. Each new octave of harmonics halves the spacing.</p>
+<p>That regular pattern isn't a coincidence. Harmonics are evenly spaced in hertz, and the frequency ring is spaced by hertz, so within each octave the harmonics share the ring out evenly. There's one in the first octave, two in the next, then four, then eight. Turn on the <strong>halves</strong>, <strong>quarters</strong> and <strong>eighths</strong> grids to see them.</p>
+<p>Now tap the piano's G. It sits 0.6° from the spot where harmonic 3 landed. E sits 3.6° from harmonic 5. The piano's notes don't land on the grid, but some of them land very close to it. <strong>That's why ×1½ is half a turn, and why G sounds good with C: G lives right where C's own harmonic 3 already is.</strong></p>
+
+<h2>4. Whose grid?</h2>
+<p>Not every note sits near a grid line made by C's harmonics. Tap F: no harmonic of C lands on it. The closest, harmonic 11, is about 15° away.</p>
+<p>Switch <strong>Harmonics of</strong> to <strong>a low F</strong>, and turn on the <strong>thirds</strong> grid. This F is chosen so that its harmonic 3 is a C. Its harmonics fall on the thirds: F a third of a turn round, A two thirds round, and C at the top. So F lives on a different grid from G, one made by a lower note whose harmonics C shares.</p>
+<p>That's the general rule. A note whose frequency is a simple fraction <i>p</i>/<i>q</i> of C sits on the <i>q</i>-way grid. G is 3/2 of C, so it sits on the halves. E is 5/4, on the quarters. F is 4/3, on the thirds.</p>
+<p>It also explains something odd about counting. Next to G, C is the "two" in two-against-three. Next to F, C is the "three". The number belongs to the pair, not to the note: it says which grid the pair shares.</p>
+
+<h2>5. The square</h2>
+<p>Turn on <strong>The square</strong>. Harmonics 4, 5, 6 and 7 of C (a C, an E, a G and harmonic 7) sit at exactly a quarter turn apart. Four notes, one perfect square.</p>
+<p>The piano has no key at harmonic 7. Its nearest key, B♭, misses that corner by about 11°. Tap it to see.</p>
+<aside class="note"><strong>Musicians:</strong> the square is a dominant seventh chord in its pure 4:5:6:7 tuning, sometimes called the barbershop seventh. The equal-tempered minor seventh is 31 cents sharp of it.</aside>
+
+<h2>6. So why does slightly-off waver?</h2>
+<p>When C and G are exactly two-against-three, G's harmonic 2 and C's harmonic 3 are the same frequency. They land on the same spot on the ring and vibrate in step forever.</p>
+<p>Nudge G slightly off and those two harmonics are no longer quite the same. They drift in and out of step: together, then cancelling, then together again. That drifting is the wavering. For Part 2's slightly-off G it happens about five times a second, and for the piano's G a little under once a second. Part 7 measures it properly.</p>
+
+<h2>7. Two meanings of "fundamental"</h2>
+<p>You'll often hear harmonic 1 called the <strong>fundamental</strong>. That's one meaning: a note's own slowest vibration, the whole string.</p>
+<p>But the word gets used a second way too, and it helps to keep them apart. In Part 2, C's hand and G's hand met at the top once every two turns of C. That happens 130.8 times a second: exactly the frequency of the C an octave below. C4 and G4 are harmonics 2 and 3 of that lower C3. So the second meaning is the shared, slower pulse that two notes fit into together. It's a third note, the one that both notes are harmonics of.</p>
+
+<h2>What comes next</h2>
+<p>The frequency ring is spaced by hertz, and harmonics are evenly spaced in hertz, so harmonics fall onto the ring in a regular grid. Notes whose frequencies are simple fractions of C land on that grid, and that's what makes them sound steady together.</p>
+<p>So far every ring has had C at the top. <a href="draft57-part4.html">Part 4</a> moves the top to other notes and finds that each note needs a ring of its own, and that the note sitting opposite changes every time.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft57-part1.html">Part 1: Stickers and Elastic</a></li>
+          <li><a href="draft57-part2.html">Part 2: One Octave, Rolled into a Ring</a></li>
+          <li><strong>Part 3: Harmonics: Why the Ring Works</strong></li>
+          <li><a href="draft57-part4.html">Part 4: Each Note's Ring</a></li>
+          <li><a href="draft57-part5.html">Part 5: Chords as Shapes</a></li>
+          <li><a href="draft57-part6.html">Part 6: Pythagoras and the Maker's Problem</a></li>
+          <li><a href="draft57-part7.html">Part 7: The Tuner Returns</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pythagoras's Hops</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --chain: #f0883e; --miss: #f85149; --good: #3fb950;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 10px 0 0; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button, .btn { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button { border: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .btn { border: 1px solid var(--border); border-radius: 6px; padding: 5px 11px; color: var(--text); }
+  .btn.main { border-color: var(--chain); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="C's ring, with a chain of hops drawn on it"></svg>
+  <div class="row">
+    <span>Hop by</span>
+    <div class="seg" id="by" role="group" aria-label="Hop size">
+      <button data-v="fifth" aria-pressed="true">Fifths (×1½)</button>
+      <button data-v="third" aria-pressed="false">Major thirds (×1¼)</button>
+    </div>
+    <span>Tuning</span>
+    <div class="seg" id="tune" role="group" aria-label="Tuning">
+      <button data-v="pure" aria-pressed="true">Pure</button>
+      <button data-v="piano" aria-pressed="false">Piano</button>
+    </div>
+  </div>
+  <div class="row">
+    <button class="btn main" id="hop">Hop &#9654;</button>
+    <button class="btn" id="all">All the way</button>
+    <button class="btn" id="reset">Start again</button>
+    <button class="btn" id="hearPure">&#9654; A pure fifth</button>
+    <button class="btn" id="hearWolf">&#9654; The leftover fifth</button>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  const C4 = 261.6256;
+  const SHARP = ['C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'C♯', 'G♯', 'D♯', 'A♯', 'E♯', 'B♯'];
+  const THIRDS = ['C', 'E', 'G♯', 'B♯'];
+  let by = 'fifth', tune = 'pure', hops = 0;
+  const step = () => by === 'fifth' ? (tune === 'pure' ? 1.5 : 2 ** (7 / 12)) : (tune === 'pure' ? 1.25 : 2 ** (4 / 12));
+  const full = () => by === 'fifth' ? 12 : 3;                        // hops a keyboard needs to come back to C
+  const fold = x => x / 2 ** Math.floor(Math.log2(x + 1e-12));
+  const at = k => fold(step() ** k);                                 // where hop k lands, as a ratio to C
+  const deg = r => 360 * (r - 1);
+  const hundredths = r => 1200 * Math.log2(r);                       // hundredths of a key above C
+  const label = k => by === 'fifth' ? SHARP[k] : THIRDS[k];
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = {}; ['text','muted','border','sticker','accent','chain','miss','good','code','card'].forEach(k => COL[k] = cv('--' + k));
+  const polar = (cx, cy, R, d) => [cx + R * Math.sin(d * Math.PI / 180), cy - R * Math.cos(d * Math.PI / 180)];
+
+  let ac;
+  function pair(lo, hi) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t0 = ac.currentTime + 0.02, out = ac.createGain();
+      out.gain.setValueAtTime(0, t0); out.gain.linearRampToValueAtTime(0.07, t0 + 0.04);
+      out.gain.setValueAtTime(0.07, t0 + 3.3); out.gain.linearRampToValueAtTime(0, t0 + 3.8);
+      out.connect(ac.destination);
+      for (const f of [lo, hi]) for (let n = 1; n <= 8; n++) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f * n; g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 3.85); }
+    } catch (e) {}
+  }
+  function pluck(f) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime + 0.02, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.12, t + 0.01); out.gain.exponentialRampToValueAtTime(0.0005, t + 1.4);
+      out.connect(ac.destination);
+      for (let n = 1; n <= 8; n++) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f * n; g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t); o.stop(t + 1.5); }
+    } catch (e) {}
+  }
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const R = Math.min(w / 2 - 46, 150), cx = w / 2, cy = R + 40, H = 2 * R + 84;
+    const svg = $('v'); svg.replaceChildren();
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: COL.border, 'stroke-width': 2 }, svg);
+    for (const [q, lab] of [[0, '×1'], [90, '×1¼'], [180, '×1½'], [270, '×1¾']]) {
+      const [a1, b1] = polar(cx, cy, R - 6, q), [a2, b2] = polar(cx, cy, R + 6, q), [lx, ly] = polar(cx, cy, R - 22, q);
+      el('line', { x1: a1, y1: b1, x2: a2, y2: b2, stroke: COL.muted, 'stroke-width': 1.4 }, svg);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 11, fill: COL.muted }, svg, lab);
+    }
+    // the chain: straight lines from each hop to the next
+    const pts = [];
+    for (let k = 0; k <= hops; k++) pts.push(polar(cx, cy, R, deg(at(k))));
+    if (pts.length > 1) el('polyline', { points: pts.map(p => p.join(',')).join(' '), fill: 'none', stroke: COL.chain, 'stroke-width': 1.6, 'stroke-opacity': 0.75 }, svg);
+    // C, where the chain started
+    const [sx, sy] = polar(cx, cy, R, 0);
+    el('circle', { cx: sx, cy: sy, r: 7, fill: COL.sticker, stroke: '#7a5c00' }, svg);
+    for (let k = 1; k <= hops; k++) {
+      const d = deg(at(k)), [x, y] = polar(cx, cy, R, d), [lx, ly] = polar(cx, cy, R + 19, d);
+      const last = k === full();
+      const missed = last && Math.abs(hundredths(at(k))) > 0.5 && Math.abs(hundredths(at(k)) - 1200) > 0.5;
+      el('circle', { cx: x, cy: y, r: last ? 6.5 : 5, fill: last ? (missed ? COL.miss : COL.good) : COL.chain, stroke: '#0d1117' }, svg);
+      if (!last || missed) el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 11.5, fill: last ? COL.miss : COL.text, 'font-weight': last ? 600 : 400 }, svg, label(k));
+    }
+    el('text', { x: sx, y: sy - 14, 'text-anchor': 'middle', 'font-size': 12, fill: COL.text, 'font-weight': 600 }, svg, 'C');
+    // magnify the top when the chain has come round
+    if (hops >= full()) {
+      const g = el('g', {}, svg), mx = cx, my = cy;
+      const h = hundredths(at(full())), off = h > 600 ? h - 1200 : h;
+      if (Math.abs(off) > 0.5) {
+        const wBox = Math.min(220, w - 40), x0 = mx - wBox / 2, y0 = my - 26;
+        el('rect', { x: x0, y: y0, width: wBox, height: 56, rx: 6, fill: COL.code, stroke: COL.border }, g);
+        el('text', { x: mx, y: y0 + 15, 'text-anchor': 'middle', 'font-size': 10.5, fill: COL.muted }, g, 'the top, magnified');
+        const scale = (wBox - 40) / 100, base = mx;            // 100 hundredths (one key) across
+        el('line', { x1: x0 + 14, x2: x0 + wBox - 14, y1: y0 + 36, y2: y0 + 36, stroke: COL.border, 'stroke-width': 2 }, g);
+        el('circle', { cx: base, cy: y0 + 36, r: 5.5, fill: COL.sticker }, g);
+        el('circle', { cx: base + off * scale * (off > 0 ? 1 : 1), cy: y0 + 36, r: 5.5, fill: COL.miss }, g);
+        el('text', { x: base, y: y0 + 51, 'text-anchor': 'middle', 'font-size': 10, fill: COL.text }, g, 'C');
+        el('text', { x: base + off * scale, y: y0 + 51, 'text-anchor': 'middle', 'font-size': 10, fill: COL.miss }, g, label(full()));
+      }
+    }
+  }
+
+  function update() {
+    draw();
+    const name = by === 'fifth' ? 'fifth' : 'major third';
+    let msg;
+    if (hops === 0) msg = `Start at C and hop up by ${by === 'fifth' ? '×1½' : '×1¼'}, folding each hop back into the octave. A keyboard needs ${full()} hops to come back round to C.`;
+    else if (hops < full()) msg = `Hop ${hops}: <b>${label(hops)}</b>, at ×${at(hops).toFixed(4)} of C. ${full() - hops} more hop${full() - hops === 1 ? '' : 's'} to come back to C.`;
+    else {
+      const h = hundredths(at(full())), off = h > 600 ? h - 1200 : h;
+      if (Math.abs(off) < 0.5) msg = `${full()} hops of the piano’s ${name} land exactly on <b>C</b>: the chain closes. Each piano ${name} is ${by === 'fifth' ? 'about 2 hundredths of a key narrower' : 'about 14 hundredths of a key wider'} than pure, and that is what makes it close.`;
+      else msg = `${full()} pure hops land on <b>${label(full())}</b>, not C: <b>${Math.abs(off).toFixed(1)} hundredths of a key ${off > 0 ? 'past' : 'short of'}</b> C. The chain doesn’t close. (On the ring that is ${Math.abs(deg(at(full())) - (off > 0 ? 0 : 360)).toFixed(1)}°, but compare gaps in hundredths of a key, not degrees: the ring’s spacing isn’t even.)`;
+    }
+    $('out').innerHTML = msg;
+    $('rule').innerHTML = `<b>Rule:</b> each hop multiplies by ${tune === 'pure' ? (by === 'fifth' ? 'exactly 3/2' : 'exactly 5/4') : (by === 'fifth' ? '2^(7/12), the piano’s seven keys' : '2^(4/12), the piano’s four keys')}, then halves until it fits between C and the next C. The ring is C’s ring. A hundredth of a key is ×1.000578.`;
+    document.querySelectorAll('#by button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === by)));
+    document.querySelectorAll('#tune button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === tune)));
+    $('hop').disabled = $('all').disabled = hops >= full();
+    try { parent.postMessage({ tuningEmbed: 'pythag', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  $('hop').addEventListener('click', () => { if (hops < full()) { hops++; pluck(C4 * at(hops)); update(); } });
+  $('all').addEventListener('click', () => { hops = full(); update(); });
+  $('reset').addEventListener('click', () => { hops = 0; update(); });
+  document.querySelectorAll('#by button').forEach(b => b.addEventListener('click', () => { by = b.dataset.v; hops = 0; update(); }));
+  document.querySelectorAll('#tune button').forEach(b => b.addEventListener('click', () => { tune = b.dataset.v; update(); }));
+  // A pure fifth, and the fifth left over when eleven pure fifths are used and the twelfth must close the circle.
+  const left = 1.5 ** 11 / 2 ** 6;                       // E sharp after eleven pure fifths, folded
+  $('hearPure').addEventListener('click', () => pair(C4 * left / 2, C4 * left / 2 * 1.5));
+  $('hearWolf').addEventListener('click', () => pair(C4 * left / 2, C4));
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>

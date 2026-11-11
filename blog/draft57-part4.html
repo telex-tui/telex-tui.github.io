@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Frequency Ring, Part 4: Each Note's Ring - Telex</title>
+  <meta name="description" content="Put a different note at the top of the frequency ring and it can't just be rotated: it has to be re-stretched. Hopping from each note to its opposite builds the circle of fifths.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>The Frequency Ring, Part 4: Each Note's Ring</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 4 of 7 in <a href="#series-index">The Frequency Ring</a>.</p>
+      <p class="series-nav">Previous: <a href="draft57-part3.html">Part 3: Harmonics: Why the Ring Works</a> | Next: <a href="draft57-part5.html">Part 5: Chords as Shapes</a></p>
+<p>Every ring so far has had C at the top. C was the <strong>ring's root</strong>: the note every other note is measured against. G sat opposite it, half a turn round, because G vibrates ×1½ as fast as C.</p>
+<p>But C isn't special. Every note has a note that vibrates ×1½ as fast as it does. So what does the ring look like with D at the top, or F♯?</p>
+
+<h2>1. The wrong way first</h2>
+<p>The obvious move is to turn the ring until the new root reaches the top, the way you'd turn a clock face. Try it below. Leave <strong>Try a plain rotation first</strong> ticked and press <strong>Next root</strong>.</p>
+<p>The purple dial never moves. It's the ring's rule written on glass: ×1 at the top, ×1½ at the bottom. Whatever sits under ×1½ is the root's opposite.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/stepper.html" title="The stepper: changing the ring's root" height="600" loading="lazy"></iframe>
+</figure>
+<p>A plain rotation doesn't work. When C♯ turns to the top, the bottom of the dial points between G and A♭, and A♭, the note that really belongs there, is about 10° away. Then the ring re-stretches, and A♭ slides into place.</p>
+<p>The reason is the stretch from Part 1. On the frequency ring, notes crowd together just after the top and spread out just before it, and that pattern is anchored to the root. Turning the ring carries C's crowding round with it, so it ends up in the wrong place. A new root needs a new stretch: <strong>every note needs a ring of its own.</strong></p>
+<p>That also means you can only read ratios on a ring by measuring from its root. On C's ring, C to E♭ spans 68°, but E to G spans 86°. Both are the same step, three keys, but only the first one starts at the root.</p>
+
+<h2>2. In slow motion</h2>
+<p>Now drag <strong>Root, in slow motion</strong>. Instead of jumping from key to key, the root slides smoothly through every frequency in between.</p>
+<p>Watch the dots. They all drift the same way, but not at the same speed: the dots just before the top move twice as fast as the dots just after it. That uneven drift is the ring re-stretching as you go.</p>
+<p>Stop halfway between two keys. Nothing sits at ×1, and nothing sits at ×1½. The ring's root is a frequency, not a key, and halfway between two keys there's no key to put there. Let go and the root snaps to the nearest key.</p>
+<p>Every time a key reaches the top, the list beside the ring logs it with its opposite: C with G, C♯ with A♭, D with A. However you get there, the opposite is always seven keys above the root.</p>
+
+<h2>3. Hop to the opposite</h2>
+<p>Here's a different game. Start at C. Its opposite is G, so make G the root. G's opposite is D, so make D the root. Keep hopping.</p>
+<p>On the right, each new root goes one twelfth of a turn further round a second circle, in the order the hops reach it.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/hops.html" title="Hop to the opposite: building a chain of roots" height="460" loading="lazy"></iframe>
+</figure>
+<p>Every hop is seven keys up. After twelve hops, every one of the twelve notes has had a turn at the top, and the chain arrives back at C, 84 keys higher: exactly seven octaves. The chain closes into a circle.</p>
+<aside class="note"><strong>Musicians:</strong> that second circle is the circle of fifths, built here one hop at a time. On the frequency ring, a note's fifth sits opposite it, so the circle of fifths is a chain of opposites. It also suggests one way to see why neighbors on the circle of fifths feel closely related: each hop joins two notes that share a harmonic, as Part 3 showed.</aside>
+
+<h2>4. Twelve rings, one shape</h2>
+<p>As you step or hop, notice that every root's ring looks the same. The notes crowd together just after the top and spread out before it in exactly the same pattern, whichever note is at the top. Only the names move.</p>
+<p>That's not automatic. It happens because of how pianos are tuned: every step from one key to the next is the same ×1.0595, wherever you are on the keyboard. Part 6 shows what happens with other tunings. Some of the twelve rings come out lopsided, and the chain of hops doesn't quite close.</p>
+
+<h2>What comes next</h2>
+<p>A ring's shape is anchored to its root. Change the root and the ring has to be re-stretched, not just turned, and the note opposite the root changes with it. Hopping from opposite to opposite visits all twelve notes and comes home.</p>
+<p>So far we've mostly looked at pairs of notes. <a href="draft57-part5.html">Part 5</a> plays three notes at once. On the frequency ring, chords become triangles, and some of the most familiar chords turn out to have remarkably tidy shapes.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft57-part1.html">Part 1: Stickers and Elastic</a></li>
+          <li><a href="draft57-part2.html">Part 2: One Octave, Rolled into a Ring</a></li>
+          <li><a href="draft57-part3.html">Part 3: Harmonics: Why the Ring Works</a></li>
+          <li><strong>Part 4: Each Note's Ring</strong></li>
+          <li><a href="draft57-part5.html">Part 5: Chords as Shapes</a></li>
+          <li><a href="draft57-part6.html">Part 6: Pythagoras and the Maker's Problem</a></li>
+          <li><a href="draft57-part7.html">Part 7: The Tuner Returns</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

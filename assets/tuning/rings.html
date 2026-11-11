@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Twelve Rings</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --good: #3fb950; --miss: #f85149; --warn: #d29922;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .cell { background: var(--code); border-radius: 6px; padding: 6px 4px 4px; text-align: center; border: 1px solid transparent; }
+  .cell.pure { border-color: var(--good); }
+  .cell svg { display: block; width: 100%; height: auto; }
+  .cell .name { font-size: 12.5px; font-weight: 600; }
+  .cell .miss { font-size: 11px; color: var(--muted); min-height: 1.3em; }
+  .cell.pure .miss { color: var(--good); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 12px 0 0; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; border: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .seg button:disabled { opacity: .4; cursor: default; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="grid" id="grid"></div>
+  <div class="row">
+    <span>Tuning</span>
+    <div class="seg" id="tune" role="group" aria-label="Tuning">
+      <button data-v="pure" aria-pressed="true">Pure, for C</button>
+      <button data-v="piano" aria-pressed="false">Piano</button>
+    </div>
+    <span>D is</span>
+    <div class="seg" id="dsw" role="group" aria-label="Which pure D">
+      <button data-v="98" aria-pressed="true">9/8</button>
+      <button data-v="109" aria-pressed="false">10/9</button>
+    </div>
+  </div>
+  <div class="row">
+    <span>Chord on each root</span>
+    <div class="seg" id="kind" role="group" aria-label="Kind of chord">
+      <button data-v="major" aria-pressed="true">4:5:6 (root, +4 keys, +7 keys)</button>
+      <button data-v="minor" aria-pressed="false">10:12:15 (root, +3, +7)</button>
+    </div>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const BASE = [[1, 1], [16, 15], [9, 8], [6, 5], [5, 4], [4, 3], [45, 32], [3, 2], [8, 5], [5, 3], [9, 5], [15, 8]];
+  let tune = 'pure', d109 = false, kind = 'major';
+  const ratio = j => {
+    if (tune === 'piano') return 2 ** (j / 12);
+    const [p, q] = j === 2 && d109 ? [10, 9] : BASE[j];
+    return p / q;
+  };
+  const fold = x => x / 2 ** Math.floor(Math.log2(x + 1e-12));
+  const rel = (j, root) => fold(ratio(j) / ratio(root));                      // j's ratio to the root
+  const cents = r => 1200 * Math.log2(r);
+  const chord = root => kind === 'major' ? [root, (root + 4) % 12, (root + 7) % 12] : [root, (root + 3) % 12, (root + 7) % 12];
+  const target = () => kind === 'major' ? [5 / 4, 3 / 2] : [6 / 5, 3 / 2];
+  function miss(root) {                                                       // worst miss, in hundredths of a key
+    const [, a, b] = chord(root), [ta, tb] = target();
+    return Math.max(Math.abs(cents(rel(a, root) / ta)), Math.abs(cents(rel(b, root) / tb)));
+  }
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = {}; ['text','muted','border','sticker','good','miss','warn'].forEach(k => COL[k] = cv('--' + k));
+  const polar = (c, R, d) => [c + R * Math.sin(d * Math.PI / 180), c - R * Math.cos(d * Math.PI / 180)];
+
+  function ring(root) {
+    const S = 120, c = 60, R = 46;
+    const svg = el('svg', { viewBox: `0 0 ${S} ${S}`, 'aria-label': NAMES[root] + "'s ring" });
+    el('circle', { cx: c, cy: c, r: R, fill: 'none', stroke: COL.border, 'stroke-width': 1.5 }, svg);
+    // the exact spots a pure chord would use, as faint ticks
+    for (const t of [0, ...target()]) { const d = 360 * (t - 1); const [x1, y1] = polar(c, R - 5, d), [x2, y2] = polar(c, R + 5, d); el('line', { x1, y1, x2, y2, stroke: COL.muted, 'stroke-width': 1 }, svg); }
+    const ch = chord(root), m = miss(root), pure = m < 0.05;
+    el('polygon', { points: ch.map(j => polar(c, R, 360 * (rel(j, root) - 1)).join(',')).join(' '), fill: pure ? COL.good : COL.warn, 'fill-opacity': 0.18, stroke: pure ? COL.good : m > 15 ? COL.miss : COL.warn, 'stroke-width': 1.6 }, svg);
+    for (let j = 0; j < 12; j++) {
+      const [x, y] = polar(c, R, 360 * (rel(j, root) - 1));
+      el('circle', { cx: x, cy: y, r: j === root ? 3.6 : ch.includes(j) ? 3.2 : 1.8, fill: j === 0 ? COL.sticker : ch.includes(j) ? COL.text : COL.muted }, svg);
+    }
+    return { svg, m, pure };
+  }
+
+  function update() {
+    const grid = $('grid'); grid.replaceChildren();
+    const pureList = [], worst = { m: 0, r: 0 };
+    for (let root = 0; root < 12; root++) {
+      const { svg, m, pure } = ring(root);
+      const cell = document.createElement('div'); cell.className = 'cell' + (pure ? ' pure' : '');
+      cell.appendChild(svg);
+      const n = document.createElement('div'); n.className = 'name'; n.textContent = NAMES[root] + '’s ring'; cell.appendChild(n);
+      const t = document.createElement('div'); t.className = 'miss'; t.textContent = pure ? 'pure' : 'off by ' + m.toFixed(1); cell.appendChild(t);
+      grid.appendChild(cell);
+      if (pure) pureList.push(NAMES[root]);
+      if (m > worst.m) { worst.m = m; worst.r = root; }
+    }
+    const what = kind === 'major' ? '4:5:6 chords' : '10:12:15 chords';
+    $('out').innerHTML = tune === 'piano'
+      ? `On a piano, all twelve rings are the same shape, and none of the ${what} is pure. Every one is off by the same <b>${worst.m.toFixed(1)}</b> hundredths of a key. Nothing is perfect, and nothing is bad.`
+      : `Tuned pure for C (D as ${d109 ? '10/9' : '9/8'}): <b>${pureList.length}</b> of 12 ${what} are pure${pureList.length ? ': ' + pureList.join(', ') : ''}. The worst is on <b>${NAMES[worst.r]}</b>, off by ${worst.m.toFixed(1)} hundredths of a key.`;
+    $('rule').innerHTML = `<b>Rule:</b> each small ring is one root’s frequency ring, with all twelve notes placed by their ratio to that root. The triangle is the chord built on the root; the ticks mark where a pure chord’s notes would sit. “Off by” is the chord’s worst note, in hundredths of a key. ` +
+      (tune === 'pure' ? '<b>Pure, for C:</b> C♯ 16/15, D 9/8 or 10/9, E♭ 6/5, E 5/4, F 4/3, F♯ 45/32, G 3/2, A♭ 8/5, A 5/3, B♭ 9/5, B 15/8.' : '<b>Piano:</b> every key ×1.0595.');
+    document.querySelectorAll('#tune button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === tune)));
+    document.querySelectorAll('#dsw button').forEach(b => { b.setAttribute('aria-pressed', String((b.dataset.v === '109') === d109)); b.disabled = tune === 'piano'; });
+    document.querySelectorAll('#kind button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === kind)));
+    try { parent.postMessage({ tuningEmbed: 'rings', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  document.querySelectorAll('#tune button').forEach(b => b.addEventListener('click', () => { tune = b.dataset.v; update(); }));
+  document.querySelectorAll('#dsw button').forEach(b => b.addEventListener('click', () => { d109 = b.dataset.v === '109'; update(); }));
+  document.querySelectorAll('#kind button').forEach(b => b.addEventListener('click', () => { kind = b.dataset.v; update(); }));
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>

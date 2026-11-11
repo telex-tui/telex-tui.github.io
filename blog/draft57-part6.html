@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Frequency Ring, Part 6: Pythagoras and the Maker's Problem - Telex</title>
+  <meta name="description" content="Pure fifths make perfect sense on one ring, but twelve of them overshoot the octave. An instrument with fixed keys has to hide the leftover somewhere, and the piano shares it out.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>The Frequency Ring, Part 6: Pythagoras and the Maker's Problem</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 6 of 7 in <a href="#series-index">The Frequency Ring</a>.</p>
+      <p class="series-nav">Previous: <a href="draft57-part5.html">Part 5: Chords as Shapes</a> | Next: <a href="draft57-part7.html">Part 7: The Tuner Returns</a></p>
+<p>Part 5 ended with a crack. Tuned pure for C, the chords on C, F and G drew perfect shapes, but D, F, A came out lopsided. This part shows that the crack isn't a mistake in the tuning table. It's built into the numbers, and every maker of keyboard instruments has had to decide where to put it.</p>
+
+<h2>1. The pure answer</h2>
+<p>The tradition credits Pythagoras, about 2,500 years ago, with the first tuning recipe: build every note from pure fifths. Start at C. Multiply by exactly 3/2 to get G. Multiply again to get D, folding it back down an octave so it stays between C and the next C. Keep going: A, E, B, F♯.</p>
+<p>It makes complete sense. Every hop is the smoothest, steadiest pair there is after the octave, the two-against-three from Part 2. A handful of hops gives the notes of a scale, and every neighbouring pair in the chain is perfect.</p>
+<p>Below, every hop is drawn on C's ring. Press <strong>Hop</strong> a few times and watch the chain criss-cross the ring.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/pythag.html" title="Pythagoras's hops on C's ring" height="640" loading="lazy"></iframe>
+</figure>
+
+<h2>2. Keep going</h2>
+<p>A keyboard needs all twelve notes, so keep hopping until the chain comes back round to the top. In Part 4, on the piano, it closed exactly on C after twelve hops.</p>
+<p>With pure hops, it doesn't. The twelfth hop lands on a note called B♯, and B♯ isn't C. It's 23.5 hundredths of a key too high: about a quarter of a key. Twelve pure fifths multiply to 129.7, and seven octaves multiply to 128. They were never going to meet.</p>
+<p>Switch to <strong>Major thirds</strong>, the ×1¼ that put E a quarter turn round. Three pure thirds should get back to C as well, but they stop short, 41 hundredths of a key below it.</p>
+<p>One warning about reading the ring here. The fifths' gap looks like 4.9° and the thirds' gap like 16.9°, which makes the second look more than three times as big. In hundredths of a key, it's less than twice as big. Because the ring is stretched, the same musical gap takes up more angle just before the top than just after it. That's why the readout always gives gaps in hundredths of a key.</p>
+<aside class="note"><strong>Musicians:</strong> the fifths' leftover is the Pythagorean comma, about 23.5 cents. The thirds' shortfall is the lesser diesis, about 41 cents. In pure tuning, B♯ and C really are different notes. Enharmonic spellings name different pitches until a tuning forces them together.</aside>
+
+<h2>3. The maker's problem</h2>
+<p>A singer or a violinist can nudge every note as they go, a little higher here, a little lower there, so the music stays pure. An instrument maker can't. Each key gets one string, tuned to one pitch, and that's the pitch it plays in every piece.</p>
+<p>So the leftover has to go somewhere. Tune eleven pure fifths and the twelfth, the one that closes the circle, comes out a quarter of a key too narrow. Press <strong>A pure fifth</strong>, then <strong>The leftover fifth</strong>. The pure one is steady. The leftover one wavers about seven times a second. Old tuners had a name for it: the wolf, because it howls.</p>
+<p>Thirds are just as stubborn. Here's the tuning from Part 5, applied to every root at once. Each small ring is one root's own ring, as in Part 4, and the triangle is the 4:5:6 chord built on that root.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/rings.html" title="Twelve rings: the chord on every root" height="900" loading="lazy"></iframe>
+</figure>
+<p>Tuned pure for C, six of the twelve chords are perfect. The others are off, the worst by 41 hundredths of a key, and you can see the lopsided triangles. The ratios that made C's chords perfect have pushed other roots' notes off their spots.</p>
+<p>Now try the <strong>D is</strong> switch. With D at 9/8, G's chord is pure. With D at 10/9, G's chord breaks, but the D, F, A chord from Part 5 becomes pure (switch to <strong>10:12:15</strong> to check). There's no D that keeps both: it's one or the other. The two Ds differ by 21.5 hundredths of a key, which is exactly how far off the D ring's chord is in the default setting.</p>
+<aside class="note"><strong>Musicians:</strong> with D at 9/8, V is pure and ii isn't; with D at 10/9, ii is pure and V isn't. The two Ds differ by the syntonic comma, 81/80, about 21.5 cents.</aside>
+
+<h2>4. The maker's way out</h2>
+<p>Switch the twelve rings to <strong>Piano</strong>. Every ring becomes the same shape, and none of the chords is pure. Every 4:5:6 chord is off by the same 13.7 hundredths of a key. Nothing is perfect, and nothing howls.</p>
+<p>This is equal temperament, the piano's tuning, and it's the ×1.0595 from Part 1. Instead of hiding the whole leftover in one fifth, it shaves a twelfth of it off every fifth: about 2 hundredths of a key each. Twelve slightly narrow fifths fit exactly into seven octaves, so the chain of hops closes, as it did in Part 4. Switch the hops above to <strong>Piano</strong> to see.</p>
+<p>The fifths barely notice: their 2 hundredths are the slow swell you heard from the piano's G in Part 2. The thirds pay most: every major third is 13.7 hundredths of a key wider than pure, enough that three of them close up the octave they used to fall short of. That's the slight lean you saw in Part 5's triangles.</p>
+<p>Equal temperament isn't the only answer. For centuries, makers tried other ways to share out the leftover: favouring the common keys, letting the rare ones suffer. But it's the answer that lets every key, and every ring, be the same.</p>
+<aside class="note"><strong>Musicians:</strong> between Pythagorean tuning and equal temperament came meantone temperaments, which sacrifice fifths to purify thirds, and well temperaments, which give each key a slightly different character. In equal temperament every fifth is about 1.96 cents narrow and every major third 13.7 cents wide.</aside>
+
+<h2>What comes next</h2>
+<p>Pure fifths and pure thirds never close the circle. A fixed keyboard has to put the leftover somewhere, and the piano spreads it evenly: every fifth a hair narrow, every third noticeably wide, and every key the same.</p>
+<p>The tuner from Part 1 has to make those small, deliberate misses by ear. <a href="draft57-part7.html">Part 7</a> shows how: by listening to the wavering, and counting it.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft57-part1.html">Part 1: Stickers and Elastic</a></li>
+          <li><a href="draft57-part2.html">Part 2: One Octave, Rolled into a Ring</a></li>
+          <li><a href="draft57-part3.html">Part 3: Harmonics: Why the Ring Works</a></li>
+          <li><a href="draft57-part4.html">Part 4: Each Note's Ring</a></li>
+          <li><a href="draft57-part5.html">Part 5: Chords as Shapes</a></li>
+          <li><strong>Part 6: Pythagoras and the Maker's Problem</strong></li>
+          <li><a href="draft57-part7.html">Part 7: The Tuner Returns</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

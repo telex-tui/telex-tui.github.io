@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harmonic Rain</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --band: #d29922; --harm: #3fb950;
+    --g2: #f0883e; --g3: #bc8cff; --g4: #58a6ff; --g8: #8b949e;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 10px 0 0; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+  .chips button[aria-pressed="true"] { color: var(--text); background: var(--code); border-color: var(--accent); }
+  .chips button[data-q="2"][aria-pressed="true"] { border-color: var(--g2); }
+  .chips button[data-q="3"][aria-pressed="true"] { border-color: var(--g3); }
+  .chips button[data-q="4"][aria-pressed="true"] { border-color: var(--g4); }
+  .chips button[data-q="8"][aria-pressed="true"] { border-color: var(--g8); }
+  .slider { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; }
+  .slider label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--harm); min-width: 120px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="The frequency ring with harmonics landing on it"></svg>
+  <div class="row">
+    <div class="slider">
+      <label for="count">Harmonics</label>
+      <input id="count" type="range" min="1" max="16" value="1" aria-label="How many harmonics have fallen onto the ring">
+    </div>
+  </div>
+  <div class="row"><span>Harmonics of</span><div class="chips" id="src"></div></div>
+  <div class="row"><span>Grids</span><div class="chips" id="grids"></div><div class="chips"><button id="sq" aria-pressed="false">The square</button></div></div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  const C4 = 261.6256;
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  // Sources: the low note whose harmonics fall, as a ratio to C. F's harmonic 3 is a C; G's harmonic 2 is a G.
+  const SOURCES = [
+    { label: 'C', base: 1, note: 'C' },
+    { label: 'a low F', base: 1 / 3, note: 'F' },
+    { label: 'a low G', base: 3 / 4, note: 'G' },
+  ];
+  const GRIDS = [[2, 'halves'], [3, 'thirds'], [4, 'quarters'], [8, 'eighths']];
+  let src = 0, N = 1, sel = null, square = false, prevN = 1;
+  const grid = { 2: false, 3: false, 4: false, 8: false };
+
+  const fold = r => r / 2 ** Math.floor(Math.log2(r + 1e-12));          // halve or double into [1, 2)
+  const angle = r => 360 * (fold(r) - 1);                              // the frequency ring's rule
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = {}; ['text','muted','border','sticker','harm','accent','g2','g3','g4','g8','code','card'].forEach(k => COL[k] = cv('--' + k));
+
+  // ---- Sound ----
+  let ac;
+  function sound(parts, dur) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime + 0.02, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.14, t + 0.02);
+      out.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      out.connect(ac.destination);
+      for (const [f, a] of parts) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f; g.gain.value = a; o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05); }
+    } catch (e) {}
+  }
+  const pluck = f => sound(Array.from({ length: 8 }, (_, i) => [f * (i + 1), 1 / (i + 1)]), 1.8);
+
+  const polar = (cx, cy, r, deg) => [cx + r * Math.sin(deg * Math.PI / 180), cy - r * Math.cos(deg * Math.PI / 180)];
+
+  let anim = null;
+  function draw(drop = 1) {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const R = Math.min(w / 2 - 46, 150), cx = w / 2, cy = R + 40, H = 2 * R + 80;
+    const svg = $('v'); svg.replaceChildren();
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    // grids: spokes dividing the ring into q equal parts
+    for (const [q] of GRIDS) if (grid[q]) for (let i = 0; i < q; i++) {
+      const [x, y] = polar(cx, cy, R, 360 * i / q);
+      el('line', { x1: cx, y1: cy, x2: x, y2: y, stroke: COL['g' + q], 'stroke-width': q === 8 ? 1 : 1.4, 'stroke-dasharray': '4 4', 'stroke-opacity': 0.85 }, svg);
+    }
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: COL.border, 'stroke-width': 2 }, svg);
+    for (const [q, lab] of [[0, '×1'], [0.25, '×1¼'], [0.5, '×1½'], [0.75, '×1¾']]) {
+      const [x1, y1] = polar(cx, cy, R - 5, 360 * q), [x2, y2] = polar(cx, cy, R + 5, 360 * q);
+      el('line', { x1, y1, x2, y2, stroke: COL.muted, 'stroke-width': 1.4 }, svg);
+    }
+    // the square: C, E, G and harmonic 7 at the four quarters
+    if (square) {
+      const pts = [0, 90, 180, 270].map(d => polar(cx, cy, R, d).join(','));
+      el('polygon', { points: pts.join(' '), fill: COL.harm, 'fill-opacity': 0.08, stroke: COL.harm, 'stroke-width': 1.5 }, svg);
+    }
+    // piano notes: the ring's twelve keys
+    for (let j = 0; j < 12; j++) {
+      const d = 360 * (2 ** (j / 12) - 1);
+      const [x, y] = polar(cx, cy, R, d), [lx, ly] = polar(cx, cy, R + 22, d);
+      const on = sel === j, bflat = square && j === 10;
+      const g = el('g', { style: 'cursor:pointer', role: 'button', 'aria-label': 'Piano ' + NAMES[j] }, svg);
+      el('circle', { cx: x, cy: y, r: 13, fill: 'transparent' }, g);
+      el('circle', { cx: x, cy: y, r: j === 0 ? 6 : 4.5, fill: j === 0 ? COL.sticker : on ? COL.accent : COL.card || '#161b22', stroke: bflat ? '#f85149' : j === 0 ? '#7a5c00' : on ? COL.accent : COL.text, 'stroke-width': bflat ? 2.2 : 1.2 }, g);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 11.5, fill: on ? COL.text : COL.muted, 'font-weight': on ? 600 : 400 }, g, NAMES[j]);
+      g.addEventListener('click', () => { sel = j; pluck(C4 * 2 ** (j / 12)); update(); });
+    }
+    // harmonics: each lands where its frequency, folded into the octave, belongs
+    const base = SOURCES[src].base, seen = {};
+    for (let n = 1; n <= N; n++) {
+      const d = angle(base * n), key = d.toFixed(3);
+      const stack = seen[key] = (seen[key] || 0) + 1;
+      const fall = n === N ? drop : 1;                               // the newest one falls in from the centre
+      const rr = R * fall;
+      const [x, y] = polar(cx, cy, rr, d), [tx, ty] = polar(cx, cy, R - 15 - (12 + 8 * Math.abs(Math.sin(d * Math.PI / 180))) * (stack - 1), d);
+      const g = el('g', { style: 'cursor:pointer', role: 'button', 'aria-label': 'Harmonic ' + n }, svg);
+      el('circle', { cx: x, cy: y, r: 6.5, fill: COL.harm, 'fill-opacity': 0.9, stroke: '#0d1117', 'stroke-width': 1 }, g);
+      if (fall > 0.98) el('text', { x: tx, y: ty + 4, 'text-anchor': 'middle', 'font-size': 10.5, fill: COL.harm, 'font-weight': 600 }, g, n);
+      g.addEventListener('click', () => { sound([[C4 / 2 * base * n, 0.9]], 1.5); });
+    }
+    el('circle', { cx, cy, r: 2.5, fill: COL.muted }, svg);
+  }
+
+  function rain() {
+    cancelAnimationFrame(anim);
+    const t0 = performance.now();
+    const step = t => { const u = Math.min(1, (t - t0) / 380); draw(1 - (1 - u) ** 3); if (u < 1) anim = requestAnimationFrame(step); };
+    anim = requestAnimationFrame(step);
+  }
+
+  function update(animate) {
+    if (animate) rain(); else draw();
+    const S = SOURCES[src];
+    let msg;
+    if (sel !== null) {
+      const r = 2 ** (sel / 12), d = 360 * (r - 1);
+      // nearest spot that a harmonic of this source has already landed on
+      let best = null;
+      for (let n = 1; n <= N; n++) { const a = angle(S.base * n), gap = Math.min(Math.abs(a - d), 360 - Math.abs(a - d)); if (!best || gap < best.gap) best = { n, a, gap }; }
+      msg = `Piano <b>${NAMES[sel]}</b>: ×${r.toFixed(4)} of C, ${d.toFixed(1)}° round. `;
+      msg += best.gap < 0.05 ? `It sits exactly on ${S.note}’s harmonic ${best.n}.`
+        : best.gap < 15 ? `The nearest harmonic of ${S.note} so far is harmonic ${best.n}, at ${best.a.toFixed(1)}°: <b>${best.gap.toFixed(1)}°</b> away.`
+        : `No harmonic of ${S.note} has landed near it yet.`;
+      if (square && sel === 10) msg += ' The square’s fourth corner is harmonic 7 at exactly 270°; the piano’s B♭ misses it by about 11°.';
+    } else if (N === 1) {
+      msg = `Harmonic 1 is ${S.note === 'C' ? 'C itself' : 'the low ' + S.note + ' itself'}. Drag <b>Harmonics</b> to let the next ones fall.`;
+    } else {
+      const counts = {};
+      for (let n = 1; n <= N; n++) { const k = angle(S.base * n).toFixed(1); counts[k] = (counts[k] || 0) + 1; }
+      msg = `${N} harmonics of ${S.label} have landed on <b>${Object.keys(counts).length}</b> different spots. Tap a piano note to compare it with them.`;
+    }
+    $('out').innerHTML = msg;
+    $('rule').innerHTML = `<b>Rule:</b> harmonic <i>n</i> vibrates <i>n</i> times as fast as ${S.label}. Halve it until it fits within the octave from C to the next C, then place it by the frequency ring’s rule: ×1½ is half a turn. A note at a fraction p/q of C sits on the q-way grid.`;
+    [...$('src').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === src)));
+    [...$('grids').children].forEach(b => b.setAttribute('aria-pressed', String(grid[b.dataset.q])));
+    $('sq').setAttribute('aria-pressed', String(square));
+    try { parent.postMessage({ tuningEmbed: 'rain', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  SOURCES.forEach((s, i) => { const b = document.createElement('button'); b.textContent = s.label; b.addEventListener('click', () => { src = i; if (i) square = false; update(); }); $('src').appendChild(b); });
+  GRIDS.forEach(([q, lab]) => { const b = document.createElement('button'); b.textContent = lab; b.dataset.q = q; b.addEventListener('click', () => { grid[q] = !grid[q]; update(); }); $('grids').appendChild(b); });
+  $('sq').addEventListener('click', () => { square = !square; if (square) { src = 0; if (N < 7) { N = 7; $('count').value = 7; } } update(); });
+  $('count').addEventListener('input', e => { const n = +e.target.value; const grew = n > N; N = n; update(grew); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>
