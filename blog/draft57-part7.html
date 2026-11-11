@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Frequency Ring, Part 7: The Tuner Returns - Telex</title>
+  <meta name="description" content="The piano's small, deliberate misses can't be seen, but they can be heard and counted. How a tuner turns wavering into a tuning, and why real pianos end up with their octaves stretched.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>The Frequency Ring, Part 7: The Tuner Returns</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 7 of 7 in <a href="#series-index">The Frequency Ring</a>.</p>
+      <p class="series-nav">Previous: <a href="draft57-part6.html">Part 6: Pythagoras and the Maker's Problem</a> | Next: none</p>
+<p>In Part 1, a tuner arrived at the workshop and wrote frequencies on the stickers. Part 6 showed what that tuner is really being asked to do: make every fifth about 2 hundredths of a key narrow, and every major third about 14 hundredths wide. Small, deliberate misses, all of them the same.</p>
+<p>Nobody can hear "2 hundredths of a key". But you can hear wavering, and you can count it. This last part shows how the misses turn into something a tuner can count, and then lets you do the tuner's job yourself.</p>
+
+<h2>1. Where the wavering comes from</h2>
+<p>Back to the tuner's chart from Part 1, where every hertz is the same width. On this chart, each note's harmonics from Part 3 are evenly spaced teeth, like a comb. That's where the chart finally earns its keep: on the keyboard, the same teeth would crowd together into a blur.</p>
+<p>Below, C's harmonics point up and the other note's harmonics point down. With a pure fifth, C's harmonic 3 and G's harmonic 2 are the same tooth. Switch <strong>Tuning</strong> between <strong>Pure</strong> and <strong>Piano</strong> and watch the two red teeth come apart in the magnified view.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/beats.html" title="Counting the wavering: harmonic combs on the tuner's chart" height="660" loading="lazy"></iframe>
+</figure>
+<p>On the piano, at middle C, the two teeth are 0.89 Hz apart. Two tones that close drift in and out of step, so the sound swells and fades 0.89 times a second. That's the wavering, and its rate is simply the gap between the teeth.</p>
+<p>Try the other pairs. The fourth wavers about 1.2 times a second. The major third wavers about 10 times a second: its teeth are much further apart, because the piano's third is so much further from pure. Now change the lower note to C3 or C5. Every rate halves an octave down and doubles an octave up, so the same tuning wavers at different speeds in different parts of the keyboard.</p>
+<p>The readout also shows the frequency ring turning a miss straight into a wavering rate. G misses its pure spot on C's ring by 0.61°. Multiply by C's frequency, divide by 360, multiply by the smaller number in 3:2, and you get 0.89: the same number. That works because the ring is spaced by hertz. And it's the clock hands from Part 2: the point where C's and G's hands meet creeps round the dial, and it completes one lap for every waver.</p>
+<aside class="note"><strong>Musicians:</strong> the wavering is beating. Tuners setting equal temperament by ear count beat rates: in the middle of the piano, fifths beat slowly, a little under once a second, while major thirds beat fast, around 7 to 11 times a second and getting faster as they rise.</aside>
+
+<h2>2. Tune it yourself</h2>
+<p>Now do the tuner's job. Start from middle C and tune a chain of fifths by ear. Turn the sound on, then move the <strong>tuning peg</strong> slowly. The circle pulses with the wavering. As you get closer, the pulsing slows down, and when it stops, the fifth is pure. Then press <strong>Next fifth</strong>: the note you just tuned becomes the bottom of the next fifth.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/tune.html" title="Tune it yourself: a chain of fifths by ear" height="470" loading="lazy"></iframe>
+</figure>
+<p>Eleven pure fifths reach every key. But the twelfth fifth has to land on a C that's already been tuned, and it comes out a quarter of a key narrow, wavering about 14 times a second. That's Part 6's wolf, made by your own hands: nothing went wrong at any step, but the leftover had to go somewhere.</p>
+<p>Press <strong>Share the leftover out</strong>. Every fifth becomes the piano's fifth, 2 hundredths of a key narrow. None is pure any more, and none howls. Each one wavers gently, between about 0.9 and 1.7 times a second, faster for higher notes. Tap any fifth in the list to hear it.</p>
+<p>A real tuner works the other way round. Instead of tuning fifths pure and sharing out the leftover afterwards, they tune each fifth to waver at exactly the right slow rate from the start, and check the fast-wavering thirds as they go. Once one octave in the middle is right, they tune the rest of the piano from it, octave by octave.</p>
+
+<h2>3. One last stretch</h2>
+<p>There's one more twist, and it brings back the elastic band from Part 1.</p>
+<p>Part 3 treated a string's harmonics as exact: harmonic 2 at exactly twice the frequency, harmonic 3 at exactly three times. A real piano string is a stiff steel wire, and stiffness pushes its higher harmonics slightly sharp. Go back to the first embed, choose <strong>Octave</strong>, and turn on <strong>Stiff strings</strong>.</p>
+<p>Even an exact 2:1 octave now wavers, about 0.3 times a second at middle C, because the lower C's harmonic 2 is slightly sharp of the upper C. To stop it, the tuner nudges the upper C up, by about a hundredth of a key. Try it with <strong>Nudge</strong>.</p>
+<p>Across the whole piano, these nudges add up. Real pianos are tuned with octaves slightly wider than 2:1, more so towards the ends of the keyboard. The stickers from Part 1 don't sit at exact doublings after all. The tuner's elastic needs one more small stretch, and if you coiled it into Part 2's spring, the Cs would no longer stack exactly on top of each other.</p>
+<aside class="note"><strong>Musicians:</strong> this is inharmonicity, and the result is stretch tuning. A plot of how far a well-tuned piano departs from exact equal temperament is called a Railsback curve. It's flat through the middle and bends away at both ends, by tens of cents at the extremes.</aside>
+
+<h2>The whole series, in one picture</h2>
+<p>Seven parts, one set of yellow stickers:</p>
+<ol>
+  <li>Equal steps on the keys are equal multiplications of frequency.</li>
+  <li>Rolled up by hertz, one octave makes the frequency ring, where ×1½ is half a turn.</li>
+  <li>Harmonics fall onto that ring in a regular grid, which is why simple ratios sound steady.</li>
+  <li>Every note needs a ring of its own, and hopping to the opposite builds the circle of fifths.</li>
+  <li>Chords become triangles, and the most familiar ones draw some of the tidiest shapes.</li>
+  <li>Pure intervals can't close the circle, so a keyboard has to share out a leftover.</li>
+  <li>The tuner hears that sharing as wavering, and counts it.</li>
+</ol>
+<p>Every picture in the series was placed by a rule printed underneath it. Nothing was nudged to make the point. If a shape came out tidy, it was because the numbers are tidy, and where they aren't, the shapes show that too.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft57-part1.html">Part 1: Stickers and Elastic</a></li>
+          <li><a href="draft57-part2.html">Part 2: One Octave, Rolled into a Ring</a></li>
+          <li><a href="draft57-part3.html">Part 3: Harmonics: Why the Ring Works</a></li>
+          <li><a href="draft57-part4.html">Part 4: Each Note's Ring</a></li>
+          <li><a href="draft57-part5.html">Part 5: Chords as Shapes</a></li>
+          <li><a href="draft57-part6.html">Part 6: Pythagoras and the Maker's Problem</a></li>
+          <li><strong>Part 7: The Tuner Returns</strong></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

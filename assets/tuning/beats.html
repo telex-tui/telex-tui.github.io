@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Counting the Wavering</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --other: #58a6ff; --hit: #f85149; --good: #3fb950;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 2px; }
+  .lbl:first-child { margin-top: 0; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 10px 0 0; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button, .btn { background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; border: 1px solid var(--border); }
+  .chips button { border-radius: 999px; padding: 3px 10px; }
+  .chips button[aria-pressed="true"] { color: var(--text); background: var(--code); border-color: var(--accent); }
+  .btn { border-radius: 6px; padding: 5px 11px; color: var(--text); font-size: 13px; }
+  .btn.main { border-color: var(--sticker); }
+  .slider { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; }
+  .slider label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--other); min-width: 120px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="lbl">Each note's harmonics on the tuner's chart</p>
+  <svg id="comb" aria-label="Harmonics of both notes as teeth on the tuner's chart"></svg>
+  <p class="lbl" id="zoomLbl">The two teeth that nearly meet, magnified</p>
+  <svg id="zoom" aria-label="The two nearly coinciding harmonics, magnified"></svg>
+  <p class="lbl">What you hear: the loudness of those two teeth together, over three seconds</p>
+  <svg id="env" aria-label="The loudness of the two nearly coinciding harmonics over three seconds"></svg>
+  <div class="row"><span>Pair</span><div class="chips" id="pairs"></div></div>
+  <div class="row"><span>Lower note</span><div class="chips" id="octs"></div><span>Tuning</span><div class="chips" id="tunes"></div></div>
+  <div class="row">
+    <div class="slider"><label for="nudge">Nudge</label><input id="nudge" type="range" min="-300" max="300" value="0" aria-label="Nudge the upper note, in tenths of a hundredth of a key"></div>
+    <button class="btn main" id="play">&#9654; Listen</button>
+  </div>
+  <div class="row"><div class="chips"><button id="stiff" aria-pressed="false">Stiff strings, like a real piano</button></div></div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  const C = { 3: 130.8128, 4: 261.6256, 5: 523.2511 };
+  const PAIRS = [ // name, other note's name, keys up, pure ratio p/q
+    ['Fifth', 'G', 7, 3, 2], ['Fourth', 'F', 5, 4, 3], ['Major third', 'E', 4, 5, 4], ['Octave', 'C′', 12, 2, 1]
+  ];
+  const B = 0.0004;                          // how stiff a real piano string is, roughly, mid-keyboard
+  let pair = 0, oct = 4, tune = 'piano', nudge = 0, stiff = false;
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = {}; ['text','muted','border','sticker','other','hit','good','code'].forEach(k => COL[k] = cv('--' + k));
+
+  const P = () => PAIRS[pair];
+  const lo = () => C[oct];
+  const hi = () => {
+    const [, , keys, p, q] = P();
+    const base = tune === 'pure' ? p / q : 2 ** (keys / 12);
+    return lo() * base * 2 ** (nudge / 10 / 1200);
+  };
+  const partial = (f, n) => n * f * (stiff ? Math.sqrt(1 + B * n * n) : 1);   // harmonic n of a note at f
+  const pairTeeth = () => { const [, , , p, q] = P(); return [partial(lo(), p), partial(hi(), q)]; };
+  const beat = () => { const [a, b] = pairTeeth(); return Math.abs(a - b); };
+
+  // ---- Sound ----
+  let ac;
+  function listen() {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t0 = ac.currentTime + 0.02, out = ac.createGain(), dur = 4.5;
+      out.gain.setValueAtTime(0, t0); out.gain.linearRampToValueAtTime(0.07, t0 + 0.05);
+      out.gain.setValueAtTime(0.07, t0 + dur - 0.6); out.gain.linearRampToValueAtTime(0, t0 + dur);
+      out.connect(ac.destination);
+      for (const f of [lo(), hi()]) for (let n = 1; n <= 8; n++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = partial(f, n); g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + dur + 0.05);
+      }
+    } catch (e) {}
+  }
+
+  function width() { return Math.max(280, Math.round(document.querySelector('.wrap').getBoundingClientRect().width - 30)); }
+
+  function drawComb(w) {
+    const svg = $('comb'); svg.replaceChildren();
+    const H = 106, y0 = 60;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const [, other, , p, q] = P();
+    const fMax = lo() * (p + 2.5);
+    const x = f => 8 + (w - 16) * f / fMax;
+    el('line', { x1: 8, x2: w - 8, y1: y0, y2: y0, stroke: COL.muted }, svg);
+    for (let n = 1; partial(lo(), n) < fMax; n++) {
+      const f = partial(lo(), n), hit = n === p;
+      el('line', { x1: x(f), x2: x(f), y1: y0, y2: y0 - 26, stroke: hit ? COL.hit : COL.sticker, 'stroke-width': hit ? 3 : 2 }, svg);
+      el('text', { x: x(f), y: y0 - 31, 'text-anchor': 'middle', 'font-size': 10, fill: COL.sticker }, svg, n);
+    }
+    for (let n = 1; partial(hi(), n) < fMax; n++) {
+      const f = partial(hi(), n), hit = n === q;
+      el('line', { x1: x(f), x2: x(f), y1: y0, y2: y0 + 26, stroke: hit ? COL.hit : COL.other, 'stroke-width': hit ? 3 : 2 }, svg);
+      el('text', { x: x(f), y: y0 + 38, 'text-anchor': 'middle', 'font-size': 10, fill: COL.other }, svg, n);
+    }
+    el('text', { x: 8, y: 12, 'font-size': 10.5, fill: COL.sticker }, svg, 'C’s harmonics (up)');
+    el('text', { x: w - 8, y: 12, 'text-anchor': 'end', 'font-size': 10.5, fill: COL.other }, svg, other + '’s harmonics (down)');
+  }
+
+  function drawZoom(w) {
+    const svg = $('zoom'); svg.replaceChildren();
+    const H = 64, y0 = 32;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const [a, b] = pairTeeth(), mid = (a + b) / 2;
+    const span = 40;                                  // hertz across the window
+    const x = f => Math.max(10, Math.min(w - 10, w / 2 + (f - mid) / span * (w - 40)));
+    el('line', { x1: 8, x2: w - 8, y1: y0, y2: y0, stroke: COL.muted }, svg);
+    for (let t = Math.ceil((mid - span / 2) / 5) * 5; t <= mid + span / 2; t += 5) {
+      el('line', { x1: x(t), x2: x(t), y1: y0 - 3, y2: y0 + 3, stroke: COL.border }, svg);
+    }
+    el('line', { x1: x(a), x2: x(a), y1: y0, y2: y0 - 22, stroke: COL.sticker, 'stroke-width': 3 }, svg);
+    el('line', { x1: x(b), x2: x(b), y1: y0, y2: y0 + 22, stroke: COL.other, 'stroke-width': 3 }, svg);
+    el('text', { x: 8, y: H - 4, 'font-size': 10, fill: COL.muted }, svg, '40 Hz across');
+  }
+
+  function drawEnv(w) {
+    const svg = $('env'); svg.replaceChildren();
+    const H = 70, mid = 34, amp = 26;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const bt = beat();
+    let d = '';
+    for (let i = 0; i <= 300; i++) {
+      const t = i / 300 * 3, x = 8 + (w - 16) * i / 300;
+      const e = Math.abs(Math.cos(Math.PI * bt * t));          // two equal tones drifting in and out of step
+      d += (i ? ' L' : 'M') + x.toFixed(1) + ' ' + (mid - amp * e).toFixed(1);
+    }
+    let d2 = '';
+    for (let i = 0; i <= 300; i++) { const t = i / 300 * 3, x = 8 + (w - 16) * i / 300; d2 += (i ? ' L' : 'M') + x.toFixed(1) + ' ' + (mid + amp * Math.abs(Math.cos(Math.PI * bt * t))).toFixed(1); }
+    el('path', { d: d + ' L' + d2.slice(1).split(' L').reverse().join(' L') + ' Z', fill: COL.hit, 'fill-opacity': 0.25, stroke: 'none' }, svg);
+    el('path', { d, fill: 'none', stroke: COL.hit, 'stroke-width': 1.5 }, svg);
+    el('path', { d: d2, fill: 'none', stroke: COL.hit, 'stroke-width': 1.5 }, svg);
+    for (let s = 0; s <= 3; s++) {
+      const x = 8 + (w - 16) * s / 3;
+      el('text', { x, y: H - 1, 'text-anchor': s === 0 ? 'start' : s === 3 ? 'end' : 'middle', 'font-size': 10, fill: COL.muted }, svg, s + ' s');
+    }
+  }
+
+  function update() {
+    const w = width();
+    drawComb(w); drawZoom(w); drawEnv(w);
+    const [name, other, , p, q] = P(), [a, b] = pairTeeth(), bt = beat();
+    const r = hi() / lo(), miss = 360 * (r - p / q);                 // degrees on the lower note's ring
+    let msg = `C’s harmonic ${p} is at <b>${a.toFixed(2)} Hz</b>; ${other}’s harmonic ${q} is at <b>${b.toFixed(2)} Hz</b>. ` +
+      (bt < 0.02 ? 'They are the same: <b>no wavering</b>.' : `They are ${bt.toFixed(2)} Hz apart, so the sound wavers <b>${bt < 1 ? bt.toFixed(2) : bt.toFixed(1)} times a second</b>.`);
+    if (!stiff && Math.abs(miss) > 0.005) msg += ` On C’s ring, ${other} misses its pure spot by ${Math.abs(miss).toFixed(2)}°, and ${lo().toFixed(1)} × ${Math.abs(miss).toFixed(2)} ÷ 360 × ${q} = ${(lo() * Math.abs(miss) / 360 * q).toFixed(2)}: the same number.`;
+    if (stiff && pair === 3) msg += bt > 0.02 ? ' Even an exact 2:1 octave wavers now: the stiff string’s harmonic 2 is slightly sharp. Nudge the upper C up to stop it.' : ' The octave is now a little wider than 2:1, and it’s steady.';
+    $('out').innerHTML = msg;
+    $('rule').innerHTML = `<b>Rule:</b> harmonic <i>n</i> of a note at <i>f</i> is at <i>n</i> × <i>f</i>` + (stiff ? ' × √(1 + 0.0004 n²), a stiff piano string, so the higher harmonics run slightly sharp' : '') +
+      `. Two tones ${bt < 0.02 ? 'at the same frequency stay in step' : bt.toFixed(2) + ' Hz apart drift in and out of step ' + bt.toFixed(2) + ' times a second'}. Upper note: ${tune === 'pure' ? 'exactly ' + p + '/' + q : 'piano'}${nudge ? ', nudged ' + (nudge / 10).toFixed(1) + ' hundredths of a key' : ''}.`;
+    [...$('pairs').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === pair)));
+    [...$('octs').children].forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.o === oct)));
+    [...$('tunes').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === tune)));
+    $('stiff').setAttribute('aria-pressed', String(stiff));
+    try { parent.postMessage({ tuningEmbed: 'beats', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  const chip = (parent, label, fn, data) => { const b = document.createElement('button'); b.textContent = label; if (data) Object.assign(b.dataset, data); b.addEventListener('click', fn); $(parent).appendChild(b); };
+  PAIRS.forEach((pr, i) => chip('pairs', `${pr[0]}: C–${pr[1]}`, () => { pair = i; update(); }));
+  [3, 4, 5].forEach(o => chip('octs', 'C' + o, () => { oct = o; update(); }, { o }));
+  [['pure', 'Pure'], ['piano', 'Piano']].forEach(([t, l]) => chip('tunes', l, () => { tune = t; update(); }, { t }));
+  $('nudge').addEventListener('input', e => { nudge = +e.target.value; update(); });
+  $('stiff').addEventListener('click', () => { stiff = !stiff; update(); });
+  $('play').addEventListener('click', listen);
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>
