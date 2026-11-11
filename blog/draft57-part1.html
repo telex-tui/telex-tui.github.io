@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Frequency Ring, Part 1: Stickers and Elastic - Telex</title>
+  <meta name="description" content="Stickers on a piano's C keys, a tuner's chart and an elastic band: why equal steps on the keyboard are equal multiplications of frequency.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>The Frequency Ring, Part 1: Stickers and Elastic</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 1 of 7 in <a href="#series-index">The Frequency Ring</a>.</p>
+      <p class="series-nav">Previous: none | Next: Part 2: One Octave, Rolled into a Ring (coming)</p>
+<p>This series builds one picture: a ring that shows how musical notes fit together, made from nothing but a piano, some stickers and an elastic band. Every picture in it is something you can drag, tap or pull. Nothing is placed by hand. Each dot sits where a stated rule puts it, and the rule is always printed underneath.</p>
+<p>Part 1 doesn't get to the ring yet. It's about a surprise hiding in the keyboard.</p>
+
+<h2>1. The carpenter's stickers</h2>
+<p>Picture a piano being built. The carpenter fits the keys side by side, every white key the same width. The pattern of white and black keys repeats every seven white keys, about 16.5 cm.</p>
+<p>Now put a small yellow sticker on the front of every key called C. A full-size piano has eight of them, from C1 near the bottom to C8 at the top. Because the pattern repeats exactly, the stickers end up evenly spaced, 16.5 cm apart.</p>
+
+<h2>2. The tuner's numbers</h2>
+<p>Then the tuner arrives. Every note on a piano is a string vibrating back and forth, and how high or low the note sounds depends on how many times the string vibrates each second. That count is the note's <strong>frequency</strong>, measured in hertz (Hz).</p>
+<p>The tuner writes each C's frequency on its sticker:</p>
+<table>
+  <thead><tr><th>Sticker</th><th>Frequency</th></tr></thead>
+  <tbody>
+    <tr><td>C1</td><td>32.7 Hz</td></tr>
+    <tr><td>C2</td><td>65.4 Hz</td></tr>
+    <tr><td>C3</td><td>130.8 Hz</td></tr>
+    <tr><td>C4</td><td>261.6 Hz</td></tr>
+    <tr><td>C5</td><td>523.3 Hz</td></tr>
+    <tr><td>C6</td><td>1,046.5 Hz</td></tr>
+    <tr><td>C7</td><td>2,093.0 Hz</td></tr>
+    <tr><td>C8</td><td>4,186.0 Hz</td></tr>
+  </tbody>
+</table>
+<p>Each number is double the one before. The stickers are the same distance apart, but each one up the keyboard vibrates twice as fast as the last.</p>
+<aside class="note"><strong>Musicians:</strong> these figures assume standard tuning, with the A above middle C at 440 Hz. C4 is middle C. Each step from one C to the next is an octave, and every octave is a 2:1 ratio of frequencies.</aside>
+
+<h2>3. Stretching the band</h2>
+<p>The tuner keeps a big frequency chart on the workshop wall: a straight line where every hertz takes up the same width. Its scale is set so that 16.5 cm of chart covers 32.7 Hz, the same width as the bottom octave of the keyboard.</p>
+<p>To check the stickers against the chart, the tuner moves them onto an elastic band, in the same even spacing, and stretches the band along the chart until each sticker sits on its frequency.</p>
+<p>In the picture below, the dashed rings on the chart mark where each sticker belongs. Start with <strong>Even stretch</strong> and drag <strong>Pull</strong> all the way. Do the stickers reach their rings?</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/unroll.html" title="Unroll: stretching the band of stickers onto the tuner's chart" height="620" loading="lazy"></iframe>
+</figure>
+<p>An even stretch fails. C1 and C8 land, but every sticker in between overshoots its ring. Now switch to <strong>Real elastic</strong> and pull again. This time every sticker lands, but only because each octave of band stretches twice as much as the octave below it: ×1, ×2, ×4, and so on up to ×64 for the top octave. The rubber gets thinner where it's working hardest.</p>
+<p>Watch the readouts as you pull. A band that started 1.16 m long ends up nearly 21 m long, and the camera has to back away about eighteen times to keep it in view. The top octave alone is about 10.6 m, more than all six octaves below it put together (about 10.4 m).</p>
+
+<h2>4. Adding versus multiplying</h2>
+<p>Why does the band behave like this? Because the keyboard and the chart measure in different ways.</p>
+<p>On the chart, equal distances mean <em>adding</em> the same amount: every 16.5 cm adds another 32.7 Hz. On the keyboard, equal distances mean <em>multiplying</em> by the same amount: every octave doubles. A ruler that adds and a ruler that multiplies can only agree at a few points, so one of them has to be stretched unevenly to match the other.</p>
+<p>Put the two rulers side by side at the same width, one above the other, and join each key to its frequency with a thread. In the <strong>Threads</strong> view below, highlight each octave in turn.</p>
+<figure class="embed">
+  <iframe src="../assets/tuning/threads.html" title="Threads and staircase: the keyboard against the tuner's chart" height="470" loading="lazy"></iframe>
+</figure>
+<p>On the keyboard, every octave gets a seventh of the width. On the chart, the top octave takes half of it, and the bottom octave gets less than 1%. The threads crowd into the left-hand corner because the chart gives the low notes almost no room.</p>
+<aside class="note"><strong>Musicians:</strong> in other words, the keyboard is a logarithmic scale of frequency. That's roughly how we hear pitch: equal ratios sound like equal steps.</aside>
+
+<h2>5. Inside one octave</h2>
+<p>The doubling isn't saved up for the Cs. It's shared out evenly across the twelve keys of each octave, white and black.</p>
+<p>Switch to <strong>Staircase</strong>. Each bar is one key, as tall as its frequency, from one C to the next. Each bar is about 6% taller than the one before it, so the rises themselves grow as you climb. In the octave above middle C, the first rise is 15.6 Hz and the last is 29.4 Hz. Tap any bar to compare it with its neighbour.</p>
+<p>Turn on <strong>Compare</strong> to see the alternative: adding the same 21.8 Hz every key. It reaches the same top C, but it runs high all the way through the middle. Then change the octave. The numbers change, but the staircase keeps exactly the same shape, because every octave is the same twelve multiplications.</p>
+<p>Twelve steps of ×1.0595 make exactly ×2. Remember that number. It comes back in Part 6, where it turns out to be a compromise.</p>
+<aside class="note"><strong>Musicians:</strong> ×1.0595 is the twelfth root of 2, the equal-tempered semitone.</aside>
+
+<h2>What comes next</h2>
+<p>Equal steps on the keys are equal <em>multiplications</em> of frequency. The keyboard is a ruler for multiplying, and the tuner's chart is a ruler for adding. That mismatch is why the elastic has to stretch unevenly.</p>
+<p>Part 2 takes a single octave of the stretched band and rolls it into a ring. Where the notes land on that ring turns out to say a lot about which notes sound good together.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><strong>Part 1: Stickers and Elastic</strong></li>
+          <li>Part 2: One Octave, Rolled into a Ring (coming)</li>
+          <li>Part 3: Harmonics: Why the Ring Works (coming)</li>
+          <li>Part 4: Each Note's Ring (coming)</li>
+          <li>Part 5: Chords as Shapes (coming)</li>
+          <li>Part 6: Pythagoras and the Maker's Problem (coming)</li>
+          <li>Part 7: The Tuner Returns (coming)</li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

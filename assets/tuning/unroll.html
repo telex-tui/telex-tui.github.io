@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unroll</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --sticker: #f2cc60; --band: #d29922; --good: #3fb950; --miss: #f85149;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 4px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .panel + .panel { margin-top: 12px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 14px 0 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { background: transparent; color: var(--muted); border: 0; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .slider { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px; }
+  .slider label { font-size: 13px; color: var(--muted); }
+  input[type=range] { flex: 1; accent-color: var(--sticker); min-width: 120px; }
+  .hint { font-size: 13.5px; min-height: 2.9em; margin: 4px 0 10px; }
+  .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .readouts div { background: var(--code); border-radius: 6px; padding: 6px 9px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .readouts span { display: block; color: var(--muted); font-size: 11px; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <p class="lbl">The keyboard: the carpenter's spacing</p>
+    <svg id="kb" aria-label="Piano keyboard from C1 to C8 with a yellow sticker on every C"></svg>
+  </div>
+  <div class="panel">
+    <p class="lbl">The band on the tuner's chart</p>
+    <svg id="band" aria-label="Elastic band carrying the stickers, above the tuner's frequency chart"></svg>
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Kind of stretch">
+      <button id="mEven" aria-pressed="true">Even stretch</button>
+      <button id="mReal" aria-pressed="false">Real elastic</button>
+    </div>
+    <div class="slider">
+      <label for="pull">Pull</label>
+      <input id="pull" type="range" min="0" max="1000" value="0" aria-label="How far the band is pulled">
+    </div>
+  </div>
+  <p class="hint" id="hint" aria-live="polite"></p>
+  <div class="readouts">
+    <div><span>Band length</span><b id="rLen"></b></div>
+    <div><span>Stretch</span><b id="rStretch"></b></div>
+    <div><span>Camera pulled back</span><b id="rCam"></b></div>
+    <div><span>Stickers on their frequency</span><b id="rHit"></b></div>
+  </div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position on screen comes from these. ----
+  const W = 16.5;               // cm of keyboard per octave (seven white keys)
+  const F1 = 32.7032;           // C1 in Hz (A4 = 440 Hz, equal temperament)
+  const OCT = 7;                // C1 to C8
+  const freq = k => F1 * 2 ** k;                       // sticker k is C(k+1)
+  const chartX = f => W * (f / F1 - 1);                // tuner's chart: 16.5 cm per 32.7 Hz, from C1
+  const evenT = x => x * (2 ** OCT - 1) / OCT;          // every cm stretched by the same amount
+  const realT = x => {                                  // each octave stretched just enough to hit its frequency
+    const k = Math.min(OCT - 1, Math.floor(x / W));
+    return (2 ** k - 1) * W + (x - k * W) * 2 ** k;
+  };
+  const evenF = (2 ** OCT - 1) / OCT;                   // 18.14...
+
+  let s = 0;          // how far the band is pulled, 0..1
+  let m = 0;          // 0 = even stretch, 1 = real elastic (tweened when switching)
+  let mTarget = 0;
+
+  const target = x => (1 - m) * evenT(x) + m * realT(x);
+  const pos = x => x + s * (target(x) - x);
+  const localStretch = k => 1 + s * (((1 - m) * evenF + m * 2 ** k) - 1);
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = {};
+  ['--text','--muted','--border','--code','--sticker','--band','--good','--miss','--accent'].forEach(v => C[v.slice(2)] = css(v));
+
+  const kb = document.getElementById('kb');
+  const band = document.getElementById('band');
+  const fmtHz = f => f >= 1000 ? Math.round(f).toLocaleString('en') : f.toFixed(1);
+
+  function drawKeyboard(w) {
+    kb.replaceChildren();
+    const white = OCT * 7 + 1, kw = w / white, kh = Math.max(46, Math.min(70, w * 0.09));
+    const H = kh + 34;
+    kb.setAttribute('viewBox', `0 0 ${w} ${H}`); kb.setAttribute('height', H);
+    for (let i = 0; i < white; i++)
+      el('rect', { x: i * kw + 0.5, y: 0, width: kw - 1, height: kh, rx: 1.5, fill: '#e9ecef' }, kb);
+    for (let i = 0; i < white - 1; i++) {
+      if ([0, 1, 3, 4, 5].includes(i % 7))
+        el('rect', { x: (i + 1) * kw - kw * 0.3, y: 0, width: kw * 0.6, height: kh * 0.6, rx: 1, fill: '#0d1117' }, kb);
+    }
+    const r = Math.max(2.6, Math.min(kw * 0.36, 6.5));
+    const labelEvery = w < 420 ? 1 : 1;
+    for (let k = 0; k <= OCT; k++) {
+      const cx = (7 * k + 0.5) * kw;
+      el('circle', { cx, cy: kh - r - 3, r, fill: C.sticker, stroke: '#7a5c00', 'stroke-width': 0.8 }, kb);
+      if (k % labelEvery === 0) {
+        const anchor = k === 0 ? 'start' : k === OCT ? 'end' : 'middle';
+        const tx = k === 0 ? 0 : k === OCT ? w : cx;
+        el('text', { x: tx, y: kh + 14, 'text-anchor': anchor, 'font-size': 11, fill: C.text }, kb, 'C' + (k + 1));
+        el('text', { x: tx, y: kh + 28, 'text-anchor': anchor, 'font-size': 10, fill: C.muted }, kb, fmtHz(freq(k)) + (w > 520 ? ' Hz' : ''));
+      }
+    }
+  }
+
+  function niceStep(span, n) {
+    const raw = span / n, p = 10 ** Math.floor(Math.log10(raw));
+    for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p;
+    return 10 * p;
+  }
+
+  function drawBand(w) {
+    band.replaceChildren();
+    const H = 132, yBand = 34, yAxis = 98;
+    band.setAttribute('viewBox', `0 0 ${w} ${H}`); band.setAttribute('height', H);
+    const maxX = pos(OCT * W);
+    const vMin = -0.04 * maxX, vSpan = 1.08 * maxX;
+    const sx = X => (X - vMin) / vSpan * w;
+    const pxPerCm = w / vSpan;
+
+    // the original, unstretched band, for comparison
+    el('rect', { x: sx(0), y: yBand + 22, width: Math.max(1, sx(OCT * W) - sx(0)), height: 3, rx: 1.5, fill: C.border }, band);
+    if (sx(OCT * W) - sx(0) > 110)
+      el('text', { x: sx(0), y: yBand + 36, 'font-size': 10, fill: C.muted }, band, 'band before pulling: ' + (OCT * W / 100).toFixed(2) + ' m');
+    else
+      el('text', { x: sx(0), y: yBand + 36, 'font-size': 10, fill: C.muted }, band, '↑ band before pulling');
+
+    // the band, octave by octave; rubber gets thinner as it stretches
+    for (let k = 0; k < OCT; k++) {
+      const a = sx(pos(k * W)), b = sx(pos((k + 1) * W));
+      const st = localStretch(k);
+      const h = Math.max(1.6, 16 / Math.sqrt(st));
+      el('rect', { x: a, y: yBand - h / 2, width: Math.max(0.6, b - a), height: h, fill: C.band, 'fill-opacity': 0.85, stroke: '#0d1117', 'stroke-width': b - a > 4 ? 0.6 : 0 }, band);
+      if (b - a > 34 && s > 0.02)
+        el('text', { x: (a + b) / 2, y: yBand - 13, 'text-anchor': 'middle', 'font-size': 10, fill: C.muted }, band, '×' + (st < 9.95 ? st.toFixed(1) : Math.round(st)));
+    }
+
+    // the tuner's chart
+    el('line', { x1: 0, x2: w, y1: yAxis, y2: yAxis, stroke: C.muted, 'stroke-width': 1 }, band);
+    const fLo = Math.max(0, F1 * (1 + vMin / W)), fHi = F1 * (1 + (vMin + vSpan) / W);
+    const step = niceStep(fHi - fLo, Math.max(3, Math.floor(w / 90)));
+    for (let f = Math.ceil(fLo / step) * step; f <= fHi; f += step) {
+      const x = sx(chartX(f));
+      el('line', { x1: x, x2: x, y1: yAxis, y2: yAxis + 5, stroke: C.muted }, band);
+      el('text', { x, y: yAxis + 17, 'text-anchor': 'middle', 'font-size': 10, fill: C.muted }, band, f.toLocaleString('en'));
+    }
+    el('text', { x: w, y: yAxis + 31, 'text-anchor': 'end', 'font-size': 10, fill: C.muted }, band, 'hertz (vibrations per second), every hertz the same width');
+
+    // where each sticker belongs on the chart, and where it actually is
+    let hits = 0, offRight = 0;
+    const tol = 0.004 * maxX + 0.2;
+    const lastLabelX = [];
+    for (let k = 0; k <= OCT; k++) {
+      const tx = sx(chartX(freq(k)));
+      const bx = sx(pos(k * W));
+      const hit = Math.abs(pos(k * W) - chartX(freq(k))) < tol;
+      if (hit) hits++;
+      if (tx > w + 2) offRight++;
+      else el('circle', { cx: tx, cy: yAxis, r: 5, fill: 'none', stroke: hit ? C.good : C.sticker, 'stroke-width': 1.4, 'stroke-dasharray': hit ? '' : '2 2' }, band);
+      if (!hit && tx <= w + 2)
+        el('line', { x1: bx, y1: yBand + 7, x2: Math.min(tx, w), y2: yAxis - 6, stroke: C.miss, 'stroke-width': 1, 'stroke-dasharray': '3 3', 'stroke-opacity': 0.8 }, band);
+    }
+    for (let k = 0; k <= OCT; k++) {
+      const bx = sx(pos(k * W));
+      el('circle', { cx: bx, cy: yBand, r: 6, fill: C.sticker, stroke: '#7a5c00', 'stroke-width': 0.8 }, band);
+      if (!lastLabelX.length || bx - lastLabelX[lastLabelX.length - 1] > 22) {
+        el('text', { x: bx, y: yBand - 26 + (k % 2 ? 0 : 0), 'text-anchor': 'middle', 'font-size': 10.5, fill: C.text }, band, 'C' + (k + 1));
+        lastLabelX.push(bx);
+      }
+    }
+    if (offRight)
+      el('text', { x: w, y: yAxis - 10, 'text-anchor': 'end', 'font-size': 10.5, fill: C.sticker }, band, offRight + ' more ' + (offRight === 1 ? 'target' : 'targets') + ' off to the right →');
+
+    return { hits, maxX };
+  }
+
+  const $ = id => document.getElementById(id);
+  function render() {
+    const w = Math.max(280, Math.round($('band').getBoundingClientRect().width || 600));
+    drawKeyboard(w);
+    const { hits, maxX } = drawBand(w);
+    $('rLen').textContent = (maxX / 100).toFixed(2) + ' m';
+    const top = localStretch(OCT - 1), bot = localStretch(0);
+    $('rStretch').textContent = Math.abs(top - bot) < 0.05
+      ? 'every part ×' + top.toFixed(1)
+      : '×' + bot.toFixed(1) + ' bottom, ×' + top.toFixed(1) + ' top';
+    $('rCam').textContent = '×' + (maxX / (OCT * W)).toFixed(1);
+    $('rHit').textContent = hits + ' of ' + (OCT + 1);
+
+    const real = mTarget === 1;
+    let hint;
+    if (s < 0.02) hint = real
+      ? 'Real elastic: drag “Pull” and watch each octave of band stretch.'
+      : 'The dashed rings show where each sticker belongs on the tuner’s chart. Drag “Pull” to stretch the band evenly. Do the stickers reach their rings?';
+    else if (s < 0.995) hint = real
+      ? 'Keep pulling. The camera has to back away to keep the whole band in view.'
+      : 'Keep pulling. Watch the red lines: does any sticker other than C1 land on its ring?';
+    else hint = real
+      ? 'Every sticker is on its ring. Each octave of band had to stretch twice as much as the one below it: ×1, ×2, ×4 … ×64. The top octave alone is longer than all the others put together.'
+      : 'Only C1 and C8 line up. Every sticker in between overshoots its ring: the chart crowds the low notes together, and an even stretch can’t. Try “Real elastic”.';
+    $('hint').textContent = hint;
+    $('rule').innerHTML = '<b>Chart rule:</b> 16.5 cm of chart for every 32.7 Hz, starting from C1, so the bottom octave keeps its keyboard width. ' +
+      (real ? '<b>Band rule:</b> each octave of band stretches just enough to carry its top sticker to its frequency.'
+            : '<b>Band rule:</b> every part of the band stretches by the same amount, so C8 still reaches 4,186 Hz.');
+    postHeight();
+  }
+
+  function postHeight() {
+    try { parent.postMessage({ tuningEmbed: 'unroll', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  function setMode(real) {
+    mTarget = real ? 1 : 0;
+    $('mEven').setAttribute('aria-pressed', String(!real));
+    $('mReal').setAttribute('aria-pressed', String(real));
+    const from = m, start = performance.now();
+    const step = t => {
+      const u = Math.min(1, (t - start) / 450), e = u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+      m = from + (mTarget - from) * e;
+      render();
+      if (u < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  $('mEven').addEventListener('click', () => setMode(false));
+  $('mReal').addEventListener('click', () => setMode(true));
+  $('pull').addEventListener('input', e => { s = e.target.value / 1000; render(); });
+  new ResizeObserver(() => render()).observe(document.querySelector('.wrap'));
+  render();
+})();
+</script>
+</body>
+</html>
