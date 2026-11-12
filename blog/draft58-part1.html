@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frequencies of C major, Part 1: Keys and Hertz - Telex</title>
+  <meta name="description" content="Every key on a piano multiplies the frequency by the same amount, so each key's leap in hertz is bigger than the last. Two embeds that morph from evenly spaced keys to hertz.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Frequencies of C major, Part 1: Keys and Hertz</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 1 of 7 in <a href="#series-index">Frequencies of C major</a>.</p>
+      <p class="series-nav">Previous: none | Next: Part 2: One Octave as a Ring (coming)</p>
+<p>This series looks at the notes of C major through their frequencies: how fast each one vibrates. Every picture in it is something you can drag or tap. Nothing is placed by hand: every dot sits where a rule puts it, and the rule is printed underneath.</p>
+<p>Part 1 is about the keyboard itself, and what its evenly spaced keys hide.</p>
+
+<h2>1. Notes are vibrations</h2>
+<p>Every note on a piano is a string vibrating back and forth. How high the note sounds depends on how many times the string vibrates each second. That count is the note's <strong>frequency</strong>, measured in hertz (Hz).</p>
+<p>A full-size piano has eight keys called C. Here are their frequencies:</p>
+<table>
+  <thead><tr><th>Key</th><th>Frequency</th></tr></thead>
+  <tbody>
+    <tr><td>C1</td><td>32.7 Hz</td></tr>
+    <tr><td>C2</td><td>65.4 Hz</td></tr>
+    <tr><td>C3</td><td>130.8 Hz</td></tr>
+    <tr><td>C4</td><td>261.6 Hz</td></tr>
+    <tr><td>C5</td><td>523.3 Hz</td></tr>
+    <tr><td>C6</td><td>1,046.5 Hz</td></tr>
+    <tr><td>C7</td><td>2,093.0 Hz</td></tr>
+    <tr><td>C8</td><td>4,186.0 Hz</td></tr>
+  </tbody>
+</table>
+<p>Each C vibrates exactly twice as fast as the one below it.</p>
+<aside class="note"><strong>Musicians:</strong> these figures assume standard tuning, with the A above middle C at 440 Hz. C4 is middle C, and each C to the next is an octave, a 2:1 ratio of frequencies.</aside>
+
+<h2>2. Every key multiplies</h2>
+<p>The twelve keys from one C to the next share that doubling out evenly. Each key vibrates about 1.0595 times as fast as the key below it, and twelve of those multiplications make exactly ×2.</p>
+<p>So the keys are evenly spaced, but what each one does to the frequency is multiply. To see what that looks like in hertz, put the keyboard above a <strong>frequency axis</strong>: a straight line where every hertz takes up the same width. A thread joins each key to its frequency.</p>
+<p>The axis below starts out spaced like the keys, so every thread runs straight down. Drag <strong>Spacing</strong> from keys to hertz and watch the threads lean.</p>
+<figure class="embed">
+  <iframe src="../assets/cmajor/keys-axis.html" title="Keys and hertz: the keyboard above a frequency axis that morphs from key spacing to hertz spacing" height="470" loading="lazy"></iframe>
+</figure>
+<p>With key spacing, every octave gets a seventh of the width. With hertz spacing, the top octave, C7 to C8, takes half the axis on its own, and the bottom octave gets less than 1%. Each octave covers twice as many hertz as the one below it, so on a frequency axis the low notes crowd into the left-hand corner. Highlight each octave in turn to see its share change as you drag.</p>
+<aside class="note"><strong>Musicians:</strong> the keyboard is a logarithmic scale of frequency: equal distances are equal ratios. That's roughly how we hear pitch.</aside>
+
+<h2>3. Equal keys, growing leaps</h2>
+<p>Now zoom in to one octave, from middle C to the C above. Draw each key as a bar as tall as its frequency.</p>
+<p>A row of evenly spaced keys looks like a flight of stairs, every stair the same height. If the keys really were equal leaps in hertz, each bar would rise by the same amount: 21.8 Hz, a twelfth of the octave. The picture below starts there. Drag <strong>Leaps</strong> from equal to the real keys.</p>
+<figure class="embed">
+  <iframe src="../assets/cmajor/staircase.html" title="Equal keys, growing leaps: one octave of bars morphing from equal leaps in hertz to the real keys" height="560" loading="lazy"></iframe>
+</figure>
+<p>The ends don't move, because both pictures run from C to the next C. But the middle sinks, and the rises change. With the real keys, each rise is about 6% bigger than the last. The first, from C to C♯, is 15.6 Hz. The last, from B to C, is 29.4 Hz, nearly twice as much. Tap any bar to read its rise.</p>
+<p>Now watch the dashed line. It marks halfway from C to the next C in hertz: 392.4 Hz, which is ×1½ of middle C. With equal leaps, the sixth key, F♯, sits exactly on it. With the real keys, F♯ drops 22.4 Hz below it, and the line is reached at the seventh key, G, to within half a hertz. That one key's difference is what Part 2 is about.</p>
+<p>Change the octave and the numbers change, but the shape doesn't, because every octave is the same twelve multiplications.</p>
+<aside class="note"><strong>Musicians:</strong> ×1.0595 is the twelfth root of 2, the equal-tempered semitone. The halfway line is the 3:2 ratio of the perfect fifth, G. F♯, six keys up, is the tritone.</aside>
+
+<h2>What comes next</h2>
+<p>Evenly spaced keys are equal multiplications of frequency, and in hertz each one is a bigger leap than the last. The stairs picture, where every leap is the same, puts halfway at F♯. The real keys put it at G.</p>
+<p>Part 2 bends one octave of the frequency axis into a ring. Halfway round that ring is ×1½, and it lands on G.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><strong>Part 1: Keys and Hertz</strong></li>
+          <li>Part 2: One Octave as a Ring (coming)</li>
+          <li>Part 3: Harmonics: Why Half a Turn and a Quarter Turn (coming)</li>
+          <li>Part 4: Rotating the Root (coming)</li>
+          <li>Part 5: Following the Partners (coming)</li>
+          <li>Part 6: Eight out of Twelve (coming)</li>
+          <li>Part 7: Pythagoras and Fixed Keys (coming)</li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

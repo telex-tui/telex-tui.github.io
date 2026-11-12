@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Equal Keys, Growing Leaps</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --good: #3fb950; --half: #bc8cff; --bad: #f85149;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 12px 0 6px; }
+  .slider label { font-size: 13px; color: var(--muted); }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+  .chips span { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .chips button { background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+  .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: var(--code); }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 4.4em; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="One octave of keys as bars, each as tall as its frequency. Tap a bar to read its rise."></svg>
+  <div class="slider">
+    <label for="blend">Leaps</label>
+    <span class="end">equal</span>
+    <input id="blend" type="range" min="0" max="1000" value="0" aria-label="From equal leaps in hertz to the real keys">
+    <span class="end">real keys</span>
+  </div>
+  <div class="chips" id="octs"><span>Octave</span></div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every bar height comes from these. ----
+  const F1 = 32.7032, R = 2 ** (1 / 12);
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B', 'C'];
+  let oct = 3, b = 0, sel = 12;                         // oct 3 is C4, middle C
+  const base = () => F1 * 2 ** oct;                     // the octave's bottom C
+  const hAdd = j => base() * (1 + j / 12);              // equal leaps: every key adds the same hertz
+  const hMul = j => base() * R ** j;                    // the real keys: every key multiplies by the same amount
+  const h = j => (1 - b) * hAdd(j) + b * hMul(j);       // a stated blend of the two
+  const half = () => 1.5 * base();                      // halfway in hertz from C to the next C
+
+  // The code checks its own rule: both ends stay put, and the bars keep rising, at every blend.
+  function check() {
+    for (const bb of [0, 0.25, 0.5, 0.75, 1]) {
+      const hh = j => (1 - bb) * hAdd(j) + bb * hMul(j);
+      if (Math.abs(hh(0) - base()) > 1e-9 || Math.abs(hh(12) - 2 * base()) > 1e-9) return false;
+      for (let j = 1; j <= 12; j++) if (hh(j) <= hh(j - 1)) return false;
+    }
+    return true;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), border: cv('--border'), accent: cv('--accent'), dot: cv('--dot'), good: cv('--good'), half: cv('--half'), code: cv('--code') };
+  const hz = v => v >= 1000 ? Math.round(v).toLocaleString('en') : v.toFixed(1);
+  const name = j => NAMES[j] + (j === 12 ? oct + 2 : oct + 1);
+
+  for (let k = 0; k < 7; k++) {
+    const btn = document.createElement('button');
+    btn.textContent = 'C' + (k + 1);
+    btn.addEventListener('click', () => { oct = k; render(); });
+    $('octs').appendChild(btn);
+  }
+
+  function draw(w) {
+    const svg = $('v'); svg.replaceChildren();
+    const H = 262, padL = 50, padR = 6, top = 26, bot = 216;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const ys = v => bot - (v - base()) / base() * (bot - top);     // axis from this octave's C to the next C
+    const n = 13, bw = (w - padL - padR) / n;
+    el('text', { x: padL, y: 11, 'font-size': 10.5, fill: C.muted }, svg, `frequency (Hz), from C${oct + 1} to C${oct + 2}`);
+    for (const q of [0, 0.25, 0.5, 0.75, 1]) {
+      const v = base() * (1 + q), y = ys(v);
+      el('line', { x1: padL, x2: w - padR, y1: y, y2: y, stroke: C.border, 'stroke-width': 0.6 }, svg);
+      el('text', { x: padL - 6, y: y + 3.5, 'text-anchor': 'end', 'font-size': 10, fill: C.muted }, svg, hz(v));
+    }
+    for (let j = 0; j < n; j++) {
+      const x = padL + j * bw + 1, bwid = bw - 2, y = ys(h(j)), onHalf = Math.abs(h(j) - half()) < 1;
+      const g = el('g', { style: j ? 'cursor:pointer' : '', role: j ? 'button' : 'img', 'aria-label': name(j) }, svg);
+      el('rect', { x, y, width: bwid, height: Math.max(0, bot - y), fill: C.code, stroke: onHalf ? C.good : C.border, 'stroke-width': onHalf ? 2 : 1 }, g);
+      if (j > 0) {   // the rise from the key below
+        const yPrev = ys(h(j - 1));
+        el('rect', { x, y, width: bwid, height: Math.max(1, yPrev - y), fill: j === sel ? C.accent : C.muted, 'fill-opacity': j === sel ? 0.95 : 0.55 }, g);
+        g.addEventListener('click', () => { sel = j; render(); });
+      }
+      if (j === 0 || j === 12) el('circle', { cx: x + bwid / 2, cy: y - (j ? 7 : 0), r: 3.6, fill: C.dot, stroke: '#7a5c00', 'stroke-width': 0.6 }, g);
+      const every = w < 420 ? 2 : 1;
+      if (j % every === 0 || j === 7)
+        el('text', { x: x + bwid / 2, y: bot + 15, 'text-anchor': 'middle', 'font-size': 10.5, fill: j % 12 === 0 ? C.dot : C.text }, svg, NAMES[j]);
+    }
+    // halfway in hertz from C to the next C
+    const yh = ys(half());
+    el('line', { x1: padL, x2: w - padR, y1: yh, y2: yh, stroke: C.half, 'stroke-width': 1.4, 'stroke-dasharray': '5 4' }, svg);
+    el('text', { x: padL + 4, y: yh - 5, 'font-size': 10.5, fill: C.half, stroke: '#161b22', 'stroke-width': 3, 'paint-order': 'stroke' }, svg, `halfway in hertz: ×1½, ${hz(half())} Hz`);
+    el('text', { x: padL, y: bot + 34, 'font-size': 10.5, fill: C.muted }, svg, 'one bar per key, as tall as its frequency');
+  }
+
+  function render() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    draw(w);
+    const first = h(1) - h(0), last = h(12) - h(11);
+    const fs = half() - h(6), gs = half() - h(7);
+    let line1;
+    if (b === 0) line1 = `<b>Equal leaps:</b> every key adds the same <b>${first.toFixed(1)} Hz</b>. The sixth key, F♯, sits exactly on halfway (${hz(half())} Hz).`;
+    else if (b === 1) line1 = `<b>The real keys:</b> every key multiplies by ×${R.toFixed(4)}, so the rises grow from <b>${first.toFixed(1)} Hz</b> to <b>${last.toFixed(1)} Hz</b>. F♯ is now ${fs.toFixed(1)} Hz below halfway, and the seventh key, G, comes within ${Math.abs(gs).toFixed(1)} Hz of it.`;
+    else line1 = `${Math.round(b * 100)}% of the way from equal leaps to the real keys. The rises run from ${first.toFixed(1)} Hz to ${last.toFixed(1)} Hz, and halfway falls between F♯ and G.`;
+    const j = sel, rise = h(j) - h(j - 1);
+    const line2 = `${name(j - 1)} → ${name(j)}: ${hz(h(j - 1))} → ${hz(h(j))} Hz, a rise of <b>${rise.toFixed(1)} Hz</b>. Tap any bar to read its rise.`;
+    $('out').innerHTML = `<p>${line1}</p><p>${line2}</p>`;
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> the key k places above C${oct + 1} is drawn (1 − b) × C × (1 + k/12) + b × C × ${R.toFixed(4)}<sup>k</sup> tall, with C = ${hz(base())} Hz and b = ${Math.round(b * 100)}%. At b = 0, every key adds the same hertz; at b = 100%, every key multiplies by the same amount. The axis runs from C${oct + 1} to C${oct + 2}.`;
+    [...$('octs').querySelectorAll('button')].forEach((btn, k) => btn.setAttribute('aria-pressed', String(k === oct)));
+    try { parent.postMessage({ cmajorEmbed: 'staircase', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  $('blend').addEventListener('input', e => { b = +e.target.value / 1000; render(); });
+  new ResizeObserver(() => render()).observe(document.querySelector('.wrap'));
+  render();
+})();
+</script>
+</body>
+</html>

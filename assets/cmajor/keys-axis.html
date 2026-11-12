@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keys and Hertz</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --bad: #f85149;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 12px 0 6px; }
+  .slider label { font-size: 13px; color: var(--muted); }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+  .chips span { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .chips button { background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+  .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: var(--code); }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 3.1em; font-variant-numeric: tabular-nums; }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="A keyboard from C1 to C8 above a frequency axis, with a thread from each key to its place on the axis"></svg>
+  <div class="slider">
+    <label for="blend">Spacing</label>
+    <span class="end">keys</span>
+    <input id="blend" type="range" min="0" max="1000" value="0" aria-label="Spacing of the lower axis, from key spacing to hertz spacing">
+    <span class="end">hertz</span>
+  </div>
+  <div class="chips" id="octs"><span>Highlight</span></div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position on screen comes from these. ----
+  const F1 = 32.7032, N = 84;                          // C1 in Hz, and the 84 keys from C1 up to C8
+  const f = i => F1 * 2 ** (i / 12);                   // every key multiplies the frequency by the same amount
+  const keyPos = fr => 12 * Math.log2(fr / F1) / N;    // 0..1 across: every key the same width
+  const hzPos = fr => (fr - F1) / (f(N) - F1);         // 0..1 across: every hertz the same width
+  let b = 0, oct = 6;                                  // b: how far the lower axis has moved from key spacing to hertz spacing
+  const pos = fr => (1 - b) * keyPos(fr) + b * hzPos(fr);
+
+  // The code checks its own rule: the ends never move, and the keys stay in order, at every blend.
+  function check() {
+    for (const bb of [0, 0.25, 0.5, 0.75, 1]) {
+      const p = fr => (1 - bb) * keyPos(fr) + bb * hzPos(fr);
+      if (Math.abs(p(F1)) > 1e-9 || Math.abs(p(f(N)) - 1) > 1e-9) return false;
+      for (let i = 1; i <= N; i++) if (p(f(i)) <= p(f(i - 1))) return false;
+    }
+    return true;
+  }
+  const ruleOK = check();
+
+  const isBlack = i => [1, 3, 6, 8, 10].includes(i % 12);
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), border: cv('--border'), accent: cv('--accent'), dot: cv('--dot') };
+
+  for (let k = 0; k < 7; k++) {
+    const btn = document.createElement('button');
+    btn.textContent = 'C' + (k + 1) + '–C' + (k + 2);
+    btn.addEventListener('click', () => { oct = k; render(); });
+    $('octs').appendChild(btn);
+  }
+
+  function draw(w) {
+    const svg = $('v'); svg.replaceChildren();
+    const H = 226, yTop = 24, yKeys = 58, yAxis = 176, pad = 4;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const W = w - 2 * pad, X = u => pad + u * W;
+    const lo = 12 * oct, hi = 12 * oct + 12;
+
+    el('text', { x: pad, y: 12, 'font-size': 11, fill: C.muted }, svg, 'Keyboard: every key the same width');
+    for (let i = 0; i <= N; i++) {
+      const x0 = i === 0 ? X(0) : X((i - 0.5) / N), x1 = i === N ? X(1) : X((i + 0.5) / N);
+      el('rect', { x: x0, y: yTop, width: Math.max(0.5, x1 - x0 - 0.4), height: yKeys - yTop,
+        fill: isBlack(i) ? '#0d1117' : '#e9ecef', stroke: C.border, 'stroke-width': 0.3 }, svg);
+    }
+    el('rect', { x: X(lo / N), y: yTop - 6, width: X(hi / N) - X(lo / N), height: 3, fill: C.accent }, svg);
+
+    // a thread from each key to where the lower axis puts its frequency
+    for (let i = 0; i <= N; i++) {
+      const inSel = i >= lo && i <= hi, isC = i % 12 === 0;
+      el('line', { x1: X(i / N), y1: yKeys, x2: X(pos(f(i))), y2: yAxis,
+        stroke: isC ? C.dot : inSel ? C.accent : C.muted,
+        'stroke-width': isC ? 1.6 : inSel ? 1.1 : 0.5,
+        'stroke-opacity': isC ? 0.95 : inSel ? 0.9 : 0.35 }, svg);
+    }
+    el('line', { x1: X(0), x2: X(1), y1: yAxis, y2: yAxis, stroke: C.muted }, svg);
+    el('rect', { x: X(pos(f(lo))), y: yAxis + 3, width: Math.max(1.5, X(pos(f(hi))) - X(pos(f(lo)))), height: 3, fill: C.accent }, svg);
+    for (let k = 0; k <= 7; k++) {
+      const i = 12 * k;
+      el('circle', { cx: X(i / N), cy: yKeys - 7, r: 3.6, fill: C.dot, stroke: '#7a5c00', 'stroke-width': 0.6 }, svg);
+      el('circle', { cx: X(pos(f(i))), cy: yAxis, r: 3.6, fill: C.dot, stroke: '#7a5c00', 'stroke-width': 0.6 }, svg);
+    }
+
+    // hertz ticks follow the same blend as the keys
+    const yLab = yAxis + 24;
+    el('text', { x: X(0), y: yLab, 'font-size': 10.5, fill: C.dot }, svg, 'C1');
+    el('text', { x: X(1), y: yLab, 'text-anchor': 'end', 'font-size': 10.5, fill: C.dot }, svg, 'C8');
+    let lastX = X(0) + 14;
+    for (const fr of [1000, 2000, 3000, 4000]) {
+      const x = X(pos(fr));
+      el('line', { x1: x, x2: x, y1: yAxis + 7, y2: yAxis + 12, stroke: C.muted }, svg);
+      if (x - lastX > 46 && X(1) - x > 34) {
+        el('text', { x, y: yLab, 'text-anchor': 'middle', 'font-size': 10, fill: C.muted }, svg, fr.toLocaleString('en') + ' Hz');
+        lastX = x;
+      }
+    }
+    const desc = b === 0 ? 'spaced like the keys' : b === 1 ? 'every hertz the same width'
+      : Math.round(b * 100) + '% of the way from key spacing to hertz spacing';
+    el('text', { x: X(0), y: H - 4, 'font-size': 11, fill: C.muted }, svg, 'Frequency axis: ' + desc);
+  }
+
+  function render() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    draw(w);
+    const lo = 12 * oct, hi = lo + 12;
+    const share = (pos(f(hi)) - pos(f(lo))) * 100;
+    const nm = `C${oct + 1}–C${oct + 2}`;
+    const pct = s => (s < 1 ? s.toFixed(2) : s.toFixed(1)) + '%';
+    let msg;
+    if (b === 0) msg = `With key spacing, every thread runs straight down, and <b>${nm}</b> takes ${pct(share)} of the axis, the same seventh as every other octave. Drag <b>Spacing</b> towards hertz.`;
+    else if (b === 1) msg = `With hertz spacing, <b>${nm}</b> takes <b>${pct(share)}</b> of the axis.` +
+      (oct === 6 ? ' The top octave gets half the axis on its own.' : oct === 0 ? ' The bottom octave gets less than 1%.' : '') +
+      ' Each octave covers twice as many hertz as the one below it.';
+    else msg = `${Math.round(b * 100)}% of the way from key spacing to hertz spacing. <b>${nm}</b> now takes ${pct(share)} of the axis.`;
+    $('out').innerHTML = msg;
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> on the keyboard, every key is the same width. On the axis, each key sits at (1 − b) × its keyboard position + b × its hertz position, with b = ${Math.round(b * 100)}%. At b = 100%, every hertz is the same width. Each key’s frequency is ×1.0595 the one below it.`;
+    [...$('octs').querySelectorAll('button')].forEach((btn, k) => btn.setAttribute('aria-pressed', String(k === oct)));
+    try { parent.postMessage({ cmajorEmbed: 'keys-axis', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  $('blend').addEventListener('input', e => { b = +e.target.value / 1000; render(); });
+  new ResizeObserver(() => render()).observe(document.querySelector('.wrap'));
+  render();
+})();
+</script>
+</body>
+</html>
