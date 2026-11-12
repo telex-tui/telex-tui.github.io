@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fixed Keys</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --harm: #3fb950; --warn: #f0883e; --bad: #f85149;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 0; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button, .seg button, .play { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+  .chips button { border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; }
+  .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: var(--code); }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .play { border: 1px solid var(--harm); color: var(--text); border-radius: 6px; padding: 5px 12px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 7.4em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .readout p b { color: var(--text); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="How fast four pairs of notes waver under three ways of fixing the keys, with the chosen pair's matching harmonics zoomed in and the pair added together over two seconds"></svg>
+  <div class="row">
+    <span>Keys</span>
+    <div class="seg" role="group" aria-label="How the keys are fixed">
+      <button data-t="pyth" aria-pressed="true">Pythagoras’s</button>
+      <button data-t="tri" aria-pressed="false">Exact triangles</button>
+      <button data-t="piano" aria-pressed="false">Piano</button>
+    </div>
+  </div>
+  <div class="row"><span>Pair</span><div class="chips" id="pairs"></div></div>
+  <div class="row">
+    <button class="play" id="both">&#9654; Both notes</button>
+    <button class="play" id="pair">&#9654; Just the matching pair</button>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules ----
+  const C4 = 261.6256;                                   // middle C, in Hz
+  const fold = x => { while (x >= 2 - 1e-12) x /= 2; while (x < 1 - 1e-12) x *= 2; return x; };
+  // Three ways to fix the keys, as multiples of middle C within its octave.
+  // Pythagoras's: C, then eleven hops of exactly ×1½, each halved back into the octave. The eleventh, E♯, is the F key.
+  const PYTH = {}; ['C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'C♯', 'G♯', 'D♯', 'A♯', 'F'].forEach((n, k) => PYTH[n] = fold(1.5 ** k));
+  const TUNINGS = {
+    pyth: { name: 'Pythagoras’s keys', r: PYTH },
+    tri: { name: 'exact triangles', r: { C: 1, D: 9 / 8, E: 5 / 4, F: 4 / 3, G: 3 / 2, A: 5 / 3, B: 15 / 8 } },
+    piano: { name: 'the piano’s keys', r: { C: 1, D: 2 ** (2 / 12), E: 2 ** (4 / 12), F: 2 ** (5 / 12), G: 2 ** (7 / 12), A: 2 ** (9 / 12), B: 2 ** (11 / 12) } },
+  };
+  // the pairs: lower note, its octave shift, upper note, and the harmonics that should match (lower's p against upper's q)
+  const PAIRS = [
+    { lo: 'C', loOct: 0, hi: 'G', p: 3, q: 2, label: 'C and G' },
+    { lo: 'F', loOct: -1, hi: 'C', hiOct: 0, p: 3, q: 2, label: 'F and C' },
+    { lo: 'D', loOct: 0, hi: 'A', p: 3, q: 2, label: 'D and A' },
+    { lo: 'C', loOct: 0, hi: 'E', p: 5, q: 4, label: 'C and E' },
+  ];
+  let tune = 'pyth', pick = 1;
+  const freqs = (i = pick, tn = tune) => {
+    const P = PAIRS[i], r = TUNINGS[tn].r;
+    const lo = C4 * r[P.lo] * 2 ** P.loOct, hi = C4 * r[P.hi] * 2 ** (P.hiOct || 0);
+    return { lo, hi, fl: P.p * lo, fh: P.q * hi, gap: Math.abs(P.p * lo - P.q * hi) };
+  };
+  const swell = (gap, s) => Math.abs(Math.cos(Math.PI * gap * s));
+  const names = i => { const P = PAIRS[i]; return [P.lo + (4 + P.loOct), P.hi + (4 + (P.hiOct || 0))]; };
+
+  // The code checks its own rules. Twelve of Pythagoras's hops overshoot seven octaves by 531441/524288; his keys
+  // keep C–G and D–A exact; exact triangles keep C–G, F–C and C–E exact but give D–A a ratio of 40/27; and on the
+  // piano every partner pair is the same ratio, ×1.4983, whatever the note.
+  function check() {
+    if (Math.abs(1.5 ** 12 / 2 ** 7 - 531441 / 524288) > 1e-15) return false;
+    if (freqs(0, 'pyth').gap > 1e-9 || freqs(2, 'pyth').gap > 1e-9) return false;
+    if (freqs(0, 'tri').gap > 1e-9 || freqs(1, 'tri').gap > 1e-9 || freqs(3, 'tri').gap > 1e-9) return false;
+    if (Math.abs(TUNINGS.tri.r.A / TUNINGS.tri.r.D - 40 / 27) > 1e-12) return false;
+    for (const i of [0, 1, 2]) { const f = freqs(i, 'piano'); if (Math.abs(f.hi / f.lo - 2 ** (7 / 12)) > 1e-12) return false; }
+    return true;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COL = { text: cv('--text'), muted: cv('--muted'), border: cv('--border'), dot: cv('--dot'), accent: cv('--accent'),
+    harm: cv('--harm'), warn: cv('--warn'), bad: cv('--bad'), card: cv('--card'), code: cv('--code') };
+  const hz = v => v >= 1000 ? v.toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : v.toFixed(1);
+
+  // ---- Sound ----
+  let ac;
+  function play(parts) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t0 = ac.currentTime + 0.02, dur = 4, out = ac.createGain();
+      out.gain.setValueAtTime(0, t0); out.gain.linearRampToValueAtTime(0.07, t0 + 0.05);
+      out.gain.setValueAtTime(0.07, t0 + dur - 0.6); out.gain.linearRampToValueAtTime(0, t0 + dur);
+      out.connect(ac.destination);
+      for (const [f, a] of parts) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f; g.gain.value = a; o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + dur + 0.1);
+      }
+    } catch (e) {}
+  }
+  const note = f => Array.from({ length: 8 }, (_, i) => [f * (i + 1), 1 / (i + 1)]);
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const svg = $('v'); svg.replaceChildren();
+    const H = 356;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const xa = 14, xb = w - 14;
+
+    // Panel 1: how fast each pair wavers with these keys
+    el('text', { x: xa, y: 12, 'font-size': 11, fill: COL.muted }, svg, `Wavers a second, with ${TUNINGS[tune].name}`);
+    const labW = 74, x0 = xa + labW, MAXR = 18, X = v => x0 + (xb - 46 - x0) * Math.min(v, MAXR) / MAXR;
+    PAIRS.forEach((P, i) => {
+      const y = 30 + i * 24, g = freqs(i).gap, sel = i === pick;
+      el('text', { x: xa, y: y + 4, 'font-size': 12, fill: sel ? COL.text : COL.muted, 'font-weight': sel ? 700 : 400 }, svg, P.label);
+      el('rect', { x: x0, y: y - 6, width: Math.max(0, X(MAXR) - x0), height: 12, rx: 3, fill: COL.code }, svg);
+      if (g > 1e-9) el('rect', { x: x0, y: y - 6, width: Math.max(2, X(g) - x0), height: 12, rx: 3, fill: g > 5 ? COL.bad : COL.warn, 'fill-opacity': sel ? 1 : 0.6 }, svg);
+      else el('circle', { cx: x0 + 5, cy: y, r: 4, fill: COL.harm }, svg);
+      el('text', { x: g > 1e-9 ? X(g) + 6 : x0 + 14, y: y + 4, 'font-size': 11.5, fill: g > 1e-9 ? COL.text : COL.harm }, svg, g > 1e-9 ? g.toFixed(2) : 'steady');
+      const hit = el('rect', { x: xa, y: y - 11, width: xb - xa, height: 22, fill: 'transparent', style: 'cursor:pointer' }, svg);
+      hit.addEventListener('click', () => { pick = i; update(); });
+    });
+
+    // Panel 2: the chosen pair's matching harmonics, zoomed in to 20 Hz either side, one tick per hertz
+    const f = freqs(), [nl, nh] = names(pick), P = PAIRS[pick];
+    const yz = 186, lo = f.fl - 20, za = xa + 52, zb = xb - 52, Z = v => za + (zb - za) * (v - lo) / 40;
+    el('text', { x: xa, y: 138, 'font-size': 11, fill: COL.muted }, svg, 'The matching pair, zoomed in: one tick per hertz');
+    el('line', { x1: za, x2: zb, y1: yz, y2: yz, stroke: COL.muted }, svg);
+    for (let v = Math.ceil(lo); v <= lo + 40; v++) {
+      const big = v % 5 === 0;
+      el('line', { x1: Z(v), x2: Z(v), y1: yz - (big ? 4 : 2), y2: yz + (big ? 4 : 2), stroke: COL.muted, 'stroke-opacity': big ? 1 : 0.6 }, svg);
+    }
+    el('text', { x: za - 5, y: yz + 4, 'text-anchor': 'end', 'font-size': 10, fill: COL.muted }, svg, hz(lo));
+    el('text', { x: zb + 5, y: yz + 4, 'font-size': 10, fill: COL.muted }, svg, hz(lo + 40) + ' Hz');
+    el('line', { x1: Z(f.fl), x2: Z(f.fl), y1: yz - 18, y2: yz, stroke: COL.dot, 'stroke-width': 3 }, svg);
+    el('line', { x1: Z(f.fh), x2: Z(f.fh), y1: yz, y2: yz + 18, stroke: COL.accent, 'stroke-width': 3 }, svg);
+    const clampX = v => Math.min(Math.max(v, xa + 70), xb - 70);
+    el('text', { x: clampX(Z(f.fl)), y: yz - 24, 'text-anchor': 'middle', 'font-size': 10.5, fill: COL.dot }, svg, `${nl} × ${P.p}: ${hz(f.fl)} Hz`);
+    el('text', { x: clampX(Z(f.fh)), y: yz + 32, 'text-anchor': 'middle', 'font-size': 10.5, fill: COL.accent }, svg, `${nh} × ${P.q}: ${hz(f.fh)} Hz`);
+
+    // Panel 3: the matching pair added together, over 2 seconds
+    const yt = 250, ys = 290, amp = 22;
+    el('text', { x: xa, y: yt, 'font-size': 11, fill: COL.muted }, svg, 'The pair added together, over 2 seconds');
+    const pts = [], M = 1600;
+    for (let k = 0; k <= M; k++) pts.push([xa + (xb - xa) * k / M, amp * swell(f.gap, 2 * k / M)]);
+    const d = 'M' + pts.map(([px, a]) => `${px.toFixed(1)} ${(ys - a).toFixed(1)}`).join(' L') + ' L' + pts.slice().reverse().map(([px, a]) => `${px.toFixed(1)} ${(ys + a).toFixed(1)}`).join(' L') + ' Z';
+    el('path', { d, fill: f.gap < 1e-9 ? COL.harm : f.gap > 5 ? COL.bad : COL.warn, 'fill-opacity': 0.55 }, svg);
+    for (const s of [0, 0.5, 1, 1.5, 2]) {
+      const px = xa + (xb - xa) * s / 2;
+      el('line', { x1: px, x2: px, y1: ys + amp + 3, y2: ys + amp + 7, stroke: COL.muted }, svg);
+      el('text', { x: px, y: ys + amp + 19, 'text-anchor': s === 0 ? 'start' : s === 2 ? 'end' : 'middle', 'font-size': 10, fill: COL.muted }, svg, s + ' s');
+    }
+  }
+
+  function update() {
+    draw();
+    const f = freqs(), [nl, nh] = names(pick), P = PAIRS[pick];
+    let l1 = `${nl} is ${hz(f.lo)} Hz and ${nh} ${hz(f.hi)} Hz. `;
+    l1 += f.gap < 1e-9 ? `${nl}’s harmonic ${P.p} and ${nh}’s harmonic ${P.q} are both <b>${hz(f.fl)} Hz</b>, so the pair holds steady.`
+      : `${nl}’s harmonic ${P.p} is ${hz(f.fl)} Hz and ${nh}’s harmonic ${P.q} is ${hz(f.fh)} Hz: <b>${f.gap.toFixed(2)} Hz apart</b>, so the pair wavers ${f.gap.toFixed(2)} times a second.`;
+    let l2 = '';
+    if (tune === 'pyth') l2 = pick === 1 ? 'This F is the eleventh exact hop up from C, reached as E♯, so the link from it back up to C takes the whole miss of the twelve hops: C sits 7.3° short of the half turn of F’s ring. This pair is the wolf.'
+      : pick === 3 ? 'This E is four exact hops up from C (81/64), not an exact quarter turn (5/4), so C and E waver fast.'
+        : 'Both notes come from exact hops, so these two are exact partners.';
+    else if (tune === 'tri') l2 = pick === 2 ? 'D is exact as G’s partner, ×1⅛ (9/8), but then A, at ×1⅔, is only ×1.4815 (40/27) above it: 6.7° short of the half turn of D’s ring. For D and A to be exact partners, D would have to be ×1⅑ (10/9), 3.6 Hz lower. One key can’t be both.'
+      : 'These two are in the same exact triangle, so they hold steady.';
+    else l2 = pick === 3 ? 'On the piano, every quarter-turn note sits 3.6° past the quarter turn of its ring, so every pair like this is off by the same ratio, in every key. Around middle C, that’s about ten wavers a second, and more higher up.'
+      : 'On the piano, every partner sits 0.6° short of the half turn of its ring, so every partner pair is off by the same small ratio, in every key, and wavers a little.';
+    $('out').innerHTML = `<p>${l1}</p><p>${l2} Tap a pair to choose it.</p>`;
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      '<b>Rule:</b> Pythagoras’s keys are C and eleven hops of exactly ×1½ from it, each halved back into the octave: G, D, A, E, B, F♯, C♯, G♯, D♯, A♯, and E♯ for F. Exact triangles are C’s, F’s and G’s, exact: E ×5/4, G ×3/2, F ×4/3, A ×5/3, B ×15/8 and D ×9/8. The piano’s keys are ×1.0595 each. A pair wavers once for every hertz between its matching harmonics; the bottom strip draws |cos(π × gap × t)|.';
+    [...$('pairs').children].forEach((btn, i) => btn.setAttribute('aria-pressed', String(i === pick)));
+    document.querySelectorAll('.seg button').forEach(btn => btn.setAttribute('aria-pressed', String(btn.dataset.t === tune)));
+    try { parent.postMessage({ cmajorEmbed: 'fixed', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  PAIRS.forEach((P, i) => {
+    const btn = document.createElement('button'); btn.textContent = P.label;
+    btn.addEventListener('click', () => { pick = i; update(); });
+    $('pairs').appendChild(btn);
+  });
+  document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => { tune = btn.dataset.t; update(); }));
+  $('both').addEventListener('click', () => { const f = freqs(); play([...note(f.lo), ...note(f.hi)]); });
+  $('pair').addEventListener('click', () => { const f = freqs(); play([[f.fl, 1.2], [f.fh, 1.2]]); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>

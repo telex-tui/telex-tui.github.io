@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routes Round the Ring</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --hop: #3fb950; --quarter: #58a6ff; --miss: #f85149;
+    --line: #6e7681; --note: #c9d1d9;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: 8px 0 4px; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .chip { background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; }
+  .chip[aria-pressed="true"] { color: var(--text); background: var(--code); border-color: var(--accent); }
+  .again { background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--hop); border-radius: 6px; padding: 4px 12px; }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; }
+  .slider label { font-size: 13px; color: var(--muted); min-width: 54px; }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 7.4em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .readout p b { color: var(--text); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--miss); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="Middle C's frequency ring with the piano's twelve keys marked, and a route of hops drawn on it, with the amount by which it misses shown in red"></svg>
+  <div class="row"><span>Route</span>
+    <button class="chip" data-r="0" aria-pressed="true">Twelve partner hops</button>
+    <button class="chip" data-r="1" aria-pressed="false">Four hops and a quarter turn</button>
+    <button class="chip" data-r="2" aria-pressed="false">Three quarter turns</button>
+    <button class="again" id="again">&#8635; Draw again</button>
+  </div>
+  <div class="slider">
+    <label for="t">Tuning</label>
+    <span class="end">exact ratios</span>
+    <input id="t" type="range" min="0" max="1000" value="0" aria-label="Hop size, from exact ratios to the piano's keys">
+    <span class="end">piano’s keys</span>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position on screen comes from these. ----
+  const C4 = 261.6256;                                   // middle C, in Hz
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  let route = 0, t = 0, shown = 99, anim = null;          // t: from exact ratios (0) to the piano's keys (1)
+  // a hop multiplies by a stated blend of the exact ratio and the piano's
+  const hopP = (tt = t) => 1.5 ** (1 - tt) * 2 ** (7 * tt / 12);    // partner hop: ×1½ against seven keys
+  const hopQ = (tt = t) => 1.25 ** (1 - tt) * 2 ** (4 * tt / 12);   // quarter turn: ×1¼ against four keys
+  const fold = x => { while (x >= 2 - 1e-9) x /= 2; while (x < 1 - 1e-9) x *= 2; return x; };   // halve back into the octave from middle C
+  const ang = x => 360 * (fold(x) - 1);                             // the frequency ring's rule
+  // each route: the ratios it lands on, hop by hop, in order
+  const paths = (tt = t) => [
+    { hops: Array.from({ length: 13 }, (_, k) => hopP(tt) ** k), kind: 'p' },
+    { hops: Array.from({ length: 5 }, (_, k) => hopP(tt) ** k), kind: 'p', also: [1, hopQ(tt)] },
+    { hops: Array.from({ length: 4 }, (_, k) => hopQ(tt) ** k), kind: 'q' },
+  ];
+  // how far each route misses, as a ratio of middle C: past the top, between the two Es, or short of the next C
+  const missOf = (r, tt = t) => r === 0 ? fold(hopP(tt) ** 12) - 1 : r === 1 ? fold(hopP(tt) ** 4) - hopQ(tt) : 2 - hopQ(tt) ** 3;
+
+  // The code checks its own rules. With the piano's keys every route closes exactly; with exact ratios the
+  // routes land where the fractions say (531441/524288, 81/64 against 5/4, 125/64); and every miss shrinks
+  // steadily as the hops move from exact ratios to the piano's keys.
+  function check() {
+    if (Math.abs(missOf(0, 1)) > 1e-9 || Math.abs(missOf(1, 1)) > 1e-9 || Math.abs(missOf(2, 1)) > 1e-9) return false;
+    if (Math.abs(fold(1.5 ** 12) - 531441 / 524288) > 1e-15 || Math.abs(fold(1.5 ** 4) - 81 / 64) > 1e-15 || Math.abs(1.25 ** 3 - 125 / 64) > 1e-15) return false;
+    for (let r = 0; r < 3; r++) for (let k = 1; k <= 10; k++) if (!(missOf(r, k / 10) < missOf(r, (k - 1) / 10))) return false;
+    return true;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), card: cv('--card'), dot: cv('--dot'), hop: cv('--hop'), quarter: cv('--quarter'),
+    miss: cv('--miss'), line: cv('--line'), note: cv('--note') };
+  const pct = () => t === 0 ? 0 : t === 1 ? 100 : Math.min(99, Math.max(1, Math.round(t * 100)));
+  const polar = (cx, cy, rad, a) => [cx + rad * Math.sin(a * Math.PI / 180), cy - rad * Math.cos(a * Math.PI / 180)];
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const svg = $('v'); svg.replaceChildren();
+    const H = Math.round(Math.min(Math.max(w * 0.74, 330), 440));
+    const R = Math.min(w / 2 - 50, (H - 76) / 2), cx = w / 2, cy = 38 + R;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: C.line, 'stroke-width': 3 }, svg);
+    // the piano's keys
+    for (let j = 0; j < 12; j++) {
+      const a = 360 * (2 ** (j / 12) - 1), [x, y] = polar(cx, cy, R, a), [lx, ly] = polar(cx, cy, R + 18, a);
+      el('circle', { cx: x, cy: y, r: j ? 4 : 6, fill: j ? C.note : C.dot, 'fill-opacity': j ? 0.6 : 1, stroke: '#0d1117', 'stroke-width': 1 }, svg);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 11, fill: j ? C.muted : C.dot }, svg, NAMES[j]);
+    }
+    const P = paths()[route], col = P.kind === 'p' ? C.hop : C.quarter;
+    const pts = P.hops.map(x => polar(cx, cy, R - 4, ang(x)));
+    const n = Math.min(shown, P.hops.length - 1);
+    for (let k = 1; k <= n; k++) {
+      el('line', { x1: pts[k - 1][0], y1: pts[k - 1][1], x2: pts[k][0], y2: pts[k][1], stroke: col, 'stroke-width': k === n ? 2.4 : 1.6, 'stroke-opacity': 0.85 }, svg);
+      el('circle', { cx: pts[k][0], cy: pts[k][1], r: 3.6, fill: col }, svg);
+      const [hx, hy] = polar(cx, cy, R - 20 - (k > 8 && route === 0 ? 0 : 0), ang(P.hops[k]));
+      el('text', { x: hx, y: hy + 4, 'text-anchor': 'middle', 'font-size': 10, fill: col, stroke: C.card, 'stroke-width': 3, 'paint-order': 'stroke' }, svg, k);
+    }
+    const done = n === P.hops.length - 1;
+    if (route === 1 && done) {                            // the second route to E: one quarter turn
+      const [q0, q1] = P.also.map(x => polar(cx, cy, R - 4, ang(x)));
+      el('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], stroke: C.quarter, 'stroke-width': 2.4 }, svg);
+      el('circle', { cx: q1[0], cy: q1[1], r: 3.6, fill: C.quarter }, svg);
+    }
+    // the miss, as an arc just outside the ring
+    if (done) {
+      const m = missOf(route);
+      let a1, a2;
+      if (route === 0) { a1 = 0; a2 = ang(P.hops[12]); if (a2 > 180) a2 -= 360; }
+      else if (route === 1) { a1 = ang(P.also[1]); a2 = ang(P.hops[4]); }
+      else { a1 = ang(P.hops[3]); a2 = 360; }
+      if (Math.abs(m) > 1e-9) {
+        const arc = []; for (let i = 0; i <= 30; i++) arc.push(polar(cx, cy, R + 7, a1 + (a2 - a1) * i / 30));
+        el('path', { d: 'M' + arc.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'), fill: 'none', stroke: C.miss, 'stroke-width': 5, 'stroke-linecap': 'round' }, svg);
+        const [mx, my] = polar(cx, cy, R + 34, (a1 + a2) / 2);
+        el('text', { x: mx, y: my + 4, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 600, fill: C.miss, stroke: C.card, 'stroke-width': 3, 'paint-order': 'stroke' }, svg, `${Math.abs(a2 - a1).toFixed(1)}°`);
+      }
+    }
+  }
+
+  function update() {
+    draw();
+    const m = missOf(route), hz = (Math.abs(m) * C4).toFixed(1), P = paths()[route];
+    const done = Math.min(shown, P.hops.length - 1) === P.hops.length - 1;
+    let l1;
+    if (!done) l1 = 'Drawing the route…';
+    else if (route === 0) {
+      if (t === 0) l1 = '<b>Twelve hops of exactly ×1½</b> multiply to 129.75, but seven octaves multiply to 128. Halved back into the octave, the twelfth hop lands at ×1.0136 of middle C: <b>4.9° past the top</b>, 3.6 Hz above middle C. The chain of partners doesn’t close.';
+      else if (t === 1) l1 = '<b>Twelve hops of seven keys</b> are 84 keys, exactly seven octaves. The twelfth hop lands on C, and the chain closes.';
+      else l1 = `<b>${pct()}%</b> of the way to the piano’s keys, each hop is ×${hopP().toFixed(4)}. The twelfth lands <b>${ang(P.hops[12]).toFixed(1)}° past the top</b>, ${hz} Hz above middle C.`;
+    } else if (route === 1) {
+      if (t === 0) l1 = '<b>Four hops of exactly ×1½</b> reach ×1.2656 (81/64), at 95.6°. <b>One quarter turn of exactly ×1¼</b> reaches 90°. The two routes to E land <b>5.6° apart</b>: 4.1 Hz at middle C.';
+      else if (t === 1) l1 = 'On the piano, four hops of seven keys are 28 keys, two octaves and four keys, and one hop of four keys lands in the same place: E. <b>The two routes agree.</b>';
+      else l1 = `<b>${pct()}%</b> of the way to the piano’s keys, the two routes to E land <b>${(ang(P.hops[4]) - ang(P.also[1])).toFixed(1)}° apart</b>: ${hz} Hz at middle C.`;
+    } else {
+      if (t === 0) l1 = '<b>Three quarter turns of exactly ×1¼</b> multiply to 1.953, not 2. The third lands <b>16.9° short of the top</b>, at 511.0 Hz: 12.3 Hz below C5, the C above middle C.';
+      else if (t === 1) l1 = 'On the piano, three hops of four keys are twelve keys, one octave: <b>back on C.</b>';
+      else l1 = `<b>${pct()}%</b> of the way to the piano’s keys, each quarter turn is ×${hopQ().toFixed(4)}. The third lands <b>${(360 - ang(P.hops[3])).toFixed(1)}° short of the top</b>, ${hz} Hz below C5.`;
+    }
+    const l2 = t === 1 ? 'Every hop now lands exactly on one of the piano’s keys, the dots round the ring.'
+      : `The dots round the ring are the piano’s keys. ${t === 0 ? 'Exact hops' : 'These hops'} land near them, but not on them.`;
+    const l3 = t !== 0 ? 'Drag <b>Tuning</b> to compare the two ends.'
+      : route === 0 ? 'Drag <b>Tuning</b> towards the piano’s keys: every hop shrinks by the same tiny factor, and the miss shrinks with them.'
+      : route === 1 ? 'Drag <b>Tuning</b> towards the piano’s keys: the partner hops shrink and the quarter turn grows, until the two routes meet.'
+      : 'Drag <b>Tuning</b> towards the piano’s keys: every quarter turn grows by the same tiny factor, and the gap closes.';
+    $('out').innerHTML = `<p>${l1}</p><p>${l2} ${l3}</p>`;
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> each hop multiplies by (exact ratio)<sup>1 − t</sup> × (piano ratio)<sup>t</sup>, with t = ${pct()}%: ×1½ against seven keys (×1.4983) for a partner hop, and ×1¼ against four keys (×1.2599) for a quarter turn. Each landing is halved back into the octave from middle C and placed by the frequency ring’s rule, 360° × (ratio − 1). The red arc is the miss.`;
+    document.querySelectorAll('.chip').forEach(btn => btn.setAttribute('aria-pressed', String(+btn.dataset.r === route)));
+    try { parent.postMessage({ cmajorEmbed: 'routes', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  function drawRoute() {
+    clearInterval(anim);
+    shown = 0; update();
+    const total = paths()[route].hops.length - 1;
+    anim = setInterval(() => { shown++; update(); if (shown >= total) clearInterval(anim); }, 260);
+  }
+  document.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => { route = +btn.dataset.r; drawRoute(); }));
+  $('again').addEventListener('click', drawRoute);
+  $('t').addEventListener('input', e => { t = +e.target.value / 1000; update(); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>
