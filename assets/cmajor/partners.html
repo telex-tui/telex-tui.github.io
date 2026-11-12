@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Following the Partners</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --half: #bc8cff; --link: #3fb950; --bad: #f85149;
+    --line: #6e7681; --note: #c9d1d9;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; touch-action: manipulation; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .row button.b { background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; }
+  .row button.main { border-color: var(--link); }
+  .row button.play { border-color: var(--dot); }
+  .row button:disabled { opacity: .4; cursor: default; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; border: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; }
+  .slider label { font-size: 13px; color: var(--muted); min-width: 54px; }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 36px; }
+  .slider .end:first-of-type { text-align: right; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 7.4em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .readout p b { color: var(--text); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="C's ring of twelve notes. Each press follows a note to its partner, the note at the half turn of its own ring, and draws the hop as a line. Tap a note to hear it."></svg>
+  <div class="row">
+    <button class="b main" id="next">Follow the partner &#9654;</button>
+    <button class="b" id="back">&#9664; Back a hop</button>
+    <button class="b" id="all">All twelve</button>
+    <button class="b" id="clear">Clear</button>
+  </div>
+  <div class="row">
+    <span>Follow</span>
+    <div class="seg" role="group" aria-label="Which way to follow the partners">
+      <button data-d="up" aria-pressed="true">Up the chain</button>
+      <button data-d="down" aria-pressed="false">Down the chain</button>
+    </div>
+    <button class="b play" id="pair">&#9654; Note and partner together</button>
+  </div>
+  <div class="slider">
+    <label for="blend">Spacing</label>
+    <span class="end">keys</span>
+    <input id="blend" type="range" min="0" max="1000" value="1000" aria-label="Spacing of the ring, from key spacing to hertz spacing">
+    <span class="end">hertz</span>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position on screen comes from these. ----
+  const C4 = 261.6256;                                   // middle C, in Hz
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  let b = 1, dir = 1, N = 0, grow = 1, anim = null;      // dir: +1 up the chain, −1 down; N: hops drawn
+  // A note d keys above the root sits this share of the way round the root's ring (Part 2's rule).
+  const share = (d, bb = b) => (1 - bb) * d / 12 + bb * (2 ** (d / 12) - 1);
+  // Every root's ring has the same places (Part 4), so a note's partner is always the same number of keys
+  // above it: whichever note sits nearest the half turn of its ring.
+  const hopOf = (bb = b) => { let best = 1; for (let d = 2; d < 12; d++) if (Math.abs(share(d, bb) - 0.5) < Math.abs(share(best, bb) - 0.5)) best = d; return best; };
+  const chainOf = (n, bb = b, dd = dir) => { const c = [0]; for (let i = 0; i < n; i++) c.push(((c[i] + dd * hopOf(bb)) % 12 + 12) % 12); return c; };
+
+  // The code checks its own rules. Spaced by hertz, the partner is seven keys up, and twelve hops visit
+  // every note once and come back to C; spaced like the keys, it's six keys up and the chain has two notes.
+  // Following a partner up and then down gets back to the same note, at every spacing.
+  function check() {
+    if (hopOf(1) !== 7 || hopOf(0) !== 6) return false;
+    const c = chainOf(12, 1, 1);
+    if (c[12] !== 0 || new Set(c.slice(0, 12)).size !== 12) return false;
+    if (new Set(chainOf(12, 0, 1)).size !== 2) return false;
+    for (const bb of [0, 0.3, 0.6, 1]) for (let j = 0; j < 12; j++) {
+      const up = (j + hopOf(bb)) % 12, down = ((up - hopOf(bb)) % 12 + 12) % 12;
+      if (down !== j) return false;
+    }
+    return true;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), card: cv('--card'), accent: cv('--accent'), dot: cv('--dot'),
+    half: cv('--half'), link: cv('--link'), line: cv('--line'), note: cv('--note') };
+  const fmt = v => Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : v.toFixed(1);
+  const pctB = () => b === 0 ? 0 : b === 1 ? 100 : Math.min(99, Math.max(1, Math.round(b * 100)));
+  const polar = (cx, cy, rad, a) => [cx + rad * Math.sin(a * Math.PI / 180), cy - rad * Math.cos(a * Math.PI / 180)];
+
+  // ---- Sound: plucked notes with eight harmonics, in the octave from middle C ----
+  let ac;
+  function play(freqs, dur) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime + 0.01, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.14 / freqs.length, t + 0.02);
+      out.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      out.connect(ac.destination);
+      for (const f of freqs) for (let n = 1; n <= 8; n++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * n; g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+      }
+    } catch (e) {}
+  }
+  const hzOf = j => C4 * 2 ** (j / 12);
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const svg = $('v'); svg.replaceChildren();
+    const H = Math.round(Math.min(Math.max(w * 0.74, 330), 440));
+    const R = Math.min(w / 2 - 50, (H - 80) / 2), cx = w / 2, cy = 40 + R;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const ang = j => 360 * share(j);                    // where note j sits on C's ring
+
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: C.line, 'stroke-width': 3 }, svg);
+    const [bx, by] = polar(cx, cy, R, 180);
+    el('line', { x1: cx, y1: cy - R, x2: bx, y2: by, stroke: C.half, 'stroke-width': 1.2, 'stroke-dasharray': '5 4', 'stroke-opacity': 0.75 }, svg);
+    el('text', { x: cx, y: cy + R + 34, 'text-anchor': 'middle', 'font-size': 10.5, fill: C.half }, svg, '(half turn of C’s ring)');
+
+    // the hops: a line from each note to its partner, the newest one growing in
+    const chain = chainOf(N);
+    const marks = {};
+    for (let i = 1; i <= N; i++) {
+      const [x1, y1] = polar(cx, cy, R - 6, ang(chain[i - 1])), [x2f, y2f] = polar(cx, cy, R - 6, ang(chain[i]));
+      const g = i === N ? grow : 1, x2 = x1 + (x2f - x1) * g, y2 = y1 + (y2f - y1) * g;
+      el('line', { x1, y1, x2, y2, stroke: C.link, 'stroke-width': i === N ? 2.6 : 1.6, 'stroke-opacity': i === N ? 0.95 : 0.6 }, svg);
+      if (g > 0.98) {
+        const a = Math.atan2(y2 - y1, x2 - x1), s = 7;          // an arrowhead at the partner's end
+        el('path', { d: `M${x2} ${y2} L${x2 - s * Math.cos(a - 0.45)} ${y2 - s * Math.sin(a - 0.45)} L${x2 - s * Math.cos(a + 0.45)} ${y2 - s * Math.sin(a + 0.45)} Z`, fill: C.link, 'fill-opacity': i === N ? 1 : 0.7 }, svg);
+        (marks[chain[i]] = marks[chain[i]] || []).push(i);
+      }
+    }
+    // the notes
+    const last = chain[N];
+    for (let j = 0; j < 12; j++) {
+      const a = ang(j), [x, y] = polar(cx, cy, R, a), [lx, ly] = polar(cx, cy, R + 18, a);
+      const seen = chain.slice(0, N + 1).includes(j), isLast = j === last;
+      const g = el('g', { style: 'cursor:pointer', role: 'button', 'aria-label': 'Play ' + NAMES[j] }, svg);
+      el('circle', { cx: x, cy: y, r: 14, fill: 'transparent' }, g);
+      if (isLast) el('circle', { cx: x, cy: y, r: 10.5, fill: 'none', stroke: C.link, 'stroke-width': 2 }, g);
+      el('circle', { cx: x, cy: y, r: j === 0 ? 7 : 5.5, fill: j === 0 ? C.dot : seen ? C.link : C.note, stroke: '#0d1117', 'stroke-width': 1 }, g);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': seen ? 12.5 : 11.5, 'font-weight': seen ? 700 : 400,
+        fill: j === 0 ? C.dot : seen ? C.text : C.muted }, g, NAMES[j]);
+      if (marks[j]) {
+        const [hx, hy] = polar(cx, cy, R - 24, a);
+        el('text', { x: hx, y: hy + 4, 'text-anchor': 'middle', 'font-size': 10, fill: C.link, stroke: C.card, 'stroke-width': 3, 'paint-order': 'stroke' }, svg, marks[j].join(', '));
+      }
+      g.addEventListener('click', () => play([hzOf(j)], 1.6));
+    }
+  }
+
+  function update() {
+    draw();
+    const d = hopOf(), chain = chainOf(N), seq = chain.map(j => NAMES[j]).join(' → ');
+    const distinct = new Set(chain).size;
+    const spacing = b === 1 ? 'spaced by hertz' : b === 0 ? 'spaced like the keys' : 'at this spacing';
+    let l1;
+    if (N === 0) l1 = dir > 0 ? 'Start at <b>C</b>. Press <b>Follow the partner</b> to hop to the note at the half turn of C’s ring.'
+      : 'Start at <b>C</b>. Press <b>Follow the partner</b> to hop to the note that has C at the half turn of its own ring.';
+    else l1 = `<b>${seq}</b>` + (distinct === 2 && N >= 2 ? ': back and forth between two notes.'
+      : N === 12 && chain[12] === 0 ? ': back at C after twelve hops, with every note visited once.'
+      : ` (${N} hop${N > 1 ? 's' : ''}).`);
+    let l2;
+    if (N === 0) l2 = `On every ring ${spacing}, the note nearest the half turn is the one ${d} keys above the root, ${fmt(360 * share(d))}° round. That’s each note’s partner above.`;
+    else {
+      const p = NAMES[chain[N - 1]], q = NAMES[chain[N]];
+      l2 = dir > 0 ? `Hop ${N}: ${p}’s partner above is <b>${q}</b>, ${d} keys above ${p}: the note nearest the half turn of ${p}’s ring, ${fmt(360 * share(d))}° round.`
+        : `Hop ${N}: ${p}’s partner below is <b>${q}</b>, ${d} keys below ${p}: ${p} is the note nearest the half turn of ${q}’s ring, ${fmt(360 * share(d))}° round.`;
+      if (dir > 0 && d === 7 && N === 4) l2 += ' Four hops from C reach E, the note beside C’s quarter turn.';
+    }
+    const l3 = 'Tap a note to hear it, or press <b>Note and partner together</b> to hear the last note with its next partner.';
+    $('out').innerHTML = `<p>${l1}</p><p>${l2}</p><p>${l3}</p>`;
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> a note’s partner above is the note nearest the half turn of its own ring: the d keys above it that put (1 − b) × d/12 + b × (2<sup>d/12</sup> − 1) closest to ½. With b = ${pctB()}%, d = ${d}. Its partner below is d keys below it. The notes sit on C’s ring by the same rule, and each hop is drawn as a line from a note to its partner.`;
+    $('next').disabled = N >= 12; $('back').disabled = N <= 0; $('clear').disabled = N <= 0; $('all').disabled = N >= 12;
+    document.querySelectorAll('.seg button').forEach(btn => btn.setAttribute('aria-pressed', String(+(btn.dataset.d === 'up') * 2 - 1 === dir)));
+    try { parent.postMessage({ cmajorEmbed: 'partners', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  function growIn() {
+    cancelAnimationFrame(anim);
+    const t0 = performance.now();
+    const tick = t => { grow = Math.min(1, (t - t0) / 380); update(); if (grow < 1) anim = requestAnimationFrame(tick); };
+    grow = 0; anim = requestAnimationFrame(tick);
+  }
+  let timers = [];
+  const stop = () => { timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(anim); grow = 1; };
+  $('next').addEventListener('click', () => { stop(); if (N < 12) { N++; growIn(); } });
+  $('back').addEventListener('click', () => { stop(); if (N > 0) N--; update(); });
+  $('clear').addEventListener('click', () => { stop(); N = 0; update(); });
+  $('all').addEventListener('click', () => {
+    stop();
+    for (let k = N + 1; k <= 12; k++) timers.push(setTimeout(() => { N = k; growIn(); }, (k - N - 1) * 420));
+  });
+  $('pair').addEventListener('click', () => {
+    const j = chainOf(N)[N], d = hopOf();
+    play(dir > 0 ? [hzOf(j), hzOf(j) * 2 ** (d / 12)] : [hzOf(j) * 2 ** (-d / 12), hzOf(j)], 2.6);
+  });
+  document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => { stop(); dir = btn.dataset.d === 'up' ? 1 : -1; update(); }));
+  $('blend').addEventListener('input', e => { b = +e.target.value / 1000; update(); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>
