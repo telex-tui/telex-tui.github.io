@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotating the Root</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --half: #bc8cff; --bad: #f85149;
+    --line: #6e7681; --note: #c9d1d9;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; touch-action: manipulation; }
+  svg text { font-family: inherit; }
+  .moves { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 6px; }
+  .moves button { background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; }
+  .moves button.main { border-color: var(--accent); }
+  .moves button.play { border-color: var(--dot); }
+  .moves button:disabled { opacity: .4; cursor: default; }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; }
+  .slider label { font-size: 13px; color: var(--muted); min-width: 54px; }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 40px; }
+  .slider .end:first-of-type { text-align: right; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 7.4em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .readout p b { color: var(--text); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="A ring of the twelve notes with the root at the top. Move the root up a key at a time and follow where C goes. Tap a note to hear it."></svg>
+  <div class="moves">
+    <button id="down">&#9664; Down a key</button>
+    <button id="up" class="main">Up a key &#9654;</button>
+    <button id="home">Back to C</button>
+    <button id="listen" class="play">&#9654; Root and C together</button>
+  </div>
+  <div class="slider">
+    <label for="root">Root</label>
+    <span class="end">C</span>
+    <input id="root" type="range" min="0" max="1200" value="0" aria-label="The root, from C up to the next C">
+    <span class="end">next C</span>
+  </div>
+  <div class="slider">
+    <label for="blend">Spacing</label>
+    <span class="end">keys</span>
+    <input id="blend" type="range" min="0" max="1000" value="1000" aria-label="Spacing of the ring, from key spacing to hertz spacing">
+    <span class="end">hertz</span>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position on screen comes from these. ----
+  const C4 = 261.6256;                                   // middle C, in Hz
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B', 'C'];
+  let r = 0, b = 1, anim = null;                         // r: the root, in keys above middle C (0 to 12); b: spacing
+  // A note d keys above the root sits this share of the way round the root's ring: Part 2's rule.
+  const share = (d, bb = b) => (1 - bb) * d / 12 + bb * (2 ** (d / 12) - 1);
+  // How many keys note j is above the root, from 0 up to (not including) 12.
+  const above = (j, rr = r) => { let d = (j - rr) % 12; if (d < 0) d += 12; return d; };
+  const angleOf = (j, rr = r, bb = b) => 360 * share(above(j, rr), bb);
+  // C's place when the root is a whole number k of keys above C, for C's trail.
+  const cAt = (k, bb = b) => k % 12 === 0 ? 0 : 360 * share(12 - (k % 12), bb);
+
+  // The code checks its own rules. At every spacing: both ends of the octave stay put, places keep their order,
+  // and every root's ring has the same places, so the note d keys above any root sits at the same angle.
+  // Spaced like the keys, moving the root up a key turns every note back by exactly 30°. C's trail follows
+  // the same rule as the notes.
+  function check() {
+    for (const bb of [0, 0.25, 0.5, 0.75, 1]) {
+      if (Math.abs(share(0, bb)) > 1e-12 || Math.abs(share(12, bb) - 1) > 1e-12) return false;
+      for (let d = 1; d <= 12; d++) if (share(d, bb) <= share(d - 1, bb)) return false;
+      for (let k = 0; k < 12; k++) for (let d = 0; d < 12; d++)
+        if (Math.abs(angleOf((k + d) % 12, k, bb) - 360 * share(d, bb)) > 1e-9) return false;
+      for (let k = 0; k <= 12; k++) if (Math.abs(cAt(k, bb) - (k % 12 ? angleOf(0, k, bb) : 0)) > 1e-9) return false;
+    }
+    for (let k = 0; k < 12; k++) for (let j = 0; j < 12; j++) {
+      const turn = (angleOf(j, k, 0) - angleOf(j, k + 1, 0) + 360) % 360;
+      if (Math.abs(turn - 30) > 1e-9) return false;
+    }
+    return true;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), card: cv('--card'), accent: cv('--accent'), dot: cv('--dot'),
+    half: cv('--half'), line: cv('--line'), note: cv('--note') };
+  const fmt = v => Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : v.toFixed(1);
+  const hz = v => v.toFixed(1);
+  const pctB = () => b === 0 ? 0 : b === 1 ? 100 : Math.min(99, Math.max(1, Math.round(b * 100)));
+  const whole = () => Math.abs(r - Math.round(r)) < 1e-9;
+  const polar = (cx, cy, rad, a) => [cx + rad * Math.sin(a * Math.PI / 180), cy - rad * Math.cos(a * Math.PI / 180)];
+
+  // ---- Sound: plucked notes with eight harmonics, at the frequencies the ring shows ----
+  let ac;
+  function play(freqs, dur) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime + 0.01, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.14 / freqs.length, t + 0.02);
+      out.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      out.connect(ac.destination);
+      for (const f of freqs) for (let n = 1; n <= 8; n++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * n; g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+      }
+    } catch (e) {}
+  }
+  const rootHz = () => C4 * 2 ** (r / 12);
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const svg = $('v'); svg.replaceChildren();
+    const H = Math.round(Math.min(Math.max(w * 0.74, 330), 440));
+    const R = Math.min(w / 2 - 50, (H - 96) / 2), cx = w / 2, cy = 52 + R;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: C.line, 'stroke-width': 3 }, svg);
+    // the ring's twelve places: where the notes 0 to 11 keys above the root belong
+    for (let d = 0; d < 12; d++) {
+      const a = 360 * share(d), [x1, y1] = polar(cx, cy, R - 6, a), [x2, y2] = polar(cx, cy, R + 6, a);
+      el('line', { x1, y1, x2, y2, stroke: C.muted, 'stroke-width': 1.2 }, svg);
+    }
+    // the half turn
+    const [bx, by] = polar(cx, cy, R, 180);
+    el('line', { x1: cx, y1: cy - R, x2: bx, y2: by, stroke: C.half, 'stroke-width': 1.3, 'stroke-dasharray': '5 4', 'stroke-opacity': 0.9 }, svg);
+    el('text', { x: cx, y: cy + 4, 'text-anchor': 'middle', 'font-size': 11, fill: C.half, stroke: C.card, 'stroke-width': 4, 'paint-order': 'stroke' }, svg, 'half turn');
+
+    // C's trail: where C sat at each whole-number root so far, and how far it moved back each time
+    const done = Math.floor(r + 1e-9);
+    const arc = (a1, a2, rad) => { const pts = []; for (let i = 0; i <= 24; i++) pts.push(polar(cx, cy, rad, a1 + (a2 - a1) * i / 24)); return 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'); };
+    for (let k = 1; k <= done; k++) {
+      const a1 = k === 1 ? 360 : cAt(k - 1), a2 = cAt(k);
+      el('path', { d: arc(a1, a2, R - 17), fill: 'none', stroke: C.dot, 'stroke-width': 2, 'stroke-opacity': 0.75 }, svg);
+      const [mx, my] = polar(cx, cy, R - 17, a2), [mx2, my2] = polar(cx, cy, R - 10, a2);
+      el('line', { x1: mx, y1: my, x2: mx2, y2: my2, stroke: C.dot, 'stroke-width': 2 }, svg);
+      const [lx, ly] = polar(cx, cy, R - 34, (a1 + a2) / 2);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 10.5, fill: C.dot }, svg, fmt(a1 - a2) + '°');
+    }
+    if (!whole() && r > 0) {
+      const a1 = done === 0 ? 360 : cAt(done), a2 = angleOf(0);
+      el('path', { d: arc(a1, a2 > a1 ? a2 - 360 : a2, R - 17), fill: 'none', stroke: C.dot, 'stroke-width': 1.2, 'stroke-opacity': 0.5, 'stroke-dasharray': '3 3' }, svg);
+    }
+
+    // the notes, each at its place on the current root's ring
+    const top = whole() ? Math.round(r) % 12 : -1;
+    for (let j = 0; j < 12; j++) {
+      const a = angleOf(j), [x, y] = polar(cx, cy, R, a), [lx, ly] = polar(cx, cy, R + 18, a);
+      const isC = j === 0, isRoot = j === top;
+      const g = el('g', { style: 'cursor:pointer', role: 'button', 'aria-label': 'Play ' + NAMES[j] }, svg);
+      el('circle', { cx: x, cy: y, r: 14, fill: 'transparent' }, g);
+      el('circle', { cx: x, cy: y, r: isC ? 7 : 5, fill: isC ? C.dot : isRoot ? C.accent : C.note, stroke: '#0d1117', 'stroke-width': 1 }, g);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': isRoot || isC ? 12.5 : 11.5, 'font-weight': isRoot || isC ? 700 : 400,
+        fill: isC ? C.dot : isRoot ? C.accent : C.muted }, g, NAMES[j]);
+      g.addEventListener('click', () => play([rootHz() * 2 ** (above(j) / 12)], 1.6));
+    }
+    el('text', { x: cx, y: cy - R - 34, 'text-anchor': 'middle', 'font-size': 11, fill: C.accent }, svg, 'root ▾');
+  }
+
+  function update() {
+    draw();
+    const k = Math.round(r), isInt = whole(), aC = angleOf(0);
+    let l1;
+    if (isInt && k % 12 === 0) l1 = k === 0 ? '<b>Root C.</b> C is at the top, where every ring starts. Press <b>Up a key</b> to move the root up, and follow C.'
+      : '<b>Root C</b> again, twelve keys up. C is back at the top.';
+    else if (isInt) {
+      const nm = NAMES[k], off = aC - 180;
+      let where = `<b>${fmt(aC)}°</b>`;
+      if (Math.abs(off) < 0.05) where += `, exactly on the half turn: across from ${nm}`;
+      else if (Math.abs(off) < 1.5) where += `, ${fmt(Math.abs(off))}° ${off < 0 ? 'short of' : 'past'} the half turn: across from ${nm}`;
+      l1 = `<b>Root ${nm}</b>, ${k} key${k > 1 ? 's' : ''} above C. On ${nm}’s ring, C sits at ${where}.`;
+    } else {
+      const lo = Math.floor(r);
+      l1 = `The root is between ${NAMES[lo]} and ${NAMES[lo + 1]}, at ${hz(rootHz())} Hz. C sits at <b>${fmt(aC)}°</b>.`;
+    }
+
+    const done = Math.floor(r + 1e-9);
+    let l2;
+    if (done >= 1) {
+      const moves = [];
+      for (let i = 1; i <= done; i++) moves.push((i === 1 ? 360 : cAt(i - 1)) - cAt(i));
+      const list = moves.map(m => fmt(m) + '°');
+      l2 = `C has moved back ${list.length === 1 ? list[0] : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1]}` +
+        (moves.length > 1 ? `: ${fmt(moves.reduce((s, m) => s + m, 0))}° in all.` : '.');
+    } else l2 = 'Each press of <b>Up a key</b> moves the root up one key.';
+    let n = 1;
+    while (n < 12 && cAt(n) > 180 + 0.05) n++;           // the same 0.05° that counts as "exactly on the half turn"
+    l2 += ` ${b === 1 ? 'Spaced by hertz' : b === 0 ? 'Spaced like the keys' : `At ${pctB()}% of the way to hertz spacing`}, C first reaches the half turn after <b>${n}</b> moves, with ${NAMES[n]} as the root.`;
+
+    let dN = 0;
+    for (let d = 1; d < 12; d++) if (Math.abs(share(d) - 0.5) < Math.abs(share(dN) - 0.5)) dN = d;
+    const l3 = `On every ring ${b === 1 ? 'spaced by hertz' : b === 0 ? 'spaced like the keys' : 'at this spacing'}, the note nearest the half turn is the one ${dN} keys above the root` +
+      (isInt && k % 12 ? `: on ${NAMES[k]}’s ring, <b>${NAMES[(k + dN) % 12]}</b>.` : isInt ? ': on C’s ring, <b>' + NAMES[dN] + '</b>.' : '.') + ' Tap any note to hear it.';
+    $('out').innerHTML = `<p>${l1}</p><p>${l2}</p><p>${l3}</p>`;
+
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> on the root’s ring, a note d keys above the root sits (1 − b) × d/12 + b × (2<sup>d/12</sup> − 1) of the way round, with b = ${pctB()}%. Moving the root up a key leaves every note one key lower relative to the root, so every note moves back to the place of the note below it. At b = 0, every place is 30° from the next; at b = 100%, the places are spaced by hertz, as in Part 2. The notes never change, only which one is at the top.`;
+    $('down').disabled = r <= 1e-9;
+    $('up').disabled = r >= 12 - 1e-9;
+    $('home').disabled = r <= 1e-9;
+    $('root').value = Math.round(r * 100);
+    try { parent.postMessage({ cmajorEmbed: 'rotate', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  function go(target) {
+    target = Math.max(0, Math.min(12, target));
+    cancelAnimationFrame(anim);
+    const r0 = r, t0 = performance.now(), dur = Math.min(1400, 650 + 90 * Math.abs(target - r0));
+    const tick = t => {
+      const u = Math.min(1, (t - t0) / dur), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+      r = u < 1 ? r0 + (target - r0) * e : target;
+      update();
+      if (u < 1) anim = requestAnimationFrame(tick);
+    };
+    anim = requestAnimationFrame(tick);
+  }
+
+  $('up').addEventListener('click', () => go(Math.floor(r + 1e-9) + 1));
+  $('down').addEventListener('click', () => go(Math.ceil(r - 1e-9) - 1));
+  $('home').addEventListener('click', () => go(0));
+  $('listen').addEventListener('click', () => { let d = above(0); if (d < 1e-9) d = 12; play([rootHz(), rootHz() * 2 ** (d / 12)], 3); });
+  $('root').addEventListener('input', e => {
+    cancelAnimationFrame(anim);
+    r = +e.target.value / 100;
+    if (Math.abs(r - Math.round(r)) < 0.06) r = Math.round(r);   // whole keys click into place
+    update();
+  });
+  $('blend').addEventListener('input', e => { b = +e.target.value / 1000; update(); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>

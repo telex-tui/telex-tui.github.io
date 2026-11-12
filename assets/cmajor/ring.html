@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One Octave as a Ring</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --half: #bc8cff; --bad: #f85149;
+    --line: #6e7681; --note: #c9d1d9;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; touch-action: manipulation; }
+  svg text { font-family: inherit; }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+  .slider label { font-size: 13px; color: var(--muted); min-width: 54px; }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 30px; }
+  .slider .end:first-of-type { text-align: right; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .toggle { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; margin: 8px 0 10px; }
+  .toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: var(--code); }
+  .toggle:disabled { opacity: .45; cursor: default; }
+  .more-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 7.4em; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .readout p b { color: var(--text); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="One octave, from middle C to the C above, as a line that rolls into a ring. Tap a note to hear it."></svg>
+  <div class="slider">
+    <label for="roll">Roll</label>
+    <span class="end">line</span>
+    <input id="roll" type="range" min="0" max="1000" value="0" aria-label="How far the octave is rolled, from a straight line to a ring">
+    <span class="end">ring</span>
+  </div>
+  <div class="slider">
+    <label for="blend">Spacing</label>
+    <span class="end">keys</span>
+    <input id="blend" type="range" min="0" max="1000" value="0" aria-label="Spacing of the notes, from key spacing to hertz spacing">
+    <span class="end">hertz</span>
+  </div>
+  <div class="more-row"><button class="toggle" id="more" aria-pressed="false">Add the next octave</button><span class="hint" id="hint"></span></div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position on screen comes from these. ----
+  const C4 = 261.6256;                                   // middle C, in Hz
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B', 'C'];
+  const ratio = j => 2 ** (j / 12);                      // the key j above C: every key multiplies by the same amount
+  let s = 0, b = 0, more = false, selO = 0, selJ = 7;   // s: how far rolled; b: spacing, from keys (0) to hertz (1)
+  // A note's share of the way from C to the next C: a stated blend of key spacing and hertz spacing.
+  const share = (j, bb = b) => (1 - bb) * j / 12 + bb * (ratio(j) - 1);
+  // The same rule for any ratio of frequencies, so the ×1½ mark is placed exactly as a note at ×1½ would be.
+  const shareR = (r, bb = b) => (1 - bb) * Math.log2(r) + bb * (r - 1);
+  const TICKS = [[1, '×1'], [1.25, '×1¼'], [1.5, '×1½'], [1.75, '×1¾']];
+
+  // A point at share u along a line of length L that has been bent so that its ends meet when
+  // ss = 1. The line starts at (x0, y0) heading right and curls clockwise, without stretching.
+  function bent(u, L, x0, y0, ss = s) {
+    const k = ss * 2 * Math.PI / L;
+    if (k < 1e-9) return [x0 + u * L, y0, 0];
+    const a = k * u * L, R = 1 / k;
+    return [x0 + R * Math.sin(a), y0 + R * (1 - Math.cos(a)), a];
+  }
+
+  // The code checks its own rules. At every spacing: both Cs stay put, the notes keep their order,
+  // and every note sits exactly where its ratio's mark sits. At every roll: the line keeps its
+  // length, and rolled all the way, its ends meet.
+  function check() {
+    for (const bb of [0, 0.25, 0.5, 0.75, 1]) {
+      if (Math.abs(share(0, bb)) > 1e-12 || Math.abs(share(12, bb) - 1) > 1e-12) return false;
+      for (let j = 1; j <= 12; j++) {
+        if (share(j, bb) <= share(j - 1, bb)) return false;
+        if (Math.abs(shareR(ratio(j), bb) - share(j, bb)) > 1e-12) return false;
+      }
+    }
+    for (const ss of [0.25, 0.5, 1]) {
+      let len = 0, [px, py] = bent(0, 1, 0, 0, ss);
+      for (let i = 1; i <= 2000; i++) { const [x, y] = bent(i / 2000, 1, 0, 0, ss); len += Math.hypot(x - px, y - py); px = x; py = y; }
+      if (Math.abs(len - 1) > 1e-4) return false;
+    }
+    const [ex, ey] = bent(1, 1, 0, 0, 1);
+    return Math.hypot(ex, ey) < 1e-9;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), card: cv('--card'), accent: cv('--accent'), dot: cv('--dot'),
+    half: cv('--half'), line: cv('--line'), note: cv('--note') };
+  const deg = v => { const r = Math.round(v); return Math.abs(v - r) < 0.05 ? String(r) : v.toFixed(1); };
+  const hz = v => v.toFixed(1);
+  const label = (o, j) => NAMES[j] + (4 + o + (j === 12 ? 1 : 0));
+  const pctB = () => b === 0 ? 0 : b === 1 ? 100 : Math.min(99, Math.max(1, Math.round(b * 100)));
+  const two = () => more && b === 1;
+  // the note on the first octave nearest halfway (emphasis only: it moves nothing)
+  const nearHalf = () => { let best = 1; for (let j = 1; j < 12; j++) if (Math.abs(share(j) - 0.5) < Math.abs(share(best) - 0.5)) best = j; return best; };
+  // the ratio of frequencies that sits exactly halfway, found by bisection on the rule
+  const halfRatio = () => { let lo = 1, hi = 2; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (shareR(m) < 0.5) lo = m; else hi = m; } return (lo + hi) / 2; };
+
+  // ---- Sound: a plucked note with eight harmonics, always at the piano's frequency ----
+  let ac;
+  function pluck(f) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.16, t + 0.01);
+      out.gain.exponentialRampToValueAtTime(0.0005, t + 1.8);
+      out.connect(ac.destination);
+      for (let n = 1; n <= 8; n++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * n; g.gain.value = 1 / n;
+        o.connect(g); g.connect(out); o.start(t); o.stop(t + 1.9);
+      }
+    } catch (e) {}
+  }
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const svg = $('v'); svg.replaceChildren();
+    const H = two() ? Math.round(Math.min(Math.max(w, 340), 480)) : Math.round(Math.min(Math.max(w * 0.62, 300), 380));
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const octs = two() ? [0, 1] : [0];
+
+    // World units: the first octave is 1 long. The next octave, at hertz spacing, covers twice as
+    // many hertz, so it is 2 long and starts where the first ends; rolled up, both share one centre.
+    const start = o => o === 0 ? [0, 0] : [1 - s, -s / (2 * Math.PI)];
+    const at = (o, u) => bent(u, 2 ** o, ...start(o));
+
+    // Camera: frame the whole line, the same way at every stage of the roll.
+    let x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity;
+    for (const o of octs) for (let i = 0; i <= 120; i++) {
+      const [x, y] = at(o, i / 120);
+      x1 = Math.min(x1, x); x2 = Math.max(x2, x); y1 = Math.min(y1, y); y2 = Math.max(y2, y);
+    }
+    const padX = 34, padTop = 34, padBot = 40;
+    const k = Math.min((w - 2 * padX) / Math.max(x2 - x1, 1e-6), (H - padTop - padBot) / Math.max(y2 - y1, 1e-6));
+    const ox = (w - (x2 - x1) * k) / 2 - x1 * k;
+    const oy = padTop + ((H - padTop - padBot) - (y2 - y1) * k) / 2 - y1 * k;
+    const P = (o, u) => { const [x, y, a] = at(o, u); return [ox + x * k, oy + y * k, a]; };
+
+    for (const o of octs) {
+      const pts = [];
+      for (let i = 0; i <= 200; i++) pts.push(P(o, i / 200));
+      el('path', { d: 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'), fill: 'none',
+        stroke: C.line, 'stroke-width': o ? 3 : 4, 'stroke-opacity': o ? 0.7 : 1, 'stroke-linecap': 'round' }, svg);
+    }
+
+    // Halfway along the first octave: a chord from C, which becomes a diameter once rolled.
+    const [cx0, cy0] = P(0, 0), [hx, hy, ha] = P(0, 0.5);
+    const hnx = -Math.sin(ha), hny = Math.cos(ha);          // normal pointing into the ring
+    if (s > 0) el('line', { x1: cx0, y1: cy0, x2: hx, y2: hy, stroke: C.half, 'stroke-width': 1.3, 'stroke-dasharray': '5 4', 'stroke-opacity': (0.9 * s * s).toFixed(3) }, svg);
+    el('line', { x1: hx - hnx * 9, y1: hy - hny * 9, x2: hx + hnx * 9, y2: hy + hny * 9, stroke: C.half, 'stroke-width': 2 }, svg);
+    // its label moves from under the mark (flat) to the middle of the chord (rolled), clear of the ×1½ label
+    const lx = (1 - s) * (hx + hnx * 46) + s * (cx0 + hx) / 2, ly = (1 - s) * (hy + hny * 46) + s * (cy0 + hy) / 2;
+    el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': 11, fill: C.half,
+      stroke: C.card, 'stroke-width': 4, 'paint-order': 'stroke' }, svg, 'halfway');
+
+    // Ratio marks on the first octave, placed by the same rule as the notes.
+    for (const [rv, lab] of TICKS) {
+      const [px, py, a] = P(0, shareR(rv));
+      const nx = -Math.sin(a), ny = Math.cos(a);
+      el('line', { x1: px + nx * 6, y1: py + ny * 6, x2: px + nx * 16, y2: py + ny * 16, stroke: C.muted, 'stroke-width': 1.2 }, svg);
+      el('text', { x: px + nx * 28, y: py + ny * 28 + 4, 'text-anchor': 'middle', 'font-size': 11, fill: C.muted,
+        stroke: C.card, 'stroke-width': 3, 'paint-order': 'stroke' }, svg, lab);
+    }
+
+    const near = nearHalf();
+    for (const o of octs) for (let j = 0; j <= 12; j++) {
+      if (j === 12 && s > 0.98) continue;                    // rolled up, the top C lands on the bottom C
+      if (o === 1 && j === 0 && s < 0.02) continue;          // unrolled, the next octave starts where this one ends
+      const [px, py, a] = P(o, share(j));
+      const nx = Math.sin(a), ny = -Math.cos(a);             // normal pointing out of the ring
+      const isC = j % 12 === 0, isSel = o === selO && j === selJ, isNear = o === 0 && j === near;
+      const g = el('g', { style: 'cursor:pointer', role: 'button', 'aria-label': 'Play ' + label(o, j) }, svg);
+      el('circle', { cx: px, cy: py, r: 14, fill: 'transparent' }, g);
+      if (isNear) el('circle', { cx: px, cy: py, r: 10, fill: 'none', stroke: C.half, 'stroke-width': 2 }, g);
+      el('circle', { cx: px, cy: py, r: isC ? 6.5 : 5, fill: isC ? C.dot : isSel ? C.accent : C.note,
+        stroke: isSel ? C.accent : '#0d1117', 'stroke-width': isSel ? 2.5 : 1 }, g);
+      el('text', { x: px + nx * 19, y: py + ny * 19 + 4, 'text-anchor': 'middle', 'font-size': o ? 10.5 : 11.5,
+        fill: isSel ? C.text : C.muted, 'font-weight': isSel ? 600 : 400 }, g, NAMES[j]);
+      g.addEventListener('click', () => { selO = o; selJ = j; pluck(C4 * 2 ** o * ratio(j)); update(); });
+    }
+  }
+
+  function update() {
+    if (b !== 1) more = false;
+    if (!two() && selO === 1) selO = 0;
+    draw();
+    const across = s === 1 ? ', directly across from C' : '';
+    let l1;
+    if (b === 0) l1 = `<b>Spaced like the keys:</b> every key gets a twelfth of the way${s === 1 ? ' round, 30°' : ''}. The sixth key, <b>F♯</b>, sits exactly halfway${across}. The ×1½ mark sits at ${deg(360 * shareR(1.5))}°, beside G.` +
+      (s === 0 ? ' Drag <b>Roll</b> to bend the line into a ring.' : '');
+    else if (two()) l1 = `<b>The next octave</b>, C5 to C6, covers ${hz(2 * C4)} Hz, twice as many as C4 to C5, so it rolls into a ring twice the size. Each of its notes lands at the same angle as the same note on the inner ring.`;
+    else if (b === 1) l1 = `<b>Spaced by hertz:</b> every hertz gets the same share, so ×1½ is exactly halfway${across}. <b>G</b> sits ${deg(180 - 360 * share(7))}° short of it, and F♯ has slid back to ${deg(360 * share(6))}°.`;
+    else l1 = `<b>${pctB()}%</b> of the way from key spacing to hertz spacing. The ×1½ mark is at ${deg(360 * shareR(1.5))}°, F♯ at ${deg(360 * share(6))}° and G at ${deg(360 * share(7))}°.`;
+
+    const hr = halfRatio();
+    let nFirst = 0;
+    for (let j = 1; j <= 12; j++) if (share(j) <= 0.5 + 1e-12) nFirst = j;
+    const l2 = `<b>The two halves:</b> C♯ to ${NAMES[nFirst]} is ${nFirst} keys, covering ${hz(C4 * (hr - 1))} Hz up to halfway (${hz(C4 * hr)} Hz). ${NAMES[nFirst + 1]} to C is ${12 - nFirst} keys, covering ${hz(C4 * (2 - hr))} Hz.`;
+
+    const fr = C4 * 2 ** selO * ratio(selJ);
+    let l3;
+    if (selJ % 12 === 0) l3 = `<b>${label(selO, selJ)}</b> (${hz(fr)} Hz): rolled up, every C sits at the top, where its octave starts and ends. Tap any note to hear it.`;
+    else l3 = `<b>${label(selO, selJ)}</b> vibrates ×${ratio(selJ).toFixed(4)} as fast as C${4 + selO} (${hz(fr)} Hz) and sits <b>${deg(360 * share(selJ))}°</b> round: ${30 * selJ}° spaced like the keys, ${deg(360 * (ratio(selJ) - 1))}° spaced by hertz.` +
+      (selO === 1 ? ` That is the same angle as ${NAMES[selJ]}4 on the inner ring.` : '') + ' Tap any note to hear it.';
+    $('out').innerHTML = `<p>${l1}</p><p>${l2}</p><p>${l3}</p>`;
+
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> a note k keys above C, with frequency f, sits (1 − b) × k/12 + b × (f ÷ C − 1) of the way from C to the next C, with b = ${pctB()}%. At b = 0, every key gets the same share; at b = 100%, every hertz does. Rolling bends the line without stretching it, so once rolled, a note sits 360° × its share round. The notes never change, only where they’re drawn.` +
+      (two() ? ' <b>Next octave:</b> twice as many hertz, so twice as long, rolled into a ring around the same centre.' : '');
+    $('more').disabled = b !== 1;
+    $('more').setAttribute('aria-pressed', String(two()));
+    $('hint').textContent = b === 1 ? '' : 'Move Spacing to hertz first.';
+    try { parent.postMessage({ cmajorEmbed: 'ring', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  $('roll').addEventListener('input', e => { s = +e.target.value / 1000; update(); });
+  $('blend').addEventListener('input', e => { b = +e.target.value / 1000; update(); });
+  $('more').addEventListener('click', () => { more = !more; update(); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>

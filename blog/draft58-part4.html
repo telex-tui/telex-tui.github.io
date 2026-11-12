@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frequencies of C major, Part 4: Rotating the Root - Telex</title>
+  <meta name="description" content="Move the top of the frequency ring up from C one key at a time and follow C. It slides back by shrinking amounts, 40.4° down to 32.1°, and reaches the half turn after five moves, with F at the top, not six.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Frequencies of C major, Part 4: Rotating the Root</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 4 of 7 in <a href="#series-index">Frequencies of C major</a>.</p>
+      <p class="series-nav">Previous: <a href="draft58-part3.html">Part 3: Harmonics: Why Half a Turn and a Quarter Turn</a> | Next: <a href="draft58-part5.html">Part 5: Following the Partners</a></p>
+<p>In <a href="draft58-part2.html">Part 2</a> and <a href="draft58-part3.html">Part 3</a>, C was always at the top of the frequency ring. Every other note sat by how far its frequency had climbed from C towards the next C, so G was at the half turn and E at the quarter turn.</p>
+<p>Any note can be at the top. This part moves the top up from C one key at a time, and follows where C goes.</p>
+
+<h2>1. Any note can be the root</h2>
+<p>Call the note at the top of the ring its <strong>root</strong>. Part 2's rule works for any root: each note sits by how far its frequency has climbed from the root towards the root's next octave. With F as the root, the half turn is ×1½ of F.</p>
+<p>Every key multiplies the frequency by the same amount, so every root's ring has the same twelve places. The note one key above the root always sits 21.4° round, the note seven keys above it always 179.4°, and the note eleven keys above it always 319.6°. Only the names in the places change.</p>
+
+<h2>2. Move the root up</h2>
+<p>The ring below starts with C as the root, spaced by hertz. The small ticks mark its twelve places. Press <strong>Up a key</strong>.</p>
+<figure class="embed">
+  <iframe src="../assets/cmajor/rotate.html" title="Rotating the root: the ring of twelve notes with the root at the top, moved up a key at a time, with C's moves marked and the spacing sliding from keys to hertz" height="800" loading="lazy"></iframe>
+</figure>
+<p>The root becomes C♯. Every note is now one key lower relative to the root than it was, so every note moves back to the place of the note below it. C, which was at the top, moves back to the ring's last place, 319.6°, where B was.</p>
+<p>On the frequency ring, that isn't a turn of the whole ring. The places are unevenly spaced, so each note moves back by a different amount: C♯ moves 21.4° to the top, while C moves 40.4°.</p>
+<p>Keep pressing <strong>Up a key</strong> and watch C. It moves back 40.4°, then 38.1°, then 36.0°, then 34.0°, then 32.1°. Each move is smaller than the last, because the places get closer together going back from the end of the ring towards the top. After five moves, with F as the root, C sits at 179.4°: 0.6° short of the half turn, exactly where G sits on C's ring. On F's ring, C is the note across from the root.</p>
+<p>Five moves are enough because the five biggest gaps on the ring, the ones C crosses first, add up to a little more than half a turn: 40.4 + 38.1 + 36.0 + 34.0 + 32.1 = 180.6°.</p>
+<p>Press <strong>Root and C together</strong> to hear the two. With F as the root, F and C sound together the way C and G did in Part 2, because they're the same seven keys apart. Drag <strong>Root</strong> to move the root smoothly instead, between keys as well as on them. C slides back fastest just after it leaves the top, and slows down as it goes round.</p>
+
+<h2>3. Six moves on evenly spaced keys</h2>
+<p>Now drag <strong>Spacing</strong> to keys. Spaced like the keys, every place is 30° from the next, so moving the root does turn the whole ring: every note moves back 30°. After five moves, C sits at 210°, not across from F. It takes a sixth move, with F♯ as the root, to bring C to the half turn.</p>
+<p>Here is where C sits on each root's ring, both ways:</p>
+<table>
+  <thead><tr><th>Root</th><th>Spaced by hertz</th><th>Moved back</th><th>Keys evenly spaced</th></tr></thead>
+  <tbody>
+    <tr><td>C</td><td>top</td><td></td><td>top</td></tr>
+    <tr><td>C♯</td><td>319.6°</td><td>40.4°</td><td>330°</td></tr>
+    <tr><td>D</td><td>281.4°</td><td>38.1°</td><td>300°</td></tr>
+    <tr><td>E♭</td><td>245.4°</td><td>36.0°</td><td>270°</td></tr>
+    <tr><td>E</td><td>211.5°</td><td>34.0°</td><td>240°</td></tr>
+    <tr><td>F</td><td><strong>179.4°</strong></td><td>32.1°</td><td>210°</td></tr>
+    <tr><td>F♯</td><td>149.1°</td><td>30.3°</td><td><strong>180°</strong></td></tr>
+  </tbody>
+</table>
+<p>Keys evenly spaced, every move is 30°, and C reaches the half turn one move later. So the evenly spaced picture puts C across from F♯, six keys above C. Spaced by hertz, C is across from F, five keys above C.</p>
+<aside class="note"><strong>Musicians:</strong> moving the root up a key is transposing up a semitone. Spaced like the keys, this is the chromatic circle, where the note opposite any root is the tritone above it. On the frequency ring, the note opposite the root is the perfect fifth above it.</aside>
+
+<h2>4. Seven and five again</h2>
+<p>Why five? Each move puts the root one key higher, so after five moves the root is five keys above C, and the next C is seven keys above the root. On every ring spaced by hertz, the note seven keys above the root is the one at the half turn. So five moves bring C there. Spaced like the keys, the half turn holds the note six keys above the root, so it takes six moves.</p>
+<p>That's Part 2's split into seven keys and five, read from the other side. G is seven keys above C, so G sits at the half turn of C's ring. F is five keys above C, which leaves seven keys from F up to the next C, so C sits at the half turn of F's ring.</p>
+<p>So C is to F what G is to C. It works out that way only because the ring is spaced by hertz: its uneven places are what put the half turn seven keys up instead of six.</p>
+<aside class="note"><strong>Musicians:</strong> F is a perfect fourth above C, and C is a perfect fifth above F. A fourth up is a fifth down, because 5 + 7 = 12 semitones.</aside>
+
+<h2>What comes next</h2>
+<p>Moving the root up five keys, to F, brings C to the half turn of F's ring, the place G holds on C's ring. So C has two notes linked to it through the half turn: G, across from C on C's ring, and F, which has C across on its own ring.</p>
+<p><a href="draft58-part5.html">Part 5</a> follows those links from note to note.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft58-part1.html">Part 1: Keys and Hertz</a></li>
+          <li><a href="draft58-part2.html">Part 2: One Octave as a Ring</a></li>
+          <li><a href="draft58-part3.html">Part 3: Harmonics: Why Half a Turn and a Quarter Turn</a></li>
+          <li><strong>Part 4: Rotating the Root</strong></li>
+          <li><a href="draft58-part5.html">Part 5: Following the Partners</a></li>
+          <li><a href="draft58-part6.html">Part 6: Eight out of Twelve</a></li>
+          <li><a href="draft58-part7.html">Part 7: Pythagoras and Fixed Keys</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

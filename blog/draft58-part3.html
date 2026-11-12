@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frequencies of C major, Part 3: Harmonics: Why Half a Turn and a Quarter Turn - Telex</title>
+  <meta name="description" content="Every note contains harmonics, evenly spaced in hertz. Rolled onto the frequency ring, they share each octave's ring out in halves, quarters and eighths. That's why the half turn and the quarter turn matter, and where the wavering comes from.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Frequencies of C major, Part 3: Harmonics: Why Half a Turn and a Quarter Turn</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 3 of 7 in <a href="#series-index">Frequencies of C major</a>.</p>
+      <p class="series-nav">Previous: <a href="draft58-part2.html">Part 2: One Octave as a Ring</a> | Next: <a href="draft58-part4.html">Part 4: Rotating the Root</a></p>
+<p><a href="draft58-part2.html">Part 2</a> rolled one octave into the frequency ring, where ×1½ is half a turn and ×1¼ a quarter turn. G sits 0.6° short of the half turn, and E 3.6° past the quarter turn. C with an exact ×1½ sounded steady, and a G slightly off wavered.</p>
+<p>This part shows why the half turn and the quarter turn matter, and where the wavering comes from. Both answers are inside every note.</p>
+
+<h2>1. Every note contains harmonics</h2>
+<p>Pluck a string and it vibrates as a whole, swinging back and forth between its two ends. At the same time, it vibrates in two halves, each swinging twice as fast, and in three thirds, each three times as fast, and in quarters, fifths and so on.</p>
+<p>Each of these extra vibrations is a quieter note of its own, called a <strong>harmonic</strong>. Harmonic 1 is the whole string, the note you think you're hearing. Harmonic 2 vibrates exactly twice as fast, harmonic 3 exactly three times as fast, and so on. You don't hear them as separate notes. Together, they're the sound of the one note.</p>
+<p>For middle C, at 261.6 Hz, harmonic 2 is 523.3 Hz, harmonic 3 is 784.9 Hz and harmonic 4 is 1,046.5 Hz. Every harmonic is 261.6 Hz above the last. That's the picture of equal leaps from <a href="draft58-part1.html">Part 1</a>, where every leap adds the same hertz. The keys don't fit it, but the harmonics fit it exactly.</p>
+<aside class="note"><strong>Musicians:</strong> these are the harmonic series, also called overtones or partials. Harmonic 2 is the first overtone, harmonic 3 the second, and so on. Real piano strings are slightly stiff, which pushes their upper harmonics a little sharp. This series treats them as exact.</aside>
+
+<h2>2. Harmonics on a line</h2>
+<p>The picture below puts middle C's first 16 harmonics on a line four octaves long, from C4 to C8. It starts spaced like the keys, so every octave is the same length. Tap any harmonic to hear it on its own.</p>
+<figure class="embed">
+  <iframe src="../assets/cmajor/harmonic-rings.html" title="Harmonics on the rings: middle C's first sixteen harmonics on a four-octave line that rolls into one ring per octave, with its spacing sliding from keys to hertz" height="900" loading="lazy"></iframe>
+</figure>
+<p>Spaced like the keys, the harmonics crowd together as they climb. Harmonic 2 is twelve keys above harmonic 1, a whole octave. Harmonic 3 is seven keys above harmonic 2, harmonic 4 five keys above that, and harmonic 16 only 1.1 keys above harmonic 15.</p>
+<p>Now drag <strong>Spacing</strong> to hertz. The harmonics spread out evenly, every one 261.6 Hz above the last. Each octave covers twice as many hertz as the one below it, so it holds twice as many harmonics: one from C4 to C5, two from C5 to C6, four from C6 to C7 and eight from C7 to C8, with harmonic 16 at C8.</p>
+
+<h2>3. Roll the harmonics into rings</h2>
+<p>With <strong>Spacing</strong> at hertz, drag <strong>Roll</strong>. Each octave rolls into its own ring, twice the size of the one inside it, as the next octave did in Part 2. Then look where the harmonics land:</p>
+<ul>
+  <li>Harmonic 1, middle C, at the top of the smallest ring.</li>
+  <li>Harmonics 2 and 3 cut the next ring into halves: 2 at the top, 3 at the half turn.</li>
+  <li>Harmonics 4 to 7 cut the next ring into quarters.</li>
+  <li>Harmonics 8 to 15 cut the outer ring into eighths.</li>
+</ul>
+<p>That pattern follows from two things you've already seen. The harmonics are evenly spaced in hertz, and the frequency ring is spaced by hertz, so each octave's harmonics share its ring out evenly. And each octave holds twice as many harmonics as the one below it, so each ring is cut into twice as many equal parts.</p>
+<p>So the half turn is where harmonic 3 lands: the first harmonic that isn't a C. The quarter turn is where harmonic 5 lands, the next new one. Those are the two turns from Part 2. They matter because they're where C's own harmonics already sit.</p>
+<p>Drag <strong>Harmonics</strong> down to 1 and back up to watch the rings fill, or press <strong>One at a time</strong> to hear them in order.</p>
+<p>Then, with the rings still rolled up, drag <strong>Spacing</strong> back to keys. The four rings merge into one, and the harmonics slide off the halves and quarters: harmonic 3 to 210.6°, harmonic 5 to 115.9°, harmonic 7 to 290.6°. Spaced like the keys, the spots are uneven, and the pattern of halves and quarters can't be seen.</p>
+
+<h2>4. Which keys sit on the spots</h2>
+<p>The ticks on each ring are its twelve keys, at the same angles as in Part 2. Tap a harmonic to see how close the nearest key is.</p>
+<p>Some keys sit right beside a harmonic's spot. G is 0.6° from the half turn, where harmonics 3, 6 and 12 land. E is 3.6° from the quarter turn, where harmonics 5 and 10 land. On the outer ring, D is 0.9° from harmonic 9, and B is 4.6° from harmonic 15. On the quarters ring, harmonic 4 lands on C, and harmonics 5 and 6 beside E and G.</p>
+<p>Other harmonics land between keys. Harmonic 7, at three quarters of a turn, is 24.6° past A and 11.4° short of B♭. Harmonic 11 is almost exactly between F and F♯: 14.5° past F and 14.1° short of F♯. Harmonic 13 is 13.5° past A♭ and 20.4° short of A.</p>
+<p>C major's seven notes are the white keys: C, D, E, F, G, A and B. Five of them, C, D, E, G and B, sit beside spots in these first 16 harmonics. The other two, F and A, never can. An exact ×1⅓ would sit a third of a turn round, and an exact ×1⅔ two thirds round. But every ring is cut by doubling, into halves, quarters, eighths and so on, and no amount of halving ever makes a third. No harmonic of C can land on F or A. <a href="draft58-part6.html">Part 6</a> finds where they come from.</p>
+<p>Being beside a spot isn't enough on its own, either. Higher harmonics cut the rings finer still, into sixteenths and beyond, so sooner or later a spot lands near every key: harmonic 17 lands 1.1° from C♯. What matters is which spots two notes share, and the next section shows why.</p>
+<aside class="note"><strong>Musicians:</strong> harmonics 4, 5 and 6 are a major triad in its pure 4:5:6 tuning. Harmonic 5 is 14 cents below the equal-tempered major third, harmonic 7 is 31 cents below the equal-tempered minor seventh, and harmonic 11 sits close to halfway between the perfect fourth and the tritone.</aside>
+
+<h2>5. Where the wavering comes from</h2>
+<p>Two notes played together bring two sets of harmonics. When a harmonic of one has exactly the same frequency as a harmonic of the other, the two vibrate together, peak for peak. When they're nearly but not quite the same, they drift together and apart: louder when their peaks line up, quieter when the peaks of one meet the troughs of the other. That drift is the wavering from Part 2.</p>
+<p>The picture below shows middle C's harmonics above the line and a second note's below, every hertz the same width. The shaded pair is the lowest pair that match, zoomed in underneath. The strip at the bottom shows that pair added together.</p>
+<figure class="embed">
+  <iframe src="../assets/cmajor/match.html" title="Matching harmonics: middle C's harmonics and a second note's on a frequency axis, the matching pair zoomed in, and that pair added together over two seconds" height="650" loading="lazy"></iframe>
+</figure>
+<p>With G at an exact ×1½, G's harmonic 2 is 2 × 1½ = 3 times middle C: exactly C's harmonic 3, at 784.9 Hz. The pair stays lined up, and the strip holds steady.</p>
+<p>Switch <strong>Tuning</strong> to <strong>Slightly off</strong>. G's harmonic 2 drops to 780.2 Hz, 4.71 Hz below C's harmonic 3. Two vibrations 4.71 Hz apart line up and drift apart again 4.71 times a second. That's the waver you heard in Part 2, about five times a second. Press <strong>Just the matching pair</strong> to hear the two harmonics on their own.</p>
+<p>The ring tells you how big the gap will be. On middle C's ring, the full turn covers 261.6 Hz, so each degree is 0.73 Hz. The piano's G sits 0.6° short of the half turn, which puts it 0.44 Hz below an exact ×1½. Its harmonic 2 is twice as far off, 0.89 Hz below C's harmonic 3, so the piano's G wavers against C a little under once a second.</p>
+<p>The piano's E is further from its spot: 3.6° past the quarter turn, 2.60 Hz above an exact ×1¼. E's matching pair is its harmonic 4 against C's harmonic 5, so E's gap is multiplied by four, to 10.38 Hz. Choose E and <strong>Piano</strong> to hear C and E waver about ten times a second.</p>
+<p>So an exact ×1½ stops the wavering because it puts G's harmonic 2 exactly on C's harmonic 3. That's what the half turn is: the spot where a note's harmonic 2 meets C's harmonic 3. The quarter turn is where a note's harmonic 4 meets C's harmonic 5.</p>
+<aside class="note"><strong>Musicians:</strong> the wavering is beating, at the difference in hertz between the two nearly matching harmonics. Equal-tempered major thirds beat fast, about ten times a second at middle C, and equal-tempered fifths beat slowly, a little under once a second.</aside>
+
+<h2>What comes next</h2>
+<p>Every note contains harmonics, evenly spaced in hertz. On the frequency ring, they share each octave's ring out in halves, quarters and eighths. The half turn is where C's harmonic 3 lands, and the quarter turn its harmonic 5. Two notes sound steady together when their matching harmonics have exactly the same frequency, and waver when the frequencies are nearly the same.</p>
+<p>So far, C has always been at the top of the ring. <a href="draft58-part4.html">Part 4</a> turns the ring so that other notes take the top, and follows where C lands.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft58-part1.html">Part 1: Keys and Hertz</a></li>
+          <li><a href="draft58-part2.html">Part 2: One Octave as a Ring</a></li>
+          <li><strong>Part 3: Harmonics: Why Half a Turn and a Quarter Turn</strong></li>
+          <li><a href="draft58-part4.html">Part 4: Rotating the Root</a></li>
+          <li><a href="draft58-part5.html">Part 5: Following the Partners</a></li>
+          <li><a href="draft58-part6.html">Part 6: Eight out of Twelve</a></li>
+          <li><a href="draft58-part7.html">Part 7: Pythagoras and Fixed Keys</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+  <script>
+    // Let each embed size its own frame.
+    window.addEventListener('message', function (e) {
+      if (!e.data || typeof e.data.height !== 'number') return;
+      document.querySelectorAll('.embed iframe').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = Math.ceil(e.data.height) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

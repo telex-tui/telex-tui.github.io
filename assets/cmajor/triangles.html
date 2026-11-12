@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eight out of Twelve</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --code: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --dot: #f2cc60; --half: #bc8cff; --bad: #f85149;
+    --home: #f2cc60; --below: #f0883e; --above: #58a6ff; --line: #6e7681; --note: #c9d1d9;
+  }
+  html, body { margin: 0; background: transparent; color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  * { box-sizing: border-box; }
+  .wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  svg { display: block; width: 100%; overflow: visible; touch-action: manipulation; }
+  svg text { font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: 8px 0 4px; }
+  .row > span { font-size: 12px; color: var(--muted); }
+  .chip { background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; }
+  .chip[aria-pressed="true"] { color: var(--text); background: var(--code); }
+  .chip[data-k="home"][aria-pressed="true"] { border-color: var(--home); }
+  .chip[data-k="below"][aria-pressed="true"] { border-color: var(--below); }
+  .chip[data-k="above"][aria-pressed="true"] { border-color: var(--above); }
+  .chip#loose[aria-pressed="true"] { border-color: var(--bad); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; border: 0; padding: 4px 12px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--code); color: var(--text); }
+  .play { background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--dot); border-radius: 6px; padding: 5px 12px; }
+  .slider { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; }
+  .slider label { font-size: 13px; color: var(--muted); min-width: 54px; }
+  .slider .end { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 36px; }
+  .slider .end:first-of-type { text-align: right; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 100px; }
+  .readout { background: var(--code); border-radius: 6px; padding: 8px 10px; font-size: 13.5px; min-height: 8.6em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .readout p { margin: 0; }
+  .readout p + p { margin-top: 4px; color: var(--muted); }
+  .readout p b { color: var(--text); }
+  .rule { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 12px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  .rule .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="v" aria-label="A ring of the twelve notes with triangles joining each chosen note to the notes beside its quarter turn and half turn. Tap a note to hear it."></svg>
+  <div class="row"><span>Triangles</span>
+    <button class="chip" data-k="home" aria-pressed="true"></button>
+    <button class="chip" data-k="below" aria-pressed="false"></button>
+    <button class="chip" data-k="above" aria-pressed="false"></button>
+    <button class="chip" id="loose" aria-pressed="false">Loose ends</button>
+  </div>
+  <div class="row"><span>Look from</span>
+    <div class="seg" role="group" aria-label="Which note's ring to look from">
+      <button data-v="0" aria-pressed="true">C</button><button data-v="5" aria-pressed="false">F</button><button data-v="7" aria-pressed="false">G</button><button data-v="11" aria-pressed="false">B</button>
+    </div>
+  </div>
+  <div class="row">
+    <button class="play" id="playTri">&#9654; Play the triangles</button>
+    <button class="play" id="playScale">&#9654; Play the notes in order</button>
+  </div>
+  <div class="slider">
+    <label for="blend">Spacing</label>
+    <span class="end">keys</span>
+    <input id="blend" type="range" min="0" max="1000" value="1000" aria-label="Spacing of the ring, from key spacing to hertz spacing">
+    <span class="end">hertz</span>
+  </div>
+  <div class="readout" id="out" aria-live="polite"></div>
+  <p class="rule" id="rule"></p>
+</div>
+
+<script>
+(() => {
+  // ---- The rules. Every position and every choice of note comes from these. ----
+  const C4 = 261.6256;                                   // middle C, in Hz
+  const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+  let b = 1, r = 0, view = 0, anim = null, loose = false;   // r: the note at the top, in keys above C (animated)
+  const show = { home: true, below: false, above: false };
+  const mod = n => ((n % 12) + 12) % 12;
+  // A note d keys above the root sits this share of the way round the root's ring (Part 2's rule).
+  const share = (d, bb = b) => (1 - bb) * d / 12 + bb * (2 ** (d / 12) - 1);
+  // Every ring has the same places (Part 4), so these are the same number of keys up from any note.
+  const nearest = (t, bb) => { let best = 1; for (let d = 2; d < 12; d++) if (Math.abs(share(d, bb) - t) < Math.abs(share(best, bb) - t)) best = d; return best; };
+  const halfKeys = (bb = b) => nearest(0.5, bb);         // a note's partner: nearest the half turn of its ring
+  const quarterKeys = (bb = b) => nearest(0.25, bb);     // its quarter-turn note: nearest the quarter turn
+  const tri = (x, bb = b) => [x, mod(x + quarterKeys(bb)), mod(x + halfKeys(bb))];
+  const roots = (bb = b) => ({ home: 0, below: mod(-halfKeys(bb)), above: halfKeys(bb) });   // C and C's two partners
+  const union = (bb = b, sh = show) => { const R = roots(bb), U = new Set(); for (const k of ['home', 'below', 'above']) if (sh[k]) tri(R[k], bb).forEach(j => U.add(j)); return U; };
+  const above = (j, rr = r) => mod(j - rr);
+  const angleOf = (j, rr = r, bb = b) => 360 * share(above(j, rr), bb);
+
+  // The code checks its own rules. Spaced by hertz, the partner is 7 keys up and the quarter-turn note 4,
+  // and the three triangles together hold exactly the seven links of Part 5's chain from F to B. Spaced like
+  // the keys, they hold four notes, three keys apart. At every spacing, every note's triangle has the same
+  // shape on its own ring.
+  function check() {
+    if (halfKeys(1) !== 7 || quarterKeys(1) !== 4 || halfKeys(0) !== 6 || quarterKeys(0) !== 3) return false;
+    const all = { home: true, below: true, above: true };
+    const U = union(1, all);
+    for (let k = -1; k <= 5; k++) if (!U.has(mod(7 * k))) return false;
+    if (U.size !== 7) return false;
+    const U0 = union(0, all);
+    if (U0.size !== 4 || [0, 3, 6, 9].some(j => !U0.has(j))) return false;
+    for (const bb of [0, 0.5, 1]) for (let x = 0; x < 12; x++) {
+      const [p, q, h] = tri(x, bb);
+      if (angleOf(p, x, bb) !== 0) return false;
+      if (Math.abs(angleOf(q, x, bb) - 360 * share(quarterKeys(bb), bb)) > 1e-9) return false;
+      if (Math.abs(angleOf(h, x, bb) - 360 * share(halfKeys(bb), bb)) > 1e-9) return false;
+    }
+    return true;
+  }
+  const ruleOK = check();
+
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const a in attrs) e.setAttribute(a, attrs[a]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const cv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { text: cv('--text'), muted: cv('--muted'), card: cv('--card'), accent: cv('--accent'), dot: cv('--dot'), half: cv('--half'),
+    bad: cv('--bad'), home: cv('--home'), below: cv('--below'), above: cv('--above'), line: cv('--line'), note: cv('--note') };
+  const fmt = v => Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : v.toFixed(1);
+  const pctB = () => b === 0 ? 0 : b === 1 ? 100 : Math.min(99, Math.max(1, Math.round(b * 100)));
+  const polar = (cx, cy, rad, a) => [cx + rad * Math.sin(a * Math.PI / 180), cy - rad * Math.cos(a * Math.PI / 180)];
+  const list = arr => arr.length < 2 ? arr.join('') : arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1];
+
+  // ---- Sound: plucked notes with eight harmonics ----
+  let ac, timers = [];
+  function play(freqs, dur, delay = 0) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      const t = ac.currentTime + 0.02 + delay, out = ac.createGain();
+      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.14 / freqs.length, t + 0.02);
+      out.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      out.connect(ac.destination);
+      for (const f of freqs) for (let n = 1; n <= 8; n++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * n; g.gain.value = 1 / n; o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+      }
+    } catch (e) {}
+  }
+  const hzOf = j => C4 * 2 ** (j / 12);
+
+  // the notes of the set nearest a note's quarter turn and half turn: a lopsided stand-in when its own triangle doesn't fit
+  function nearestFrom(U, v) {
+    const others = [...U].filter(j => j !== v), off = (j, t) => Math.abs(angleOf(j, v) - t);
+    if (others.length < 2) return null;
+    const uq = others.reduce((a, j) => off(j, 90) < off(a, 90) ? j : a);
+    const rest = others.filter(j => j !== uq);
+    const uh = rest.reduce((a, j) => off(j, 180) < off(a, 180) ? j : a);
+    return [v, uq, uh];
+  }
+
+  function draw() {
+    const w = Math.max(280, Math.round($('v').getBoundingClientRect().width || 600));
+    const svg = $('v'); svg.replaceChildren();
+    const H = Math.round(Math.min(Math.max(w * 0.74, 330), 440));
+    const R = Math.min(w / 2 - 50, (H - 84) / 2), cx = w / 2, cy = 52 + R;
+    svg.setAttribute('viewBox', `0 0 ${w} ${H}`); svg.setAttribute('height', H);
+    const P = j => polar(cx, cy, R, angleOf(j));
+    const U = union(), h = halfKeys(), q = quarterKeys(), R0 = roots();
+
+    el('circle', { cx, cy, r: R, fill: 'none', stroke: C.line, 'stroke-width': 3 }, svg);
+    for (let d = 0; d < 12; d++) {
+      const a = 360 * share(d), [x1, y1] = polar(cx, cy, R - 6, a), [x2, y2] = polar(cx, cy, R + 6, a);
+      el('line', { x1, y1, x2, y2, stroke: C.muted, 'stroke-width': 1.1 }, svg);
+    }
+    // the top's quarter turn and half turn
+    for (const [a, lab] of [[90, '¼'], [180, '½']]) {
+      const [x1, y1] = polar(cx, cy, R - 12, a), [x2, y2] = polar(cx, cy, R + 12, a), [lx, ly] = polar(cx, cy, R - 24, a);
+      el('line', { x1, y1, x2, y2, stroke: C.half, 'stroke-width': 2.5 }, svg);
+      el('text', { x: lx, y: ly + 5, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 700, fill: C.half }, svg, lab);
+    }
+
+    // triangles: each chosen note, its quarter-turn note and its partner
+    const drawn = new Set();
+    for (const k of ['below', 'home', 'above']) {
+      if (!show[k] || drawn.has(R0[k])) continue;
+      drawn.add(R0[k]);
+      const pts = tri(R0[k]).map(P);
+      el('polygon', { points: pts.map(p => p.join(',')).join(' '), fill: C[k], 'fill-opacity': 0.12, stroke: C[k], 'stroke-width': 2.2, 'stroke-linejoin': 'round' }, svg);
+    }
+    // looking from a note whose own triangle doesn't fit the set: its own triangle, and the nearest the set offers
+    const own = tri(view);
+    if (U.size && U.has(view) && own.some(j => !U.has(j))) {
+      el('polygon', { points: own.map(P).map(p => p.join(',')).join(' '), fill: 'none', stroke: C.half, 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }, svg);
+      const lop = nearestFrom(U, view);
+      if (lop) el('polygon', { points: lop.map(P).map(p => p.join(',')).join(' '), fill: C.bad, 'fill-opacity': 0.08, stroke: C.bad, 'stroke-width': 1.8, 'stroke-dasharray': '6 3' }, svg);
+    }
+    // loose ends: notes whose partner above or below is missing from the set
+    if (loose) {
+      const hi = [...U].filter(x => !U.has(mod(x + h))), lo = [...U].filter(x => !U.has(mod(x - h)));
+      for (const [x, y] of [...hi.map(x => [x, mod(x + h)]), ...lo.map(x => [x, mod(x - h)])]) {
+        const [x1, y1] = P(x), [x2, y2] = P(y);
+        el('line', { x1, y1, x2, y2, stroke: C.bad, 'stroke-width': 1.4, 'stroke-dasharray': '2 4' }, svg);
+        el('circle', { cx: x2, cy: y2, r: 10, fill: 'none', stroke: C.bad, 'stroke-width': 1.6, 'stroke-dasharray': '3 2' }, svg);
+      }
+      if (hi.length === 1 && lo.length === 1) {
+        const [x1, y1] = P(lo[0]), [x2, y2] = P(hi[0]);
+        el('line', { x1, y1, x2, y2, stroke: C.bad, 'stroke-width': 2, 'stroke-dasharray': '7 4' }, svg);
+        el('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 6, 'text-anchor': 'middle', 'font-size': 11, fill: C.bad, stroke: C.card, 'stroke-width': 3, 'paint-order': 'stroke' }, svg, `${mod(hi[0] - lo[0])} keys apart`);
+      }
+    }
+    // the notes
+    for (let j = 0; j < 12; j++) {
+      const a = angleOf(j), [x, y] = polar(cx, cy, R, a), [lx, ly] = polar(cx, cy, R + 18, a), inSet = U.has(j);
+      const g = el('g', { style: 'cursor:pointer', role: 'button', 'aria-label': 'Play ' + NAMES[j] }, svg);
+      el('circle', { cx: x, cy: y, r: 14, fill: 'transparent' }, g);
+      el('circle', { cx: x, cy: y, r: inSet ? 6.5 : 4.5, fill: j === 0 ? C.dot : inSet ? C.text : C.note, 'fill-opacity': inSet || j === 0 ? 1 : 0.55, stroke: '#0d1117', 'stroke-width': 1 }, g);
+      el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', 'font-size': inSet ? 12.5 : 11, 'font-weight': inSet ? 700 : 400,
+        fill: j === 0 ? C.dot : inSet ? C.text : C.muted }, g, NAMES[j]);
+      g.addEventListener('click', () => play([hzOf(j)], 1.6));
+    }
+    el('text', { x: cx, y: cy - R - 36, 'text-anchor': 'middle', 'font-size': 11, fill: C.accent }, svg, `looking from ${NAMES[view]} ▾`);
+  }
+
+  function update() {
+    draw();
+    const U = union(), h = halfKeys(), q = quarterKeys(), R0 = roots();
+    const done = new Set(), parts = [];
+    for (const k of ['below', 'home', 'above']) {
+      if (!show[k] || done.has(R0[k])) continue;
+      done.add(R0[k]);
+      parts.push(`<b>${NAMES[R0[k]]}’s triangle</b>: ${tri(R0[k]).map(j => NAMES[j]).join(', ')}.`);
+    }
+    const l1 = parts.length ? parts.join(' ') : 'Press a triangle to draw it.';
+    const sorted = [...U].sort((x, y) => x - y), key = sorted.join();
+    let l2 = '';
+    if (U.size) {
+      l2 = `Together: <b>${list(sorted.map(j => NAMES[j]))}</b>, ${WORDS[U.size]} of the twelve notes.`;
+      if (key === '0,2,4,5,7,9,11') l2 += ' These are the notes of C major. Counting C at both ends of the octave, eight.';
+      else if (key === '0,3,6,9') l2 += ' Each is three keys from the next, all the way round.';
+    }
+    const v = view, vq = mod(v + q), vh = mod(v + h);
+    let l3 = `Looking from ${NAMES[v]}’s ring: ${NAMES[vq]} sits nearest the quarter turn, at ${fmt(360 * share(q))}°, and ${NAMES[vh]} nearest the half turn, at ${fmt(360 * share(h))}°.`;
+    if (v !== 0 && [...done].includes(v)) l3 += ' The same shape as C’s triangle on C’s ring.';
+    if (U.size && U.has(v) && (!U.has(vq) || !U.has(vh))) {
+      const miss = [vq, vh].filter(j => !U.has(j)).map(j => NAMES[j]);
+      l3 += ` ${list(miss)} ${miss.length > 1 ? 'aren’t' : 'isn’t'} among these notes.`;
+      const lop = nearestFrom(U, v);
+      if (lop) l3 += ` The nearest they offer is ${NAMES[lop[0]]}, ${NAMES[lop[1]]} and ${NAMES[lop[2]]}, with ${NAMES[lop[1]]} at ${fmt(angleOf(lop[1], v))}° and ${NAMES[lop[2]]} at ${fmt(angleOf(lop[2], v))}°: a lopsided triangle.`;
+    }
+    let l4 = '';
+    if (loose && U.size) {
+      const hi = [...U].filter(x => !U.has(mod(x + h))), lo = [...U].filter(x => !U.has(mod(x - h)));
+      if (!hi.length && !lo.length) l4 = 'No loose ends: every note’s partners are among these notes.';
+      else {
+        const bits = hi.map(x => `${NAMES[x]}’s partner above (${NAMES[mod(x + h)]})`).concat(lo.map(x => `${NAMES[x]}’s partner below (${NAMES[mod(x - h)]})`));
+        l4 = `Loose ends: ${list(bits)} ${bits.length > 1 ? 'are' : 'is'} missing.` +
+          (hi.length === 1 && lo.length === 1 ? ` ${NAMES[lo[0]]} and ${NAMES[hi[0]]} are ${WORDS[mod(hi[0] - lo[0])]} keys apart, and neither is the other’s partner.` : '');
+      }
+    }
+    $('out').innerHTML = `<p>${l1}</p>` + (l2 ? `<p>${l2}</p>` : '') + `<p>${l3}</p>` + (l4 ? `<p>${l4}</p>` : '');
+    $('rule').innerHTML = (ruleOK ? '' : '<span class="bad">Rule check failed. </span>') +
+      `<b>Rule:</b> each note sits by Part 2’s rule on the ring of the note at the top, with b = ${pctB()}%. A note’s partner is the note nearest the half turn of its ring, ${h} keys up at this spacing, and its quarter-turn note is the one nearest the quarter turn, ${q} keys up. Its triangle joins the note, its quarter-turn note and its partner. The triangles offered are C’s and those of C’s partners below and above.`;
+    document.querySelectorAll('.chip[data-k]').forEach(btn => {
+      const k = btn.dataset.k;
+      btn.textContent = k === 'home' ? 'C’s' : `${NAMES[R0[k]]}’s (partner ${k})`;
+      btn.setAttribute('aria-pressed', String(show[k]));
+    });
+    $('loose').setAttribute('aria-pressed', String(loose));
+    document.querySelectorAll('.seg button').forEach(btn => btn.setAttribute('aria-pressed', String(+btn.dataset.v === view)));
+    try { parent.postMessage({ cmajorEmbed: 'triangles', height: Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2 }, '*'); } catch (e) {}
+  }
+
+  function lookFrom(t) {
+    cancelAnimationFrame(anim);
+    view = t;
+    let diff = mod(t - r); if (diff > 6) diff -= 12;         // turn the shorter way round
+    const r0 = r, t0 = performance.now(), dur = 600 + 70 * Math.abs(diff);
+    const tick = now => {
+      const u = Math.min(1, (now - t0) / dur), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+      r = u < 1 ? r0 + diff * e : t;
+      update();
+      if (u < 1) anim = requestAnimationFrame(tick);
+    };
+    anim = requestAnimationFrame(tick);
+  }
+
+  document.querySelectorAll('.chip[data-k]').forEach(btn => btn.addEventListener('click', () => { show[btn.dataset.k] = !show[btn.dataset.k]; update(); }));
+  $('loose').addEventListener('click', () => { loose = !loose; update(); });
+  document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => lookFrom(+btn.dataset.v)));
+  $('playTri').addEventListener('click', () => {
+    const R0 = roots(), seen = new Set(); let i = 0;
+    for (const k of ['below', 'home', 'above']) {
+      if (!show[k] || seen.has(R0[k])) continue;
+      seen.add(R0[k]);
+      const x = R0[k];
+      play([hzOf(x), hzOf(x) * 2 ** (quarterKeys() / 12), hzOf(x) * 2 ** (halfKeys() / 12)], 1.2, 1.3 * i++);
+    }
+  });
+  $('playScale').addEventListener('click', () => {
+    const notes = [...union()].sort((x, y) => x - y);
+    if (!notes.length) return;
+    notes.concat([12]).forEach((j, i) => play([hzOf(j)], 0.7, 0.36 * i));
+  });
+  $('blend').addEventListener('input', e => { b = +e.target.value / 1000; update(); });
+  new ResizeObserver(() => update()).observe(document.querySelector('.wrap'));
+  update();
+})();
+</script>
+</body>
+</html>
