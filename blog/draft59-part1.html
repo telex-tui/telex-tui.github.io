@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>When Does Your Code Run? Four Option Methods in Plain English - Telex</title>
+  <title>When Does Your Code Run? Part 1: Four Option Methods - Telex</title>
   <meta name="description" content="Four Option methods, one question: when does the code you hand them actually run? is_some, map, unwrap_or and unwrap_or_else, starting from a puzzle.">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="../style.css">
@@ -27,8 +27,10 @@
 
   <main class="container">
     <article class="post">
-      <h1>When Does Your Code Run? Four Option Methods in Plain English</h1>
+      <h1>When Does Your Code Run? Part 1: Four Option Methods</h1>
       <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 1 of 2 in <a href="#series-index">When Does Your Code Run?</a></p>
+      <p class="series-nav">Previous: none | Next: <a href="draft59-part2.html">Part 2: Iterators</a></p>
 <p>Start with a puzzle. Here's a function that announces itself when it runs, and one <code>Option</code> handed to three methods. Before you read on, decide what this program prints.</p>
 <pre><code><span class="kw">fn</span> <span class="fn">noisy</span>() -&gt; <span class="ty">i32</span> {
     <span class="mac">println!</span>(<span class="str">"called"</span>);
@@ -116,10 +118,16 @@ called
 </table>
 </div>
 <p>And the rule of thumb: if the code you pass in does something besides return a value, check whether it should run when there's no value, or when there is one.</p>
-<h2>What's not here</h2>
-<p><code>Result</code> follows the same rules. <code>is_ok</code>, <code>map</code>, <code>unwrap_or</code> and <code>unwrap_or_else</code> behave just like their <code>Option</code> versions, except that <code>unwrap_or_else</code> passes the error into your closure.</p>
-<p>Iterators have a <code>map</code> too, with one twist: it's lazy. Its closure runs once per item, but only when something pulls that item through the chain. So a side effect in an iterator's <code>map</code> might happen for every item, some of them or none at all. That's <a href="draft56-part1.html">Inside an Iterator Chain</a>'s territory.</p>
-<p>And if a side effect is all you want, <code>map</code> is the wrong tool. <code>inspect</code> lets you look at a value without changing it, and a plain <code>if let</code> or <code>for</code> loop says what you mean.</p>
+<h2>What comes next</h2>
+<p>Iterators have a <code>map</code> too, and it asks the same question with a different answer: its closure runs later, once for every item that something pulls through the chain. <a href="draft59-part2.html">Part 2</a> starts with another puzzle.</p>
+<p><code>Result</code> follows the same rules as <code>Option</code> here. <code>is_ok</code>, <code>map</code>, <code>unwrap_or</code> and <code>unwrap_or_else</code> behave just like their <code>Option</code> versions, except that <code>unwrap_or_else</code> passes the error into your closure.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><strong>Part 1: Four Option Methods</strong></li>
+          <li><a href="draft59-part2.html">Part 2: Iterators</a></li>
+        </ol>
+      </nav>
     </article>
   </main>
 

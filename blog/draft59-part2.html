@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>When Does Your Code Run? Part 2: Iterators - Telex</title>
+  <meta name="description" content="Iterator map asks part 1's question and gets a different answer: your closure runs later, one item at a time, and only for the items something pulls through.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>When Does Your Code Run? Part 2: Iterators</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 2 of 2 in <a href="#series-index">When Does Your Code Run?</a></p>
+      <p class="series-nav">Previous: <a href="draft59-part1.html">Part 1: Four Option Methods</a> | Next: none</p>
+<p><a href="draft59-part1.html">Part 1</a> asked one question about four <code>Option</code> methods: when does the code you pass in actually run? <code>Option</code>'s <code>map</code> had the simplest answer: straight away, at most once.</p>
+<p>Iterators have a <code>map</code> too. Same name, same question, different answer. Another puzzle first. Decide what this prints:</p>
+<pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+<span class="kw">let</span> big: <span class="ty">Vec</span>&lt;_&gt; = v.<span class="fn">iter</span>()
+    .<span class="fn">map</span>(|x| { <span class="mac">println!</span>(<span class="str">"map {x}"</span>); x * <span class="num">10</span> })
+    .<span class="fn">filter</span>(|x| { <span class="mac">println!</span>(<span class="str">"filter {x}"</span>); *x &gt; <span class="num">10</span> })
+    .<span class="fn">collect</span>();
+<span class="mac">println!</span>(<span class="str">"{big:?}"</span>);</code></pre>
+<p>Hold on to your answer. Section 2 has it.</p>
+<p>Every example was compiled with rustc 1.97.0, edition 2024. Compiler errors are cut down to their key lines.</p>
+<h2>1. Nothing runs until something asks</h2>
+<p>Start by taking something away. Here's the same chain without <code>collect</code>:</p>
+<pre><code>v.<span class="fn">iter</span>()
+    .<span class="fn">map</span>(|x| { <span class="mac">println!</span>(<span class="str">"map {x}"</span>); x * <span class="num">10</span> })
+    .<span class="fn">filter</span>(|x| { <span class="mac">println!</span>(<span class="str">"filter {x}"</span>); *x &gt; <span class="num">10</span> });</code></pre>
+<p>Run it, and it prints nothing at all. Not one <code>map</code> line. The compiler saw this coming:</p>
+<pre><code>warning: unused `Filter` that must be used
+  = note: iterators are lazy and do nothing unless consumed</code></pre>
+<p>Calling <code>map</code> doesn't call your closure. It wraps the iterator in a <code>Map</code>: a step that will call your closure later, each time it's asked for an item. <code>filter</code> wraps that in a <code>Filter</code>. Nothing has asked for an item, so nothing has run. <a href="draft56-part1.html">Inside an Iterator Chain</a> calls this a recipe, not a run.</p>
+<p>You can watch the gap between building the chain and running it:</p>
+<pre><code><span class="kw">let</span> chain = v.<span class="fn">iter</span>().<span class="fn">map</span>(|x| { <span class="mac">println!</span>(<span class="str">"map {x}"</span>); x * <span class="num">10</span> });
+<span class="mac">println!</span>(<span class="str">"built the chain"</span>);
+<span class="kw">let</span> out: <span class="ty">Vec</span>&lt;_&gt; = chain.<span class="fn">collect</span>();</code></pre>
+<pre><code>built the chain
+map 1
+map 2
+map 3</code></pre>
+<p>The closure was written on the first line, but it ran on the third.</p>
+<blockquote><strong>Say it:</strong> when something asks for an item, run this on it.</blockquote>
+<h2>2. One item at a time, all the way through</h2>
+<p>Here's what the puzzle prints:</p>
+<pre><code>map 1
+filter 10
+map 2
+filter 20
+map 3
+filter 30
+[20, 30]</code></pre>
+<p>If you expected three <code>map</code> lines and then three <code>filter</code> lines, you're in good company. But there's never a moment when <code>map</code> has finished and <code>filter</code> starts.</p>
+<p><code>collect</code> asks <code>filter</code> for an item. <code>filter</code> can't answer without one of its own, so it asks <code>map</code>. <code>map</code> asks <code>v.iter()</code> for <code>1</code>, runs your closure, and hands <code>10</code> up to <code>filter</code>. <code>filter</code>'s closure says no, so <code>filter</code> asks <code>map</code> again, and <code>2</code> makes the same trip. Each item goes all the way through the chain before the next one starts.</p>
+<h2>3. Stopping early</h2>
+<p>Swap <code>collect</code> for something that doesn't need every item:</p>
+<pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
+<span class="kw">let</span> first_big = v.<span class="fn">iter</span>()
+    .<span class="fn">map</span>(|x| { <span class="mac">println!</span>(<span class="str">"map {x}"</span>); x * <span class="num">10</span> })
+    .<span class="fn">find</span>(|x| *x &gt; <span class="num">15</span>);
+<span class="mac">println!</span>(<span class="str">"{first_big:?}"</span>);</code></pre>
+<pre><code>map 1
+map 2
+Some(20)</code></pre>
+<p><code>find</code> stops asking as soon as it has an answer. <code>3</code>, <code>4</code> and <code>5</code> are never pulled, so your closure never sees them. <code>take</code>, <code>any</code>, <code>all</code> and <code>position</code> stop early the same way.</p>
+<p>So a side effect in an iterator's <code>map</code> might happen for every item, some of them or none at all. What decides isn't <code>map</code>. It's whatever sits at the end of the chain.</p>
+<h2>4. Part 1's <code>map</code>, side by side</h2>
+<div class="figure-scroll">
+<table>
+<thead>
+<tr><th></th><th><code>Option</code>'s <code>map</code></th><th>An iterator's <code>map</code></th></tr>
+</thead>
+<tbody>
+<tr><td>When your closure runs</td><td>straight away</td><td>when something asks for an item</td></tr>
+<tr><td>How many times</td><td>at most once</td><td>once per item pulled</td></tr>
+<tr><td>What it asks for</td><td><code>FnOnce</code></td><td><code>FnMut</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The last row follows from the other two. An iterator's <code>map</code> calls your closure again and again, so it needs <code>FnMut</code>: a closure that can be called more than once, and can change what it captured between calls. That's what lets this count work:</p>
+<pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+<span class="kw">let</span> <span class="kw">mut</span> count = <span class="num">0</span>;
+<span class="kw">let</span> doubled: <span class="ty">Vec</span>&lt;_&gt; = v.<span class="fn">iter</span>().<span class="fn">map</span>(|x| { count += <span class="num">1</span>; x * <span class="num">2</span> }).<span class="fn">collect</span>();
+<span class="mac">println!</span>(<span class="str">"{doubled:?} after {count} calls"</span>);</code></pre>
+<pre><code>[2, 4, 6] after 3 calls</code></pre>
+<p><code>Option</code>'s <code>map</code> calls your closure once at most, so it asks for less: <code>FnOnce</code>, a closure that only has to work once. That lets it accept something an iterator's <code>map</code> can't, a closure that gives away what it captured:</p>
+<pre><code><span class="kw">let</span> name = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Ada"</span>);
+<span class="kw">let</span> greeting = <span class="ty">Some</span>(<span class="num">1</span>).<span class="fn">map</span>(|_| name);
+<span class="mac">println!</span>(<span class="str">"{greeting:?}"</span>);</code></pre>
+<pre><code>Some("Ada")</code></pre>
+<p>Try the same closure on an iterator, and the compiler stops you:</p>
+<pre><code><span class="kw">let</span> names: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">map</span>(|_| name).<span class="fn">collect</span>();</code></pre>
+<pre><code>error[E0507]: cannot move out of `name`, a captured variable in an `FnMut` closure
+help: consider cloning the value if the performance cost is acceptable</code></pre>
+<p>The first call would give <code>name</code> away, and there'd be nothing left for the second. Same name, same question, two different answers, and the signatures say so. <a href="rust-patterns-closure-traits.html">Rust Patterns #15: Fn, FnMut, FnOnce</a> has more on the three closure traits.</p>
+<h2>5. When the side effect is the point</h2>
+<p>If you only want to watch values go past, <code>inspect</code> says so. It hands your closure a reference to each item and passes the item on unchanged:</p>
+<pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+<span class="kw">let</span> total: <span class="ty">i32</span> = v.<span class="fn">iter</span>()
+    .<span class="fn">inspect</span>(|x| <span class="mac">println!</span>(<span class="str">"saw {x}"</span>))
+    .<span class="fn">map</span>(|x| x * <span class="num">10</span>)
+    .<span class="fn">sum</span>();
+<span class="mac">println!</span>(<span class="str">"{total}"</span>);</code></pre>
+<pre><code>saw 1
+saw 2
+saw 3
+60</code></pre>
+<p><code>inspect</code> is lazy too: it runs when <code>sum</code> asks, not before. And if doing something is the whole job, a <code>for</code> loop is clearer than any chain. It runs once per item, straight away, and nobody reading it wonders whether it runs at all.</p>
+<h2>Cheat sheet</h2>
+<div class="figure-scroll">
+<table>
+<thead>
+<tr><th>You write</th><th>Your closure runs</th></tr>
+</thead>
+<tbody>
+<tr><td><code>v.iter().map(f)</code>, and nothing else</td><td>never</td></tr>
+<tr><td><code>….map(f).collect()</code></td><td>once per item, each item all the way through before the next</td></tr>
+<tr><td><code>….map(f).find(p)</code></td><td>once per item, until <code>find</code> has its answer</td></tr>
+<tr><td><code>Some(x).map(f)</code></td><td>straight away, once (part 1)</td></tr>
+</tbody>
+</table>
+</div>
+<p>And the rule of thumb: in an iterator chain, the end of the chain decides when your code runs and how many times.</p>
+<h2>What comes next</h2>
+<p><code>Result</code> is next. When it comes to running your code, it follows part 1's rules, so part 3 will ask a different question: where does the error go? That's <code>map_err</code>, <code>and_then</code>, <code>ok()</code> and <code>?</code>.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft59-part1.html">Part 1: Four Option Methods</a></li>
+          <li><strong>Part 2: Iterators</strong></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

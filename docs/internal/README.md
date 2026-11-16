@@ -39,13 +39,13 @@ A post is hidden when its file is in `blog/` but it isn't listed in `blog/index.
 
 How it's organised:
 
-- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft56-part1.html` … `draft56-part4.html` (Inside an Iterator Chain, a four-part series), `draft57.html` (When Does Your Code Run? Four Option Methods in Plain English), `draft53.html` (Rust's Angle Brackets in Plain English; its figures are in `assets/angle-brackets/`), `draft54.html` (What dyn Redacts: Type Erasure in Rust; its figures are in `assets/dyn-redaction/`), `draft55.html` (Where Your Rust Program Lives, the groundwork for draft54; its figures are in `assets/where-code-lives/`), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
+- **Draft articles** — one `.post-item` card per hidden article (title, date, filename, one-line description). Currently `draft56-part1.html` … `draft56-part4.html` (Inside an Iterator Chain, a four-part series), `draft59-part1.html` and `draft59-part2.html` (When Does Your Code Run?, a two-part series: Option methods, then iterators), `draft53.html` (Rust's Angle Brackets in Plain English; its figures are in `assets/angle-brackets/`), `draft54.html` (What dyn Redacts: Type Erasure in Rust; its figures are in `assets/dyn-redaction/`), `draft55.html` (Where Your Rust Program Lives, the groundwork for draft54; its figures are in `assets/where-code-lives/`), `20-rules-of-thumb-in-rust.html`, `draft51.html` (STM32), `draft3.html`, `draft2.html` and `draft1.html`.
 - **Challenge series** — the two challenge series, each challenge with links to part A (problem + multiple choice) and part B (solution):
   - Rust Design Challenges 1–27 = `draft10a/b.html` … `draft36a/b.html`
   - Rust Idioms Challenges 1–14 = `draft37a/b.html` … `draft50a/b.html`
 - `drafti.html` — the older "Draft Index" page for the challenges. It has its own inline styling and isn't linked from the nav; it's listed on DraftedAICrazies.
 
-Naming: hidden articles have so far used `draftN.html` (next free number: `draft58`; a multi-part draft uses `draftN-part1.html`, `draftN-part2.html`, …), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
+Naming: hidden articles have so far used `draftN.html` (next free number: `draft60`; `draft57-part*` is The Frequency Ring and `draft58-part*` is Frequencies of C major; a multi-part draft uses `draftN-part1.html`, `draftN-part2.html`, …), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
 
 Keeping it current:
 
