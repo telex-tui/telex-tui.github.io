@@ -69,8 +69,8 @@ filter 20
 map 3
 filter 30
 [20, 30]</code></pre>
-<p>If you expected three <code>map</code> lines and then three <code>filter</code> lines, you're in good company. But there's never a moment when <code>map</code> has finished and <code>filter</code> starts.</p>
-<p><code>collect</code> asks <code>filter</code> for an item. <code>filter</code> can't answer without one of its own, so it asks <code>map</code>. <code>map</code> asks <code>v.iter()</code> for <code>1</code>, runs your closure, and hands <code>10</code> up to <code>filter</code>. <code>filter</code>'s closure says no, so <code>filter</code> asks <code>map</code> again, and <code>2</code> makes the same trip. Each item goes all the way through the chain before the next one starts.</p>
+<p>If you expected three <code>map</code> lines and then three <code>filter</code> lines, you're in good company. But <code>map</code> never finishes before <code>filter</code> starts.</p>
+<p><code>collect</code> asks <code>filter</code> for an item. <code>filter</code> has no items of its own, so it asks <code>map</code>. <code>map</code> asks <code>v.iter()</code> for <code>1</code>, runs your closure, and hands <code>10</code> up to <code>filter</code>. <code>10</code> isn't more than <code>10</code>, so <code>filter</code> throws it away and asks <code>map</code> again, and <code>2</code> makes the same trip. Each item goes all the way through the chain before the next one starts.</p>
 <h2>3. Stopping early</h2>
 <p>Swap <code>collect</code> for something that doesn't need every item:</p>
 <pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
@@ -102,7 +102,7 @@ Some(20)</code></pre>
 <span class="kw">let</span> doubled: <span class="ty">Vec</span>&lt;_&gt; = v.<span class="fn">iter</span>().<span class="fn">map</span>(|x| { count += <span class="num">1</span>; x * <span class="num">2</span> }).<span class="fn">collect</span>();
 <span class="mac">println!</span>(<span class="str">"{doubled:?} after {count} calls"</span>);</code></pre>
 <pre><code>[2, 4, 6] after 3 calls</code></pre>
-<p><code>Option</code>'s <code>map</code> calls your closure once at most, so it asks for less: <code>FnOnce</code>, a closure that only has to work once. That lets it accept something an iterator's <code>map</code> can't, a closure that gives away what it captured:</p>
+<p><code>Option</code>'s <code>map</code> calls your closure once at most, so it asks for less: <code>FnOnce</code>, a closure that only has to work once. That means it accepts a closure an iterator's <code>map</code> won't: one that gives away something it captured. This one returns <code>name</code> itself:</p>
 <pre><code><span class="kw">let</span> name = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Ada"</span>);
 <span class="kw">let</span> greeting = <span class="ty">Some</span>(<span class="num">1</span>).<span class="fn">map</span>(|_| name);
 <span class="mac">println!</span>(<span class="str">"{greeting:?}"</span>);</code></pre>
@@ -133,8 +133,8 @@ saw 3
 </thead>
 <tbody>
 <tr><td><code>v.iter().map(f)</code>, and nothing else</td><td>never</td></tr>
-<tr><td><code>….map(f).collect()</code></td><td>once per item, each item all the way through before the next</td></tr>
-<tr><td><code>….map(f).find(p)</code></td><td>once per item, until <code>find</code> has its answer</td></tr>
+<tr><td><code>v.iter().map(f).collect()</code></td><td>once per item, each item all the way through before the next</td></tr>
+<tr><td><code>v.iter().map(f).find(p)</code></td><td>once per item, until <code>find</code> has its answer</td></tr>
 <tr><td><code>Some(x).map(f)</code></td><td>straight away, once (part 1)</td></tr>
 </tbody>
 </table>
