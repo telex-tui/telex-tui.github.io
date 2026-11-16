@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>When Does Your Code Run? Part 1: Four Option Methods - Telex</title>
+  <meta name="description" content="Four Option methods, one question: when does the code you hand them actually run? is_some, map, unwrap_or and unwrap_or_else, starting from a puzzle.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>When Does Your Code Run? Part 1: Four Option Methods</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 1 of 3 in <a href="#series-index">When Does Your Code Run?</a></p>
+      <p class="series-nav">Previous: none | Next: <a href="draft59-part2.html">Part 2: Iterators</a></p>
+<p>Start with a puzzle. Here's a function that announces itself when it runs, and one <code>Option</code> handed to three methods. Before you read on, decide what this program prints.</p>
+<pre><code><span class="kw">fn</span> <span class="fn">noisy</span>() -&gt; <span class="ty">i32</span> {
+    <span class="mac">println!</span>(<span class="str">"called"</span>);
+    <span class="num">0</span>
+}
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> a = <span class="ty">Some</span>(<span class="num">5</span>);
+    <span class="kw">let</span> x = a.<span class="fn">unwrap_or</span>(<span class="fn">noisy</span>());
+    <span class="kw">let</span> y = a.<span class="fn">unwrap_or_else</span>(noisy);
+    <span class="kw">let</span> z = a.<span class="fn">map</span>(|v| {
+        <span class="mac">println!</span>(<span class="str">"mapping"</span>);
+        v * <span class="num">2</span>
+    });
+    <span class="mac">println!</span>(<span class="str">"{x} {y} {z:?}"</span>);
+}</code></pre>
+<p>Hold on to your answer. We'll come back to it at the end.</p>
+<p>Every example was compiled with rustc 1.97.0, edition 2024. Compiler errors are cut down to their key lines.</p>
+<h2>The question</h2>
+<p>Most <code>Option</code> methods take something from you: a value, or a closure. The useful thing to ask about each one is <strong>when does the code I pass in actually run?</strong></p>
+<p>Most of the time you can ignore that question. You can't once your code does something besides produce a value: printing, counting, allocating, writing a file. Those are side effects, and they're how you find out exactly when your code ran. That's why <code>noisy</code> prints.</p>
+<h2>1. <code>is_some</code>: runs nothing of yours</h2>
+<pre><code><span class="kw">let</span> name = <span class="ty">Some</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Ada"</span>));
+<span class="kw">if</span> name.<span class="fn">is_some</span>() {
+    <span class="mac">println!</span>(<span class="str">"got a name"</span>);
+}
+<span class="mac">println!</span>(<span class="str">"{name:?}"</span>);</code></pre>
+<pre><code>got a name
+Some("Ada")</code></pre>
+<p><code>is_some</code> only looks. It borrows the <code>Option</code>, answers <code>true</code> or <code>false</code>, and leaves it exactly as it was. That's why <code>name</code> can still be printed on the last line. You haven't passed it any code, so there's nothing of yours to run. <code>is_none</code> asks the opposite question.</p>
+<blockquote><strong>Say it:</strong> is there a value in there?</blockquote>
+<h2>2. <code>map</code>: runs your closure if there's a value, once</h2>
+<pre><code><span class="kw">let</span> name = <span class="ty">Some</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Ada"</span>));
+<span class="kw">let</span> len = name.<span class="fn">map</span>(|s| {
+    <span class="mac">println!</span>(<span class="str">"measuring {s}"</span>);
+    s.<span class="fn">len</span>()
+});
+<span class="mac">println!</span>(<span class="str">"{len:?}"</span>);</code></pre>
+<pre><code>measuring Ada
+Some(3)</code></pre>
+<p><code>map</code> hands the value inside the <code>Some</code> to your closure, and whatever the closure returns becomes the new value. An <code>Option&lt;String&gt;</code> goes in, and an <code>Option&lt;usize&gt;</code> comes out.</p>
+<p>The <code>println!</code> isn't part of that. It's a side effect: something the closure does on the way to returning <code>s.len()</code>. On <code>None</code>, <code>map</code> never calls the closure, so the side effect never happens either. And because an <code>Option</code> holds at most one value, the closure runs at most once.</p>
+<p>One more thing about <code>map</code>: it takes the <code>Option</code> by value. Use <code>name</code> after mapping it, and the compiler stops you, then suggests the fix:</p>
+<pre><code>error[E0382]: borrow of moved value: `name`
+3 |     let len = name.map(|s| s.len());
+  |                    ---------------- `name` moved due to this method call
+help: consider calling `.as_ref()` to borrow the value's contents</code></pre>
+<p><code>name.as_ref().map(|s| s.len())</code> gives <code>map</code> a reference to the value instead of the value itself, and <code>name</code> is still there afterwards.</p>
+<blockquote><strong>Say it:</strong> if there's a value, turn it into this.</blockquote>
+<h2>3. <code>unwrap_or</code>: your code ran before the method did</h2>
+<p><code>unwrap_or(x)</code> gives you the value if there is one, or <code>x</code> if there isn't. Now look at what the puzzle passed it: <code>noisy()</code>. That isn't a closure. It's a call, and Rust works out a method's arguments before it calls the method. So <code>noisy()</code> runs first, prints <code>called</code> and returns <code>0</code>, and <code>unwrap_or</code> is handed a plain <code>0</code>. It never sees your code at all.</p>
+<p>The puzzle's line means exactly this:</p>
+<pre><code><span class="kw">let</span> fallback = <span class="fn">noisy</span>();
+<span class="kw">let</span> x = a.<span class="fn">unwrap_or</span>(fallback);</code></pre>
+<p>Written that way, it's obvious that <code>noisy</code> runs whether <code>a</code> is <code>Some</code> or not. <code>unwrap_or</code> doesn't get to decide whether your code runs. By the time it's called, your code already has.</p>
+<blockquote><strong>Say it:</strong> the value, or this one I've already worked out.</blockquote>
+<h2>4. <code>unwrap_or_else</code>: runs your closure if there's no value, once</h2>
+<p><code>unwrap_or_else(f)</code> takes a closure instead of a value, so it does get to decide. It calls <code>f</code> only when there's no value to give you.</p>
+<p>In the puzzle it was handed <code>noisy</code> without parentheses: the function itself, not a call to it. A function can go anywhere a closure with the same shape can, so that's the same as <code>unwrap_or_else(|| noisy())</code>.</p>
+<blockquote><strong>Say it:</strong> the value, or work one out if there isn't one.</blockquote>
+<p>This pair has a cost side too: why you'd rather not allocate a fallback you won't use. That's covered in <a href="rust-idioms-in-plain-english.html">Rust's _or Methods in Plain English</a>. Side effects tell the same story, and they're easier to see.</p>
+<h2>Back to the puzzle</h2>
+<p>With <code>a = Some(5)</code>, the program prints:</p>
+<pre><code>called
+mapping
+5 5 Some(10)</code></pre>
+<p><code>called</code> comes from the <code>unwrap_or</code> line, because <code>noisy()</code> ran before <code>unwrap_or</code> did. <code>unwrap_or_else</code> had a value to give, so it never called <code>noisy</code>. <code>map</code> had a value too, so its closure ran once and printed <code>mapping</code>.</p>
+<p>Now change the first line to <code>let a: Option&lt;i32&gt; = None;</code>:</p>
+<pre><code>called
+called
+0 0 None</code></pre>
+<p>Two <code>called</code>s. The first comes from <code>unwrap_or</code>, exactly as before. The second comes from <code>unwrap_or_else</code>, which needed a fallback this time. There's no <code>mapping</code>, because there was nothing to map.</p>
+<h2>Cheat sheet</h2>
+<div class="figure-scroll">
+<table>
+<thead>
+<tr><th>You write</th><th>Your code runs</th><th>You say</th></tr>
+</thead>
+<tbody>
+<tr><td><code>a.is_some()</code></td><td>never: there's no code to run</td><td>is there a value in there?</td></tr>
+<tr><td><code>a.map(f)</code></td><td>on <code>Some</code>, once</td><td>if there's a value, turn it into this</td></tr>
+<tr><td><code>a.unwrap_or(x)</code></td><td>before the call, every time</td><td>the value, or this one I've already worked out</td></tr>
+<tr><td><code>a.unwrap_or_else(f)</code></td><td>on <code>None</code>, once</td><td>the value, or work one out if there isn't one</td></tr>
+</tbody>
+</table>
+</div>
+<p>And the rule of thumb: if the code you pass in does something besides return a value, check whether it should run when there's no value, or when there is one.</p>
+<h2>What comes next</h2>
+<p>Iterators have a <code>map</code> too, and it asks the same question with a different answer: its closure runs later, once for every item that something pulls through the chain. <a href="draft59-part2.html">Part 2</a> starts with another puzzle.</p>
+<p><code>Result</code> follows the same rules as <code>Option</code> here. <code>is_ok</code>, <code>map</code>, <code>unwrap_or</code> and <code>unwrap_or_else</code> behave just like their <code>Option</code> versions, except that <code>unwrap_or_else</code> passes the error into your closure. Where that error goes is <a href="draft59-part3.html">part 3</a>.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><strong>Part 1: Four Option Methods</strong></li>
+          <li><a href="draft59-part2.html">Part 2: Iterators</a></li>
+          <li><a href="draft59-part3.html">Part 3: Where Does the Error Go?</a></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
