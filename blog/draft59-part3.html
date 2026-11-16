@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>When Does Your Code Run? Part 3: Where Does the Error Go? - Telex</title>
+  <meta name="description" content="Result's methods, through one question: where does the error go? Past the steps waiting for Ok, through map_err, into and_then, thrown away by ok(), made up by ok_or, or up to the caller with ?.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>When Does Your Code Run? Part 3: Where Does the Error Go?</h1>
+      <div class="post-meta">November 2026</div>
+      <p class="series-nav">Part 3 of 3 in <a href="#series-index">When Does Your Code Run?</a></p>
+      <p class="series-nav">Previous: <a href="draft59-part2.html">Part 2: Iterators</a> | Next: none</p>
+<p><a href="draft59-part1.html">Part 1</a> asked when the code you pass to an <code>Option</code> method runs. <code>Result</code> answers that the same way: <code>map</code> runs your closure on <code>Ok</code>, <code>unwrap_or</code>'s argument is worked out before the call, and so on.</p>
+<p>But a <code>Result</code> carries something an <code>Option</code> doesn't. When there's no value, there's an error instead, and the error has to go somewhere. This part follows it. Two small functions first, used all the way through:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">parse</span>(s: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">i32</span>, <span class="ty">String</span>&gt; {
+    s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">map_err</span>(|e| <span class="mac">format!</span>(<span class="str">"{s:?}: {e}"</span>))
+}
+
+<span class="kw">fn</span> <span class="fn">half</span>(n: <span class="ty">i32</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">i32</span>, <span class="ty">String</span>&gt; {
+    <span class="mac">println!</span>(<span class="str">"halving {n}"</span>);
+    <span class="kw">if</span> n % <span class="num">2</span> == <span class="num">0</span> { <span class="ty">Ok</span>(n / <span class="num">2</span>) } <span class="kw">else</span> { <span class="ty">Err</span>(<span class="mac">format!</span>(<span class="str">"{n} is odd"</span>)) }
+}</code></pre>
+<p><code>parse</code> turns text into a number, and <code>half</code> halves it if it's even. Both can fail. And <code>half</code> announces itself, as <code>noisy</code> did in part 1. Now the puzzle. What does this print, and which inputs get a <code>halving</code> line?</p>
+<pre><code><span class="kw">for</span> s <span class="kw">in</span> [<span class="str">"8"</span>, <span class="str">"7"</span>, <span class="str">"x"</span>] {
+    <span class="kw">let</span> r = <span class="fn">parse</span>(s).<span class="fn">and_then</span>(half).<span class="fn">map</span>(|n| n * <span class="num">10</span>);
+    <span class="mac">println!</span>(<span class="str">"{r:?}"</span>);
+}</code></pre>
+<p>Hold on to your answer. Section 1 has it.</p>
+<p>Every example was compiled with rustc 1.97.0, edition 2024. Compiler errors are cut down to their key lines.</p>
+<h2>1. An error skips every step that's waiting for <code>Ok</code></h2>
+<pre><code>halving 8
+Ok(40)
+halving 7
+Err("7 is odd")
+Err("\"x\": invalid digit found in string")</code></pre>
+<p><code>"8"</code> makes it all the way: parsed to <code>8</code>, halved to <code>4</code>, multiplied to <code>40</code>.</p>
+<p><code>"7"</code> parses fine, so <code>half</code> runs and fails. From there, the error is the whole <code>Result</code>. <code>map</code> sees an <code>Err</code>, doesn't call its closure, and passes the error on unchanged.</p>
+<p><code>"x"</code> fails at the first step, and there's no <code>halving</code> line. <code>and_then</code> only calls <code>half</code> on <code>Ok</code>, and <code>map</code> only calls its closure on <code>Ok</code>, so the error skips both and comes out the far end exactly as <code>parse</code> made it.</p>
+<p>That's the first answer to "where does the error go?": past every step that's waiting for an <code>Ok</code>, untouched. It's the same rule as part 1's <code>map</code> on <code>None</code>. The only difference is that <code>Err</code> has something inside to carry along.</p>
+<blockquote><strong>Say it:</strong> if it worked, do this next. If it didn't, pass the error on.</blockquote>
+<h2>2. <code>map_err</code>: the one step that runs on <code>Err</code></h2>
+<p><code>map_err</code> is <code>map</code>'s mirror image. It runs your closure on the error, and leaves an <code>Ok</code> alone. <code>parse</code> already uses it. Here's what <code>str::parse</code> gives you without it, next to what <code>parse</code> returns:</p>
+<pre><code>Err(ParseIntError { kind: InvalidDigit })
+Err("\"x\": invalid digit found in string")</code></pre>
+<p>The first error says what went wrong, but not to what. <code>map_err</code> swaps it for one that names the input. It can also change the error's type, here from <code>ParseIntError</code> to <code>String</code>, and section 3 shows why that matters.</p>
+<blockquote><strong>Say it:</strong> if it failed, change the error into this.</blockquote>
+<h2>3. <code>and_then</code>: a next step that can fail too</h2>
+<p>Why <code>and_then(half)</code> and not <code>map(half)</code>? Try it:</p>
+<pre><code><span class="kw">let</span> nested = <span class="fn">parse</span>(<span class="str">"8"</span>).<span class="fn">map</span>(half);
+<span class="mac">println!</span>(<span class="str">"{nested:?}"</span>);</code></pre>
+<pre><code>halving 8
+Ok(Ok(4))</code></pre>
+<p><code>map</code> wraps whatever your closure returns in an <code>Ok</code>. <code>half</code> already returns a <code>Result</code>, so you get a <code>Result</code> inside a <code>Result</code>: <code>Result&lt;Result&lt;i32, String&gt;, String&gt;</code>. <code>and_then</code> takes your closure's <code>Result</code> as it is, so an error from <code>half</code> goes to the same place as an error from <code>parse</code>.</p>
+<p>That only works if they're the same kind of error. Here's a <code>parse_raw</code> that skips the <code>map_err</code> and returns <code>str::parse</code>'s error as it comes:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">parse_raw</span>(s: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">i32</span>, std::num::<span class="ty">ParseIntError</span>&gt; {
+    s.<span class="fn">parse</span>()
+}
+
+<span class="kw">let</span> r = <span class="fn">parse_raw</span>(<span class="str">"8"</span>).<span class="fn">and_then</span>(half);</code></pre>
+<pre><code>error[E0271]: expected `half` to return `Result&lt;_, ParseIntError&gt;`, but it returns `Result&lt;i32, String&gt;`</code></pre>
+<p>A <code>Result</code> has one error type, and <code>and_then</code> won't change it for you. That's the job <code>map_err</code> did inside <code>parse</code>: it made the error a <code>String</code>, like <code>half</code>'s, before the two ever met.</p>
+<blockquote><strong>Say it:</strong> if it worked, try this next, and keep whichever error comes first.</blockquote>
+<h2>4. <code>ok()</code> and <code>err()</code>: keeping one side</h2>
+<p>Sometimes you don't want the error at all. <code>ok()</code> turns a <code>Result</code> into an <code>Option</code>: <code>Ok(v)</code> becomes <code>Some(v)</code>, and an <code>Err</code> becomes <code>None</code>. <code>err()</code> keeps the other side. With <code>filter_map</code>, that splits a list in two:</p>
+<pre><code><span class="kw">let</span> inputs = [<span class="str">"8"</span>, <span class="str">"x"</span>, <span class="str">"4"</span>, <span class="str">"y"</span>];
+<span class="kw">let</span> numbers: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = inputs.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|s| <span class="fn">parse</span>(s).<span class="fn">ok</span>()).<span class="fn">collect</span>();
+<span class="kw">let</span> errors: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = inputs.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|s| <span class="fn">parse</span>(s).<span class="fn">err</span>()).<span class="fn">collect</span>();</code></pre>
+<pre><code>[8, 4]
+["\"x\": invalid digit found in string", "\"y\": invalid digit found in string"]</code></pre>
+<p>So here's the second answer: with <code>ok()</code>, the error goes nowhere. It's dropped, and nothing tells you it existed. That's exactly right when a bad input just means "skip it". It's a bug when you needed to know why.</p>
+<blockquote><strong>Say it:</strong> the value if it worked, and never mind why if it didn't.</blockquote>
+<h2>5. <code>ok_or</code>: an <code>Option</code> that needs an error</h2>
+<p>Going the other way, from <code>Option</code> to <code>Result</code>, there's no error to carry, because <code>None</code> doesn't say why. So you supply one:</p>
+<pre><code><span class="kw">let</span> v: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = <span class="mac">vec!</span>[];
+<span class="kw">let</span> first = v.<span class="fn">first</span>().<span class="fn">ok_or</span>(<span class="str">"empty list"</span>);
+<span class="mac">println!</span>(<span class="str">"{first:?}"</span>);</code></pre>
+<pre><code>Err("empty list")</code></pre>
+<p>On <code>vec![3, 4]</code>, the same line gives <code>Ok(3)</code>, and <code>"empty list"</code> is never used.</p>
+<p>Part 1's rule applies here unchanged. <code>ok_or</code>'s argument is worked out before the call, every time. <code>ok_or_else</code> takes a closure, and runs it only on <code>None</code>. If building the error costs something, like a <code>format!</code>, give <code>ok_or_else</code> a closure that builds it.</p>
+<blockquote><strong>Say it:</strong> the value if there is one, or fail with this.</blockquote>
+<h2>6. <code>?</code>: the error goes up</h2>
+<p>Here's the puzzle's chain again, written with <code>?</code>:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">half_of</span>(s: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">i32</span>, <span class="ty">String</span>&gt; {
+    <span class="kw">let</span> n = <span class="fn">parse</span>(s)?;
+    <span class="kw">let</span> h = <span class="fn">half</span>(n)?;
+    <span class="ty">Ok</span>(h * <span class="num">10</span>)
+}</code></pre>
+<p>It prints exactly what the puzzle printed, <code>halving</code> lines included. <code>?</code> asks the same question as <code>and_then</code>: did that work? If so, you get the value and the next line runs. If not, the function returns the error right there, and nothing after it runs.</p>
+<p>That's the last answer: up, to whoever called you. It's how most Rust code passes errors along. <code>?</code> is also a little more forgiving than <code>and_then</code>. On the way out, it converts the error with <code>From</code>, so it can turn a <code>ParseIntError</code> into your own error type for you. <a href="rust-patterns-from-into.html">Rust Patterns #2</a> and <a href="rust-patterns-error-handling.html">#3</a> pick up from there.</p>
+<blockquote><strong>Say it:</strong> if it worked, carry on. If it didn't, hand the error back to my caller.</blockquote>
+<h2>Cheat sheet</h2>
+<div class="figure-scroll">
+<table>
+<thead>
+<tr><th>You write</th><th>On <code>Ok</code> / <code>Some</code></th><th>Where the error goes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>r.map(f)</code></td><td>runs <code>f</code></td><td>past <code>f</code>, unchanged</td></tr>
+<tr><td><code>r.map_err(f)</code></td><td>nothing</td><td>into <code>f</code>, which makes a new one</td></tr>
+<tr><td><code>r.and_then(f)</code></td><td>runs <code>f</code>, which can fail</td><td>past <code>f</code>, or out of <code>f</code></td></tr>
+<tr><td><code>r.ok()</code></td><td>gives <code>Some(v)</code></td><td>nowhere: it's dropped</td></tr>
+<tr><td><code>o.ok_or(e)</code></td><td>gives <code>Ok(v)</code></td><td>there wasn't one, so <code>e</code> becomes it</td></tr>
+<tr><td><code>r?</code></td><td>gives <code>v</code>, and carries on</td><td>up to the caller</td></tr>
+</tbody>
+</table>
+</div>
+<p>And the rule of thumb: every error goes somewhere. It's passed along, changed, dropped or sent up. Make sure the one you chose is the one you meant.</p>
+<h2>The whole series, in one question</h2>
+<p>Part 1 asked when the code you pass to a method runs, and the answer depended on whether there was a value. Part 2 asked the same thing of iterators, and the answer depended on what sat at the end of the chain. This part followed what a <code>Result</code> carries instead of a value, and it went wherever you sent it.</p>
+<p>All three come down to one habit. Before you hand a method your code, or your error, ask where it's going, and when.</p>
+      <nav class="series-index" id="series-index">
+        <h2>Series index</h2>
+        <ol>
+          <li><a href="draft59-part1.html">Part 1: Four Option Methods</a></li>
+          <li><a href="draft59-part2.html">Part 2: Iterators</a></li>
+          <li><strong>Part 3: Where Does the Error Go?</strong></li>
+        </ol>
+      </nav>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>

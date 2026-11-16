@@ -29,7 +29,7 @@
     <article class="post">
       <h1>When Does Your Code Run? Part 1: Four Option Methods</h1>
       <div class="post-meta">November 2026</div>
-      <p class="series-nav">Part 1 of 2 in <a href="#series-index">When Does Your Code Run?</a></p>
+      <p class="series-nav">Part 1 of 3 in <a href="#series-index">When Does Your Code Run?</a></p>
       <p class="series-nav">Previous: none | Next: <a href="draft59-part2.html">Part 2: Iterators</a></p>
 <p>Start with a puzzle. Here's a function that announces itself when it runs, and one <code>Option</code> handed to three methods. Before you read on, decide what this program prints.</p>
 <pre><code><span class="kw">fn</span> <span class="fn">noisy</span>() -&gt; <span class="ty">i32</span> {
@@ -120,12 +120,13 @@ called
 <p>And the rule of thumb: if the code you pass in does something besides return a value, check whether it should run when there's no value, or when there is one.</p>
 <h2>What comes next</h2>
 <p>Iterators have a <code>map</code> too, and it asks the same question with a different answer: its closure runs later, once for every item that something pulls through the chain. <a href="draft59-part2.html">Part 2</a> starts with another puzzle.</p>
-<p><code>Result</code> follows the same rules as <code>Option</code> here. <code>is_ok</code>, <code>map</code>, <code>unwrap_or</code> and <code>unwrap_or_else</code> behave just like their <code>Option</code> versions, except that <code>unwrap_or_else</code> passes the error into your closure.</p>
+<p><code>Result</code> follows the same rules as <code>Option</code> here. <code>is_ok</code>, <code>map</code>, <code>unwrap_or</code> and <code>unwrap_or_else</code> behave just like their <code>Option</code> versions, except that <code>unwrap_or_else</code> passes the error into your closure. Where that error goes is <a href="draft59-part3.html">part 3</a>.</p>
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>
         <ol>
           <li><strong>Part 1: Four Option Methods</strong></li>
           <li><a href="draft59-part2.html">Part 2: Iterators</a></li>
+          <li><a href="draft59-part3.html">Part 3: Where Does the Error Go?</a></li>
         </ol>
       </nav>
     </article>

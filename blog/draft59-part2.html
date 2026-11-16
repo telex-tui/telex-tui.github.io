@@ -29,8 +29,8 @@
     <article class="post">
       <h1>When Does Your Code Run? Part 2: Iterators</h1>
       <div class="post-meta">November 2026</div>
-      <p class="series-nav">Part 2 of 2 in <a href="#series-index">When Does Your Code Run?</a></p>
-      <p class="series-nav">Previous: <a href="draft59-part1.html">Part 1: Four Option Methods</a> | Next: none</p>
+      <p class="series-nav">Part 2 of 3 in <a href="#series-index">When Does Your Code Run?</a></p>
+      <p class="series-nav">Previous: <a href="draft59-part1.html">Part 1: Four Option Methods</a> | Next: <a href="draft59-part3.html">Part 3: Where Does the Error Go?</a></p>
 <p><a href="draft59-part1.html">Part 1</a> asked one question about four <code>Option</code> methods: when does the code you pass in actually run? <code>Option</code>'s <code>map</code> had the simplest answer: straight away, at most once.</p>
 <p>Iterators have a <code>map</code> too. Same name, same question, different answer. Another puzzle first. Decide what this prints:</p>
 <pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
@@ -141,12 +141,13 @@ saw 3
 </div>
 <p>And the rule of thumb: in an iterator chain, the end of the chain decides when your code runs and how many times.</p>
 <h2>What comes next</h2>
-<p><code>Result</code> is next. When it comes to running your code, it follows part 1's rules, so part 3 will ask a different question: where does the error go? That's <code>map_err</code>, <code>and_then</code>, <code>ok()</code> and <code>?</code>.</p>
+<p><code>Result</code> is next. When it comes to running your code, it follows part 1's rules, so <a href="draft59-part3.html">part 3</a> asks a different question: where does the error go? That's <code>map_err</code>, <code>and_then</code>, <code>ok()</code> and <code>?</code>.</p>
       <nav class="series-index" id="series-index">
         <h2>Series index</h2>
         <ol>
           <li><a href="draft59-part1.html">Part 1: Four Option Methods</a></li>
           <li><strong>Part 2: Iterators</strong></li>
+          <li><a href="draft59-part3.html">Part 3: Where Does the Error Go?</a></li>
         </ol>
       </nav>
     </article>
