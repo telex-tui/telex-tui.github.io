@@ -74,6 +74,26 @@
 `false`, it returns [`None`](https://doc.rust-lang.org/stable/core/option/enum.Option.html#variant.None).</code></pre>
 <p><code>[`None`](https://...)</code> has a full address, so <code>gx</code> opens it. <code>[`Some(element)`]</code> is a rustdoc intra-doc link with nothing after it. rustdoc fills the address in when it builds the web page, but the hover text doesn't include one, so there's nothing for <code>gx</code> to open.</p>
 <div class="note"><code>gx</code> calls <code>vim.ui.open()</code>, which runs <code>xdg-open</code> on Linux and <code>open</code> on macOS (<code>:help gx</code>). If you get "command failed", run <code>:messages</code> to see exactly what it was given.</div>
+<h2>4. Inlay hints: every type in the chain, on screen</h2>
+<p>Shift+k answers one question at a time. Inlay hints answer them all at once: rust-analyzer writes the types it has worked out into the code, in grey. Turn them on in normal mode:</p>
+<pre><code>:lua vim.lsp.inlay_hint.enable()</code></pre>
+<p>Then put each step of the chain on its own line. Here's the <code>complete</code> method from my todo app:</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/native-nvim/inlay-hints.png" width="975" height="468" alt="A Rust method in Neovim with grey inlay hints. self.tasks is followed by Vec&lt;Task&gt;. .iter_mut() is followed by IterMut&lt;'_, Task&gt;. The closure parameter reads t: &amp;&amp;mut Task. The match arm reads Some(r: &amp;mut Task). After the closing brace of the impl block, the hint reads impl TodoList."></div>
+<figcaption>The grey text is inlay hints. None of it is in the file.</figcaption>
+</figure>
+<p>Reading the grey text from the top:</p>
+<ul>
+<li><code>self.tasks</code> is a <code>Vec&lt;Task&gt;</code>.</li>
+<li><code>.iter_mut()</code> turns it into an <code>IterMut&lt;'_, Task&gt;</code>, an iterator of <code>&amp;mut Task</code>.</li>
+<li>The closure's <code>t</code> is a <code>&amp;&amp;mut Task</code>: <code>find</code> lends the closure a reference to each item, and each item is already a reference.</li>
+<li>The match arm's <code>r</code> is a <code>&amp;mut Task</code>, which is what <code>find</code> returned inside the <code>Some</code>.</li>
+<li>The <code>impl TodoList</code> after the last brace tells you which block that brace closes.</li>
+</ul>
+<p>That's a type for every step of the chain without pressing anything. The double reference on <code>t</code> is the one that surprises people, and here it's right there on the screen.</p>
+<p>To turn the hints off again:</p>
+<pre><code>:lua vim.lsp.inlay_hint.enable(false)</code></pre>
+<div class="note">Inlay hints are drawn on screen but aren't part of the buffer, so yanking a line doesn't copy them. Neovim has supported them since 0.10 (<code>:help vim.lsp.inlay_hint</code>). They start switched off, which is why you have to enable them.</div>
     </article>
   </main>
 
