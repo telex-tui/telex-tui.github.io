@@ -57,6 +57,7 @@
 <pre><code><span class="kw">self</span>.tasks.<span class="fn">iter_mut</span>().<span class="fn">find</span>(
 <span class="cm">//                          ^ still in insert mode, press Ctrl+s</span></code></pre>
 <p>You get the signature with the argument you're on highlighted, followed by the method's docs. For <code>find</code> that's a good half page.</p>
+<p>It works the same way as Shift+k: press Ctrl+s a second time to jump into the window and scroll it, then <code>q</code> to close it and get back to typing.</p>
 <div class="note">Neovim 0.11 maps Ctrl+s in insert mode to <code>vim.lsp.buf.signature_help()</code> by default (<code>:help i_CTRL-S</code>). Completion plugins such as blink.cmp often show the same popup automatically as you type, which is handy, but it means you might never find out the key exists. Try it in a config with no plugins to see what's really built in.</div>
     </article>
   </main>
