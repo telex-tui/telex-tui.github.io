@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Native Neovim for Rust: Docs Under the Cursor - Telex</title>
+  <meta name="description" content="Small, native Neovim habits for writing Rust, one at a time. First: K shows the docs for whatever is under the cursor.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Native Neovim for Rust: Docs Under the Cursor</h1>
+      <div class="post-meta">November 2026</div>
+<p>When you write iterator chains, you keep needing the same thing: what does this method take, and what does it give back? Neovim can tell you without a plugin or a browser tab. This post collects those habits one at a time, starting with the smallest one.</p>
+<p>Everything here is built into Neovim. It assumes rust-analyzer is running as the language server, which is the part that knows about Rust.</p>
+<h2>1. <code>K</code>: docs for the thing under the cursor</h2>
+<p>Put the cursor on a method name, say <code>find</code>, in normal mode, and press <code>K</code>.</p>
+<pre><code><span class="kw">self</span>.tasks.<span class="fn">iter_mut</span>().<span class="fn">find</span>(|t| t.id == id)
+<span class="cm">//                     ^ cursor here, press K</span></code></pre>
+<p>A floating window opens with the signature and the docs:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">find</span>&lt;<span class="ty">P</span>&gt;(&amp;<span class="kw">mut</span> <span class="kw">self</span>, predicate: <span class="ty">P</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;
+<span class="kw">where</span>
+    <span class="ty">P</span>: <span class="ty">FnMut</span>(&amp;<span class="kw">Self</span>::<span class="ty">Item</span>) -&gt; <span class="ty">bool</span>,</code></pre>
+<p>That's often all you need. Here, it tells you that the closure gets a reference to each item, and that <code>find</code> hands back an <code>Option</code>, not another iterator.</p>
+<p>Press <code>K</code> a second time to jump into the window. You can then scroll and yank in it like any buffer, and <code>q</code> closes it.</p>
+<div class="note">Since Neovim 0.10, <code>K</code> calls <code>vim.lsp.buf.hover()</code> whenever a language server is attached to the buffer. You don't need to map it yourself. Before that, <code>K</code> ran <code>man</code> on the word under the cursor, and it still does in buffers with no language server. See <code>:help K</code> and <code>:help lsp-defaults</code>.</div>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
