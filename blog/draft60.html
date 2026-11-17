@@ -94,6 +94,26 @@
 <p>To turn the hints off again:</p>
 <pre><code>:lua vim.lsp.inlay_hint.enable(false)</code></pre>
 <div class="note">Neovim has supported inlay hints since 0.10 (<code>:help vim.lsp.inlay_hint</code>). They start switched off, which is why you have to enable them.</div>
+<h2>5. Ctrl+x Ctrl+o: what can I call here?</h2>
+<p>This is the one for finding combinators. You've typed a dot, and you want to know what comes next.</p>
+<p>In insert mode, type up to and including the dot, then press Ctrl+x, then Ctrl+o:</p>
+<pre><code><span class="kw">self</span>.tasks.<span class="fn">iter_mut</span>().
+<span class="cm">//                     ^ press Ctrl+x, then Ctrl+o</span></code></pre>
+<p>A menu of every method you can call on an <code>IterMut</code> pops up. Ctrl+n and Ctrl+p move down and up it.</p>
+<p>Out of the box there's a snag. As soon as the menu opened, Neovim inserted the first method into my code. That's down to the <code>completeopt</code> option. Mine was:</p>
+<pre><code>:set completeopt?
+  completeopt=menu,popup</code></pre>
+<p>Without <code>noselect</code> in that list, the first match goes straight in. This fixed it:</p>
+<pre><code>:set completeopt=menuone,noselect,popup</code></pre>
+<ul>
+<li><code>noselect</code>: nothing is inserted until you pick something with Ctrl+n or Ctrl+p.</li>
+<li><code>popup</code>: shows the docs for the highlighted method in a float beside the menu.</li>
+<li><code>menuone</code>: shows the menu even when there's only one match.</li>
+</ul>
+<p>Now, as you move down the list, the float shows each method's docs. That's how you browse an iterator's methods without leaving the line. The float is small, though, and I had to make my terminal bigger before it was really useful.</p>
+<p>To keep the setting, put it in your <code>init.lua</code>:</p>
+<pre><code>vim.o.completeopt = <span class="str">'menuone,noselect,popup'</span></code></pre>
+<div class="note">Ctrl+x Ctrl+o is Vim's omni completion (<code>:help i_CTRL-X_CTRL-O</code>). Since Neovim 0.10, a language server sets <code>omnifunc</code> when it attaches to a buffer, so the menu comes from rust-analyzer. See <code>:help lsp-defaults</code> and <code>:help 'completeopt'</code>.</div>
     </article>
   </main>
 
