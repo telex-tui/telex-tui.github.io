@@ -45,7 +45,7 @@ How it's organised:
   - Rust Idioms Challenges 1–14 = `draft37a/b.html` … `draft50a/b.html`
 - `drafti.html` — the older "Draft Index" page for the challenges. It has its own inline styling and isn't linked from the nav; it's listed on DraftedAICrazies.
 
-Naming: hidden articles have so far used `draftN.html` (next free number: `draft60`; `draft57-part*` is The Frequency Ring and `draft58-part*` is Frequencies of C major; a multi-part draft uses `draftN-part1.html`, `draftN-part2.html`, …), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
+Naming: hidden articles have so far used `draftN.html` (next free number: `draft62`; `draft61` is 40 Rust Patterns That Matter with a clarification box under each pattern, its CSS in the "Clarification boxes" section of `style.css`; `draft57-part*` is The Frequency Ring and `draft58-part*` is Frequencies of C major; a multi-part draft uses `draftN-part1.html`, `draftN-part2.html`, …), except `20-rules-of-thumb-in-rust.html`, which already has its final slug.
 
 Keeping it current:
 
