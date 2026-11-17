@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Native Neovim for Rust: Docs Under the Cursor - Telex</title>
+  <meta name="description" content="Small, native Neovim habits for writing Rust, one at a time. First: K shows the docs for whatever is under the cursor.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Native Neovim for Rust: Docs Under the Cursor</h1>
+      <div class="post-meta">November 2026</div>
+<p>When you write iterator chains, you keep needing the same thing: what does this method take, and what does it give back? Neovim can tell you without a plugin or a browser tab. This post collects those habits one at a time, starting with the smallest one.</p>
+<p>Everything here is built into Neovim. It assumes rust-analyzer is running as the language server, which is the part that knows about Rust.</p>
+<h2>Reading key notation</h2>
+<p>Key names in Vim's notation mix capital and lowercase letters, and the case means different things in different places. Here's how it works:</p>
+<ul>
+<li><strong>A plain letter's case is literal.</strong> <code>K</code> is a capital K, so you press Shift+k. <code>k</code> on its own is just k.</li>
+<li><strong>Inside a Ctrl combination, case doesn't matter.</strong> <code>&lt;C-s&gt;</code>, <code>&lt;C-S&gt;</code> and <code>^S</code> are all the same key: Ctrl+s, with no Shift. The capital in <code>^S</code> is only how it's displayed.</li>
+<li><strong>Shift with Ctrl has to be written out</strong>, as <code>&lt;C-S-s&gt;</code>. You'll rarely need it.</li>
+</ul>
+<p>This post writes keys lowercase in prose, like Ctrl+s, and adds Shift only when you need to press it.</p>
+<p>The trap is reading <code>^S</code> as "Ctrl+Shift+S". Some terminals, Ghostty among them, report Ctrl+Shift+s as a separate key. When I tried it, nothing was mapped to that key, and it typed <code>^S</code> into the buffer.</p>
+<h2>1. Shift+k: docs for the thing under the cursor</h2>
+<p>Put the cursor on a method name, say <code>find</code>, in normal mode, and press <code>K</code>, which is Shift+k.</p>
+<pre><code><span class="kw">self</span>.tasks.<span class="fn">iter_mut</span>().<span class="fn">find</span>(|t| t.id == id)
+<span class="cm">//                     ^ cursor here, press Shift+k</span></code></pre>
+<p>A floating window opens with the signature and the docs:</p>
+<pre><code><span class="kw">fn</span> <span class="fn">find</span>&lt;<span class="ty">P</span>&gt;(&amp;<span class="kw">mut</span> <span class="kw">self</span>, predicate: <span class="ty">P</span>) -&gt; <span class="ty">Option</span>&lt;<span class="kw">Self</span>::<span class="ty">Item</span>&gt;
+<span class="kw">where</span>
+    <span class="ty">P</span>: <span class="ty">FnMut</span>(&amp;<span class="kw">Self</span>::<span class="ty">Item</span>) -&gt; <span class="ty">bool</span>,</code></pre>
+<p>That's often all you need. Here, it tells you that the closure gets a reference to each item, and that <code>find</code> hands back an <code>Option</code>, not another iterator.</p>
+<p>Press Shift+k a second time to jump into the window. You can then scroll and yank in it like any buffer, and <code>q</code> closes it.</p>
+<div class="note">Since Neovim 0.10, <code>K</code> calls <code>vim.lsp.buf.hover()</code> whenever a language server is attached to the buffer. You don't need to map it yourself. Before that, <code>K</code> ran <code>man</code> on the word under the cursor, and it still does in buffers with no language server. See <code>:help K</code> and <code>:help lsp-defaults</code>.</div>
+<h2>2. Ctrl+s: the signature while you type</h2>
+<p>Shift+k works in normal mode. When you're partway through typing a call, you want the same information without leaving insert mode.</p>
+<p>Type up to the opening parenthesis, and press Ctrl+s (no Shift):</p>
+<pre><code><span class="kw">self</span>.tasks.<span class="fn">iter_mut</span>().<span class="fn">find</span>(
+<span class="cm">//                          ^ still in insert mode, press Ctrl+s</span></code></pre>
+<p>You get the signature with the argument you're on highlighted, followed by the method's docs. For <code>find</code> that's a good half page.</p>
+<p>It works the same way as Shift+k: press Ctrl+s a second time to jump into the window and scroll it, then <code>q</code> to close it and get back to typing.</p>
+<div class="note">Neovim 0.11 maps Ctrl+s in insert mode to <code>vim.lsp.buf.signature_help()</code> by default (<code>:help i_CTRL-S</code>). Completion plugins such as blink.cmp often show the same popup automatically as you type, which is handy, but it means you might never find out the key exists. Try it in a config with no plugins to see what's really built in.</div>
+<h2>3. gx: open a docs link in the browser</h2>
+<p>Sometimes the float isn't enough, and you want the full page on docs.rust-lang.org. The hover text has links in it, and <code>gx</code> (lowercase g, then x) opens the link under the cursor in your system browser.</p>
+<p>There's a catch. The float renders its markdown, and that hides the URL part of each link. If you press <code>gx</code> on what you can see, it gets the visible word, not the address. Here's what I got with the cursor on <code>Some</code>:</p>
+<pre><code>vim.ui.open: command failed (4): { "xdg-open", "Some" }</code></pre>
+<p>So show the raw markdown first:</p>
+<ol>
+<li>Shift+k on the method, and Shift+k again to jump into the float.</li>
+<li>Run <code>:set conceallevel=0</code>. The URLs appear.</li>
+<li>Put the cursor on a <code>https://</code> URL and press <code>gx</code>.</li>
+</ol>
+<p>Not every link has a URL. Here are two from <code>find</code>'s docs, with the markdown showing:</p>
+<pre><code>`true`, then `find()` returns [`Some(element)`]. If they all return
+`false`, it returns [`None`](https://doc.rust-lang.org/stable/core/option/enum.Option.html#variant.None).</code></pre>
+<p><code>[`None`](https://...)</code> has a full address, so <code>gx</code> opens it. <code>[`Some(element)`]</code> is a rustdoc intra-doc link with nothing after it. rustdoc fills the address in when it builds the web page, but the hover text doesn't include one, so there's nothing for <code>gx</code> to open.</p>
+<div class="note"><code>gx</code> calls <code>vim.ui.open()</code>, which runs <code>xdg-open</code> on Linux and <code>open</code> on macOS (<code>:help gx</code>). If you get "command failed", run <code>:messages</code> to see exactly what it was given.</div>
+<h2>4. Inlay hints: every type in the chain, on screen</h2>
+<p>Shift+k answers one question at a time. Inlay hints answer them all at once: rust-analyzer writes the types it has worked out into the code, in grey. Turn them on in normal mode:</p>
+<pre><code>:lua vim.lsp.inlay_hint.enable()</code></pre>
+<p>Then put each step of the chain on its own line. Here's the <code>complete</code> method from my todo app:</p>
+<figure>
+<div class="figure-scroll"><img src="../assets/native-nvim/inlay-hints.png" width="975" height="468" alt="A Rust method in Neovim with grey inlay hints. self.tasks is followed by Vec&lt;Task&gt;. .iter_mut() is followed by IterMut&lt;'_, Task&gt;. The closure parameter reads t: &amp;&amp;mut Task. The match arm reads Some(r: &amp;mut Task). After the closing brace of the impl block, the hint reads impl TodoList."></div>
+<figcaption>The grey text is inlay hints.</figcaption>
+</figure>
+<p>Reading the grey text from the top:</p>
+<ul>
+<li><code>self.tasks</code> is a <code>Vec&lt;Task&gt;</code>.</li>
+<li><code>.iter_mut()</code> turns it into an <code>IterMut&lt;'_, Task&gt;</code>, an iterator of <code>&amp;mut Task</code>.</li>
+<li>The closure's <code>t</code> is a <code>&amp;&amp;mut Task</code>: <code>find</code> lends the closure a reference to each item, and each item is already a reference.</li>
+<li>The match arm's <code>r</code> is a <code>&amp;mut Task</code>, which is what <code>find</code> returned inside the <code>Some</code>.</li>
+<li>The <code>impl TodoList</code> after the last brace tells you which block that brace closes.</li>
+</ul>
+<p>That's a type for every step of the chain without pressing anything. The double reference on <code>t</code> is the one that surprises people, and here it's right there on the screen.</p>
+<p>To turn the hints off again:</p>
+<pre><code>:lua vim.lsp.inlay_hint.enable(false)</code></pre>
+<div class="note">Neovim has supported inlay hints since 0.10 (<code>:help vim.lsp.inlay_hint</code>). They start switched off, which is why you have to enable them.</div>
+<h2>5. Ctrl+x Ctrl+o: what can I call here?</h2>
+<p>This is the one for finding combinators. You've typed a dot, and you want to know what comes next.</p>
+<p>In insert mode, type up to and including the dot, then press Ctrl+x, then Ctrl+o:</p>
+<pre><code><span class="kw">self</span>.tasks.<span class="fn">iter_mut</span>().
+<span class="cm">//                     ^ press Ctrl+x, then Ctrl+o</span></code></pre>
+<p>A menu of every method you can call on an <code>IterMut</code> pops up. Ctrl+n and Ctrl+p move down and up it.</p>
+<p>Out of the box there's a snag. As soon as the menu opened, Neovim inserted the first method into my code. That's down to the <code>completeopt</code> option. Mine was:</p>
+<pre><code>:set completeopt?
+  completeopt=menu,popup</code></pre>
+<p>Without <code>noselect</code> in that list, the first match goes straight in. This fixed it:</p>
+<pre><code>:set completeopt=menuone,noselect,popup</code></pre>
+<ul>
+<li><code>noselect</code>: nothing is inserted until you pick something with Ctrl+n or Ctrl+p.</li>
+<li><code>popup</code>: shows the docs for the highlighted method in a float beside the menu.</li>
+<li><code>menuone</code>: shows the menu even when there's only one match.</li>
+</ul>
+<p>Now, as you move down the list, the float shows each method's docs. That's how you browse an iterator's methods without leaving the line. The float is small, though, and I had to make my terminal bigger before it was really useful.</p>
+<p>To keep the setting, put it in your <code>init.lua</code>:</p>
+<pre><code>vim.o.completeopt = <span class="str">'menuone,noselect,popup'</span></code></pre>
+<div class="note">Ctrl+x Ctrl+o is Vim's omni completion (<code>:help i_CTRL-X_CTRL-O</code>). Since Neovim 0.10, a language server sets <code>omnifunc</code> when it attaches to a buffer, so the menu comes from rust-analyzer. See <code>:help lsp-defaults</code> and <code>:help 'completeopt'</code>.</div>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
