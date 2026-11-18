@@ -43,10 +43,9 @@
       <p>
         This version adds <strong>clarification boxes</strong> that answer the
         question the naming rules leave open: when there are two or three
-        variants, which one should you use? Each box gives the rule of thumb,
-        then shows it in code. They're mostly <code>assert</code> lines, so the
-        expected result is part of the code: paste any box into a
-        <code>#[test]</code> function and it passes.
+        variants, which one do you use? Each box starts with the simplest case,
+        gives the rule, then shows it in <code>assert</code> lines. Paste any box
+        into a <code>#[test]</code> function and it passes.
       </p>
 
       <h2>1. <code>_or</code> vs <code>_or_else</code> -- eager value vs lazy closure</h2>
@@ -82,6 +81,61 @@
 <span class="fn">ok_or</span>(err)           / <span class="fn">ok_or_else</span>(|| ...)
 <span class="fn">or</span>(other_result)     / <span class="fn">or_else</span>(|err| ...)</code></pre>
 
+      <aside class="clarify">
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Start with <code>or</code>: this one, or that one</p>
+        <p><code>a.or(b)</code> means "<code>a</code> if it has a value, otherwise <code>b</code>." Both are <code>Option</code>s, and so is the result.</p>
+        <pre><code><span class="mac">assert_eq!</span>(<span class="ty">Some</span>(<span class="num">1</span>).<span class="fn">or</span>(<span class="ty">Some</span>(<span class="num">2</span>)), <span class="ty">Some</span>(<span class="num">1</span>));   <span class="cm">// has a value: keep it</span>
+<span class="mac">assert_eq!</span>(<span class="ty">None</span>.<span class="fn">or</span>(<span class="ty">Some</span>(<span class="num">2</span>)), <span class="ty">Some</span>(<span class="num">2</span>));      <span class="cm">// empty: take the other</span>
+<span class="mac">assert_eq!</span>(<span class="ty">None</span>::&lt;<span class="ty">i32</span>&gt;.<span class="fn">or</span>(<span class="ty">None</span>), <span class="ty">None</span>);     <span class="cm">// both empty: still None</span>
+
+<span class="cm">// You get an Option back, so fallbacks chain</span>
+<span class="kw">let</span> flag: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
+<span class="kw">let</span> env: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">Some</span>(<span class="num">9000</span>);
+<span class="kw">let</span> file: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">Some</span>(<span class="num">7000</span>);
+<span class="mac">assert_eq!</span>(flag.<span class="fn">or</span>(env).<span class="fn">or</span>(file), <span class="ty">Some</span>(<span class="num">9000</span>));</code></pre>
+      </aside>
+
+      <aside class="clarify">
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>Option</code> vs <code>Result</code>: the same <code>or</code>, a different kind of empty</p>
+        <p><code>Result</code> works like <code>Option</code>, with one difference: its empty case, <code>Err</code>, carries a reason. <code>None</code> doesn't. That changes two things:</p>
+        <ul>
+          <li><strong><code>or</code> on a <code>Result</code></strong>: keeps the first <code>Ok</code>. If both are <code>Err</code>, you get the second error, and the first one is dropped.</li>
+          <li><strong>The <code>_or_else</code> closure</strong>: on <code>Option</code> takes nothing, <code>|| ...</code>, because <code>None</code> has nothing to say. On <code>Result</code> it gets the error, <code>|e| ...</code>, so the fallback can depend on what went wrong.</li>
+        </ul>
+        <pre><code><span class="cm">// Option: None says nothing, so the closure takes nothing</span>
+<span class="kw">let</span> none: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
+<span class="mac">assert_eq!</span>(none.<span class="fn">or</span>(<span class="ty">Some</span>(<span class="num">2</span>)), <span class="ty">Some</span>(<span class="num">2</span>));
+<span class="mac">assert_eq!</span>(none.<span class="fn">or_else</span>(|| <span class="str">"8080"</span>.<span class="fn">parse</span>().<span class="fn">ok</span>()), <span class="ty">Some</span>(<span class="num">8080</span>));
+
+<span class="cm">// Result: Err says why</span>
+<span class="kw">let</span> no_flag: <span class="ty">Result</span>&lt;<span class="ty">u16</span>, &amp;<span class="ty">str</span>&gt; = <span class="ty">Err</span>(<span class="str">"no flag"</span>);
+<span class="kw">let</span> no_env: <span class="ty">Result</span>&lt;<span class="ty">u16</span>, &amp;<span class="ty">str</span>&gt; = <span class="ty">Err</span>(<span class="str">"no env"</span>);
+<span class="kw">let</span> from_file: <span class="ty">Result</span>&lt;<span class="ty">u16</span>, &amp;<span class="ty">str</span>&gt; = <span class="ty">Ok</span>(<span class="num">7000</span>);
+<span class="mac">assert_eq!</span>(no_flag.<span class="fn">or</span>(from_file), <span class="ty">Ok</span>(<span class="num">7000</span>));
+<span class="mac">assert_eq!</span>(no_flag.<span class="fn">or</span>(no_env), <span class="ty">Err</span>(<span class="str">"no env"</span>));    <span class="cm">// "no flag" is lost</span>
+
+<span class="kw">let</span> r = no_flag.<span class="fn">or_else</span>(|e| <span class="kw">if</span> e == <span class="str">"no flag"</span> { <span class="ty">Ok</span>(<span class="num">8080</span>) } <span class="kw">else</span> { <span class="ty">Err</span>(e) });
+<span class="mac">assert_eq!</span>(r, <span class="ty">Ok</span>(<span class="num">8080</span>));                          <span class="cm">// the closure saw the reason</span></code></pre>
+      </aside>
+
+      <aside class="clarify">
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>unwrap_or</code>: taking the value out</p>
+        <p><code>or</code> keeps the wrapper, so you can add more fallbacks. <code>unwrap_or</code> takes the value out, so it ends the chain. The usual shape is to chain with <code>or</code> and unwrap once, at the end. <code>Result</code> is the same, except that its <code>unwrap_or_else</code> gets the error.</p>
+        <pre><code><span class="kw">let</span> flag: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
+<span class="kw">let</span> env: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
+<span class="mac">assert_eq!</span>(flag.<span class="fn">or</span>(env), <span class="ty">None</span>);                    <span class="cm">// still an Option</span>
+<span class="mac">assert_eq!</span>(flag.<span class="fn">unwrap_or</span>(<span class="num">8080</span>), <span class="num">8080</span>);            <span class="cm">// a plain u16</span>
+<span class="mac">assert_eq!</span>(flag.<span class="fn">or</span>(env).<span class="fn">unwrap_or</span>(<span class="num">8080</span>), <span class="num">8080</span>);    <span class="cm">// chain, then unwrap</span>
+
+<span class="kw">let</span> r: <span class="ty">Result</span>&lt;<span class="ty">u16</span>, &amp;<span class="ty">str</span>&gt; = <span class="ty">Err</span>(<span class="str">"timeout"</span>);
+<span class="mac">assert_eq!</span>(r.<span class="fn">unwrap_or</span>(<span class="num">500</span>), <span class="num">500</span>);
+<span class="mac">assert_eq!</span>(r.<span class="fn">unwrap_or_else</span>(|e| <span class="kw">if</span> e == <span class="str">"timeout"</span> { <span class="num">408</span> } <span class="kw">else</span> { <span class="num">500</span> }), <span class="num">408</span>);
+
+<span class="cm">// unwrap_or_default: the type's empty value</span>
+<span class="mac">assert_eq!</span>(flag.<span class="fn">unwrap_or_default</span>(), <span class="num">0</span>);
+<span class="mac">assert_eq!</span>(<span class="ty">None</span>::&lt;<span class="ty">String</span>&gt;.<span class="fn">unwrap_or_default</span>(), <span class="str">""</span>);</code></pre>
+      </aside>
+
       <p>
         Why bother with the closure version? Because the value in <code>_or</code>
         is always evaluated, even when it isn't needed. If creating the fallback is
@@ -97,63 +151,48 @@
 <span class="kw">let</span> name = config.<span class="fn">unwrap_or_else</span>(|| <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"default"</span>));</code></pre>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Which one to use: <code>unwrap_or</code>, <code>unwrap_or_else</code> or <code>unwrap_or_default</code></p>
-        <p>Ask what the fallback costs to make. Use <code>unwrap_or</code> when it's a literal, a small <code>Copy</code> value or a variable you already have. Use <code>unwrap_or_else</code> when making it calls a function: an allocation, a lookup, anything with a side effect. Use <code>unwrap_or_default</code> when the fallback is just the type's empty value, like <code>0</code>, <code>""</code> or an empty <code>Vec</code>.</p>
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>_or</code> or <code>_or_else</code>: when is the fallback made?</p>
+        <p>Every <code>_or</code> / <code>_or_else</code> pair differs in exactly one thing: when the fallback gets made.</p>
+        <ul>
+          <li><strong><code>_or(x)</code></strong>: <code>x</code> is made first, every time, even when it isn't used. Fine for <code>8080</code>, <code>"none"</code> or a variable you already have.</li>
+          <li><strong><code>_or_else(f)</code></strong>: <code>f</code> runs only when the fallback is needed. Use it when making the fallback costs something: an allocation, a lookup, a log line.</li>
+        </ul>
         <pre><code><span class="kw">use</span> std::cell::<span class="ty">Cell</span>;
 
-<span class="kw">let</span> calls = <span class="ty">Cell</span>::<span class="fn">new</span>(<span class="num">0</span>);
-<span class="kw">let</span> fallback = || {
-    calls.<span class="fn">set</span>(calls.<span class="fn">get</span>() + <span class="num">1</span>);
+<span class="kw">let</span> made = <span class="ty">Cell</span>::<span class="fn">new</span>(<span class="num">0</span>);
+<span class="kw">let</span> make = || {
+    made.<span class="fn">set</span>(made.<span class="fn">get</span>() + <span class="num">1</span>);
     <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"default"</span>)
 };
 
-<span class="kw">let</span> config = <span class="ty">Some</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"custom"</span>));
-<span class="mac">assert_eq!</span>(config.<span class="fn">clone</span>().<span class="fn">unwrap_or</span>(<span class="fn">fallback</span>()), <span class="str">"custom"</span>);    <span class="cm">// fallback() ran anyway</span>
-<span class="mac">assert_eq!</span>(calls.<span class="fn">get</span>(), <span class="num">1</span>);
-<span class="mac">assert_eq!</span>(config.<span class="fn">clone</span>().<span class="fn">unwrap_or_else</span>(fallback), <span class="str">"custom"</span>); <span class="cm">// the closure was never called</span>
-<span class="mac">assert_eq!</span>(calls.<span class="fn">get</span>(), <span class="num">1</span>);
-
-<span class="cm">// A cheap fallback: unwrap_or is fine, and shorter</span>
-<span class="kw">let</span> port: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
-<span class="mac">assert_eq!</span>(port.<span class="fn">unwrap_or</span>(<span class="num">8080</span>), <span class="num">8080</span>);
-
-<span class="cm">// The empty value: unwrap_or_default says exactly that</span>
-<span class="kw">let</span> name: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt; = <span class="ty">None</span>;
-<span class="kw">let</span> count: <span class="ty">Option</span>&lt;<span class="ty">usize</span>&gt; = <span class="ty">None</span>;
-<span class="mac">assert_eq!</span>(name.<span class="fn">unwrap_or_default</span>(), <span class="str">""</span>);
-<span class="mac">assert_eq!</span>(count.<span class="fn">unwrap_or_default</span>(), <span class="num">0</span>);
-<span class="mac">assert_eq!</span>(<span class="ty">String</span>::<span class="fn">new</span>().<span class="fn">capacity</span>(), <span class="num">0</span>);   <span class="cm">// and String::new() doesn't allocate</span></code></pre>
+<span class="kw">let</span> name = <span class="ty">Some</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"Ann"</span>));
+<span class="mac">assert_eq!</span>(name.<span class="fn">clone</span>().<span class="fn">unwrap_or</span>(<span class="fn">make</span>()), <span class="str">"Ann"</span>);      <span class="cm">// make() ran anyway</span>
+<span class="mac">assert_eq!</span>(made.<span class="fn">get</span>(), <span class="num">1</span>);
+<span class="mac">assert_eq!</span>(name.<span class="fn">clone</span>().<span class="fn">unwrap_or_else</span>(make), <span class="str">"Ann"</span>);   <span class="cm">// make never ran</span>
+<span class="mac">assert_eq!</span>(made.<span class="fn">get</span>(), <span class="num">1</span>);
+<span class="mac">assert_eq!</span>(<span class="ty">None</span>.<span class="fn">unwrap_or_else</span>(make), <span class="str">"default"</span>);       <span class="cm">// ran, because it was needed</span>
+<span class="mac">assert_eq!</span>(made.<span class="fn">get</span>(), <span class="num">2</span>);</code></pre>
       </aside>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> The same rule for <code>ok_or</code> and <code>or</code>, plus one more reason for <code>_or_else</code></p>
-        <p>On a <code>Result</code>, the <code>_or_else</code> closure gets the error, so use it whenever the fallback depends on what went wrong. For <code>ok_or</code>, a plain enum variant is cheap, but an error built with <code>format!</code> allocates, so that one belongs in <code>ok_or_else</code>. In a chain of <code>or_else</code> fallbacks, each lookup runs only if the ones before it came up empty.</p>
-        <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
-
-<span class="cm">// The fallback can look at the error</span>
-<span class="kw">let</span> r: <span class="ty">Result</span>&lt;<span class="ty">u16</span>, <span class="ty">String</span>&gt; = <span class="ty">Err</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"timeout"</span>));
-<span class="kw">let</span> status = r.<span class="fn">unwrap_or_else</span>(|e| <span class="kw">if</span> e == <span class="str">"timeout"</span> { <span class="num">408</span> } <span class="kw">else</span> { <span class="num">500</span> });
-<span class="mac">assert_eq!</span>(status, <span class="num">408</span>);
-
-<span class="cm">// ok_or with a ready-made error, ok_or_else with one that has to be built</span>
-<span class="cm">#[derive(Debug, PartialEq)]</span>
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Crossing over: <code>ok_or</code> and <code>.ok()</code></p>
+        <p>Going from <code>Option</code> to <code>Result</code> means supplying the reason <code>None</code> doesn't have. Going back throws the reason away.</p>
+        <ul>
+          <li><strong><code>ok_or(e)</code></strong>: <code>None</code> becomes <code>Err(e)</code>. Use it for a ready-made error, like an enum variant.</li>
+          <li><strong><code>ok_or_else(f)</code></strong>: the same, but the error is only built when needed. Use it when building it allocates, as <code>format!</code> does.</li>
+          <li><strong><code>.ok()</code></strong>: <code>Ok(v)</code> becomes <code>Some(v)</code>, and <code>Err(e)</code> becomes <code>None</code>. The reason is gone.</li>
+        </ul>
+        <pre><code><span class="cm">#[derive(Debug, PartialEq)]</span>
 <span class="kw">enum</span> <span class="ty">ConfigError</span> { <span class="ty">Missing</span> }
-<span class="kw">let</span> key = <span class="str">"port"</span>;
-<span class="kw">let</span> missing: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
-<span class="mac">assert_eq!</span>(missing.<span class="fn">ok_or</span>(<span class="ty">ConfigError</span>::<span class="ty">Missing</span>), <span class="ty">Err</span>(<span class="ty">ConfigError</span>::<span class="ty">Missing</span>));
-<span class="mac">assert_eq!</span>(missing.<span class="fn">ok_or_else</span>(|| <span class="mac">format!</span>(<span class="str">"missing {key}"</span>)), <span class="ty">Err</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"missing port"</span>)));
 
-<span class="cm">// A fallback chain: later lookups run only when needed</span>
-<span class="kw">let</span> tried = <span class="ty">RefCell</span>::<span class="fn">new</span>(<span class="ty">Vec</span>::<span class="fn">new</span>());
-<span class="kw">let</span> lookup = |source: &amp;<span class="ty">'static</span> <span class="ty">str</span>, found: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt;| {
-    tried.<span class="fn">borrow_mut</span>().<span class="fn">push</span>(source);
-    found
-};
-<span class="kw">let</span> port = <span class="fn">lookup</span>(<span class="str">"flag"</span>, <span class="ty">None</span>)
-    .<span class="fn">or_else</span>(|| <span class="fn">lookup</span>(<span class="str">"env"</span>, <span class="ty">Some</span>(<span class="num">9000</span>)))
-    .<span class="fn">or_else</span>(|| <span class="fn">lookup</span>(<span class="str">"file"</span>, <span class="ty">Some</span>(<span class="num">7000</span>)));
-<span class="mac">assert_eq!</span>(port, <span class="ty">Some</span>(<span class="num">9000</span>));
-<span class="mac">assert_eq!</span>(*tried.<span class="fn">borrow</span>(), [<span class="str">"flag"</span>, <span class="str">"env"</span>]);   <span class="cm">// the file was never read</span></code></pre>
+<span class="kw">let</span> port: <span class="ty">Option</span>&lt;<span class="ty">u16</span>&gt; = <span class="ty">None</span>;
+<span class="kw">let</span> key = <span class="str">"port"</span>;
+<span class="mac">assert_eq!</span>(port.<span class="fn">ok_or</span>(<span class="ty">ConfigError</span>::<span class="ty">Missing</span>), <span class="ty">Err</span>(<span class="ty">ConfigError</span>::<span class="ty">Missing</span>));
+<span class="mac">assert_eq!</span>(port.<span class="fn">ok_or_else</span>(|| <span class="mac">format!</span>(<span class="str">"missing {key}"</span>)), <span class="ty">Err</span>(<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"missing port"</span>)));
+<span class="mac">assert_eq!</span>(<span class="ty">Some</span>(<span class="num">8080</span>).<span class="fn">ok_or</span>(<span class="ty">ConfigError</span>::<span class="ty">Missing</span>), <span class="ty">Ok</span>(<span class="num">8080</span>));
+
+<span class="mac">assert_eq!</span>(<span class="str">"8080"</span>.<span class="fn">parse</span>::&lt;<span class="ty">u16</span>&gt;().<span class="fn">ok</span>(), <span class="ty">Some</span>(<span class="num">8080</span>));
+<span class="mac">assert_eq!</span>(<span class="str">"http"</span>.<span class="fn">parse</span>::&lt;<span class="ty">u16</span>&gt;().<span class="fn">ok</span>(), <span class="ty">None</span>);   <span class="cm">// why it failed is gone</span></code></pre>
       </aside>
 
       <h2>2. <code>as_</code> vs <code>to_</code> vs <code>into_</code> -- how much work is being done</h2>
@@ -194,22 +233,23 @@
       </p>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Which one to use: decide by what happens to the original next</p>
-        <p>If you're only reading it for now, use <code>as_</code>. If you need an owned value and still need the original, use <code>to_</code>. If you're finished with the original, use <code>into_</code>, which can hand over its buffer instead of copying it. <code>as_ptr</code> shows which ones share memory:</p>
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>as_</code>, <code>to_</code> or <code>into_</code>?</p>
+        <p>Pick by what you do with the original next.</p>
+        <ul>
+          <li><strong><code>as_</code></strong>: you only need to read it for now. Same memory, nothing copied.</li>
+          <li><strong><code>to_</code></strong>: you need your own copy and still need the original. New memory.</li>
+          <li><strong><code>into_</code></strong>: you're done with the original. It's used up, and its memory is handed over.</li>
+        </ul>
         <pre><code><span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>);
-<span class="kw">let</span> buf = s.<span class="fn">as_ptr</span>();
+<span class="kw">let</span> buf = s.<span class="fn">as_ptr</span>();                  <span class="cm">// where the bytes live</span>
 
-<span class="kw">let</span> view: &amp;<span class="ty">str</span> = s.<span class="fn">as_str</span>();           <span class="cm">// as_: the same bytes, nothing copied</span>
+<span class="kw">let</span> view: &amp;<span class="ty">str</span> = s.<span class="fn">as_str</span>();           <span class="cm">// as_: same memory</span>
 <span class="mac">assert_eq!</span>(view.<span class="fn">as_ptr</span>(), buf);
-
-<span class="kw">let</span> copy: <span class="ty">String</span> = s.<span class="fn">to_owned</span>();       <span class="cm">// to_: a new allocation, s untouched</span>
+<span class="kw">let</span> copy: <span class="ty">String</span> = s.<span class="fn">to_owned</span>();       <span class="cm">// to_: new memory, s untouched</span>
 <span class="mac">assert_ne!</span>(copy.<span class="fn">as_ptr</span>(), buf);
-<span class="mac">assert_eq!</span>(s, <span class="str">"hello"</span>);
-
-<span class="kw">let</span> bytes: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; = s.<span class="fn">into_bytes</span>();   <span class="cm">// into_: s is gone, its buffer lives on</span>
-<span class="mac">assert_eq!</span>(bytes.<span class="fn">as_ptr</span>(), buf);
-<span class="mac">assert_eq!</span>(bytes, <span class="str">b"hello"</span>);</code></pre>
-        <p>The same test works at a function call. If the function takes <code>&amp;str</code>, lend it <code>&amp;s</code>. If it takes a <code>String</code> and you won't use <code>s</code> again, pass <code>s</code> itself. Clone only when you need both.</p>
+<span class="kw">let</span> bytes: <span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt; = s.<span class="fn">into_bytes</span>();   <span class="cm">// into_: same memory, s is gone</span>
+<span class="mac">assert_eq!</span>(bytes.<span class="fn">as_ptr</span>(), buf);</code></pre>
+        <p>At a function call: if it takes <code>&amp;str</code>, lend it <code>&amp;s</code>. If it takes a <code>String</code> and you're done with <code>s</code>, pass <code>s</code>. Clone only when you need both.</p>
       </aside>
 
       <p>
@@ -225,12 +265,12 @@
 <span class="ty">OsString</span>::<span class="fn">into_string</span>()   <span class="cm">// move</span></code></pre>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>to_</code> on small <code>Copy</code> types doesn't allocate</p>
-        <p>The allocation in <code>to_</code> comes from building an owned copy of something borrowed, like <code>&amp;str</code> to <code>String</code>. On small <code>Copy</code> types such as <code>char</code> and integers, <code>to_</code> just returns a new value and nothing touches the heap. And for <code>&amp;str</code>, the usual ways of getting a <code>String</code> all give the same result, so pick the one that reads best.</p>
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>to_</code> doesn't always allocate</p>
+        <p><code>to_</code> allocates when it turns something borrowed into something owned, like <code>&amp;str</code> into <code>String</code>. On small <code>Copy</code> types it just returns a new value.</p>
         <pre><code><span class="mac">assert_eq!</span>(<span class="str">'a'</span>.<span class="fn">to_ascii_uppercase</span>(), <span class="str">'A'</span>);   <span class="cm">// char in, char out</span>
-<span class="mac">assert_eq!</span>(<span class="str">'7'</span>.<span class="fn">to_digit</span>(<span class="num">10</span>), <span class="ty">Some</span>(<span class="num">7</span>));
-<span class="mac">assert_eq!</span>(<span class="num">258u16</span>.<span class="fn">to_be_bytes</span>(), [<span class="num">1</span>, <span class="num">2</span>]);    <span class="cm">// a [u8; 2], on the stack</span>
+<span class="mac">assert_eq!</span>(<span class="num">258u16</span>.<span class="fn">to_be_bytes</span>(), [<span class="num">1</span>, <span class="num">2</span>]);    <span class="cm">// an array, no heap</span>
 
+<span class="cm">// &amp;str to String: four spellings, the same result. Use whichever reads best</span>
 <span class="kw">let</span> a: <span class="ty">String</span> = <span class="str">"hi"</span>.<span class="fn">to_owned</span>();
 <span class="kw">let</span> b: <span class="ty">String</span> = <span class="str">"hi"</span>.<span class="fn">to_string</span>();
 <span class="kw">let</span> c: <span class="ty">String</span> = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hi"</span>);
@@ -268,34 +308,38 @@
 <span class="cm">// ["hello", "world", "foo", "bar"]</span></code></pre>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>filter_map</code>, or <code>filter</code> then <code>map</code>?</p>
-        <p>Use <code>filter_map</code> when deciding and transforming are the same work, as with parsing: you can't tell a string is a number without parsing it. When the test doesn't depend on the transform, <code>filter</code> and <code>map</code> as two steps read more easily than one closure with an <code>if</code>. <code>find_map</code> follows the same rule for the first match. Count what each item turns into to pick the adapter: exactly one is <code>map</code>, zero or one is <code>filter_map</code>, zero or more is <code>flat_map</code>.</p>
-        <pre><code><span class="kw">let</span> inputs = [<span class="str">"1"</span>, <span class="str">"x"</span>, <span class="str">"3"</span>];
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>map</code>, <code>filter_map</code> or <code>flat_map</code>?</p>
+        <p>Count what each item turns into.</p>
+        <ul>
+          <li><strong>Exactly one</strong>: <code>map</code></li>
+          <li><strong>Zero or one</strong>: <code>filter_map</code>: return <code>Some</code> to keep, <code>None</code> to drop</li>
+          <li><strong>Zero or more</strong>: <code>flat_map</code></li>
+        </ul>
+        <pre><code><span class="kw">let</span> lines = [<span class="str">"hello world"</span>, <span class="str">""</span>, <span class="str">"foo"</span>];
 
-<span class="cm">// The test is the transform: filter_map parses each item once</span>
-<span class="kw">let</span> nums: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = inputs.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>()).<span class="fn">collect</span>();
+<span class="kw">let</span> lens: <span class="ty">Vec</span>&lt;<span class="ty">usize</span>&gt; = lines.<span class="fn">iter</span>().<span class="fn">map</span>(|l| l.<span class="fn">len</span>()).<span class="fn">collect</span>();
+<span class="kw">let</span> firsts: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = lines.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|l| l.<span class="fn">split_whitespace</span>().<span class="fn">next</span>()).<span class="fn">collect</span>();
+<span class="kw">let</span> words: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = lines.<span class="fn">iter</span>().<span class="fn">flat_map</span>(|l| l.<span class="fn">split_whitespace</span>()).<span class="fn">collect</span>();
+
+<span class="mac">assert_eq!</span>(lens, [<span class="num">11</span>, <span class="num">0</span>, <span class="num">3</span>]);                   <span class="cm">// one each</span>
+<span class="mac">assert_eq!</span>(firsts, [<span class="str">"hello"</span>, <span class="str">"foo"</span>]);           <span class="cm">// "" has no first word</span>
+<span class="mac">assert_eq!</span>(words, [<span class="str">"hello"</span>, <span class="str">"world"</span>, <span class="str">"foo"</span>]);   <span class="cm">// "hello world" has two</span></code></pre>
+      </aside>
+
+      <aside class="clarify">
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>filter_map</code>, or <code>filter</code> then <code>map</code>?</p>
+        <p>Both keep some items and transform them. Pick by whether the test and the transform are the same work.</p>
+        <ul>
+          <li><strong><code>filter_map</code></strong>: the test is the transform. With parsing, you only find out it's a number by parsing it.</li>
+          <li><strong><code>filter</code> + <code>map</code></strong>: the test is separate. Two small steps read better than an <code>if</code> inside one closure.</li>
+        </ul>
+        <pre><code><span class="kw">let</span> inputs = [<span class="str">"1"</span>, <span class="str">"x"</span>, <span class="str">"3"</span>];
+<span class="kw">let</span> nums: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = inputs.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>()).<span class="fn">collect</span>();   <span class="cm">// parses once</span>
 <span class="mac">assert_eq!</span>(nums, [<span class="num">1</span>, <span class="num">3</span>]);
 
-<span class="cm">// filter, then map, would parse every valid item twice</span>
-<span class="kw">let</span> twice: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = inputs.<span class="fn">iter</span>()
-    .<span class="fn">filter</span>(|s| s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">is_ok</span>())
-    .<span class="fn">map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">unwrap</span>())
-    .<span class="fn">collect</span>();
-<span class="mac">assert_eq!</span>(twice, nums);
-
-<span class="cm">// An independent test: two steps read better than if/else inside filter_map</span>
 <span class="kw">let</span> v = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
-<span class="kw">let</span> evens_doubled: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">filter</span>(|&amp;&amp;x| x % <span class="num">2</span> == <span class="num">0</span>).<span class="fn">map</span>(|&amp;x| x * <span class="num">2</span>).<span class="fn">collect</span>();
-<span class="mac">assert_eq!</span>(evens_doubled, [<span class="num">4</span>, <span class="num">8</span>]);
-
-<span class="cm">// One each, zero or one each, zero or more each</span>
-<span class="kw">let</span> lines = [<span class="str">"hello world"</span>, <span class="str">""</span>, <span class="str">"foo"</span>];
-<span class="kw">let</span> one: <span class="ty">Vec</span>&lt;<span class="ty">usize</span>&gt; = lines.<span class="fn">iter</span>().<span class="fn">map</span>(|l| l.<span class="fn">len</span>()).<span class="fn">collect</span>();
-<span class="kw">let</span> first_words: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = lines.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|l| l.<span class="fn">split_whitespace</span>().<span class="fn">next</span>()).<span class="fn">collect</span>();
-<span class="kw">let</span> all_words: <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; = lines.<span class="fn">iter</span>().<span class="fn">flat_map</span>(|l| l.<span class="fn">split_whitespace</span>()).<span class="fn">collect</span>();
-<span class="mac">assert_eq!</span>(one, [<span class="num">11</span>, <span class="num">0</span>, <span class="num">3</span>]);
-<span class="mac">assert_eq!</span>(first_words, [<span class="str">"hello"</span>, <span class="str">"foo"</span>]);           <span class="cm">// "" has no first word</span>
-<span class="mac">assert_eq!</span>(all_words, [<span class="str">"hello"</span>, <span class="str">"world"</span>, <span class="str">"foo"</span>]);    <span class="cm">// "hello world" has two</span></code></pre>
+<span class="kw">let</span> doubled: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">filter</span>(|&amp;&amp;x| x % <span class="num">2</span> == <span class="num">0</span>).<span class="fn">map</span>(|&amp;x| x * <span class="num">2</span>).<span class="fn">collect</span>();
+<span class="mac">assert_eq!</span>(doubled, [<span class="num">4</span>, <span class="num">8</span>]);   <span class="cm">// the filter_map example above, easier to read</span></code></pre>
       </aside>
 
       <p>
@@ -311,17 +355,19 @@
 
       <aside class="clarify">
         <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>map</code> or <code>and_then</code>?</p>
-        <p>Look at what the closure returns. A plain value goes with <code>map</code>. If the closure returns an <code>Option</code> itself, use <code>and_then</code>; <code>map</code> would wrap it a second time. <code>Result</code> has the same pair, and its <code>and_then</code> needs both steps to share an error type.</p>
-        <pre><code><span class="kw">let</span> maybe_str: <span class="ty">Option</span>&lt;&amp;<span class="ty">str</span>&gt; = <span class="ty">Some</span>(<span class="str">"42"</span>);
-
-<span class="kw">let</span> a: <span class="ty">Option</span>&lt;<span class="ty">usize</span>&gt; = maybe_str.<span class="fn">map</span>(|s| s.<span class="fn">len</span>());                <span class="cm">// a plain value: map</span>
-<span class="kw">let</span> b: <span class="ty">Option</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt;&gt; = maybe_str.<span class="fn">map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>());   <span class="cm">// an Option: map nests it</span>
-<span class="kw">let</span> c: <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; = maybe_str.<span class="fn">and_then</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>());      <span class="cm">// and_then doesn't</span>
-<span class="mac">assert_eq!</span>((a, b, c), (<span class="ty">Some</span>(<span class="num">2</span>), <span class="ty">Some</span>(<span class="ty">Some</span>(<span class="num">42</span>)), <span class="ty">Some</span>(<span class="num">42</span>)));
+        <p>Look at what your closure returns.</p>
+        <ul>
+          <li><strong>A plain value</strong>: <code>map</code></li>
+          <li><strong>An <code>Option</code></strong>: <code>and_then</code>. <code>map</code> would wrap it a second time.</li>
+          <li><strong>On <code>Result</code></strong>: the same pair. The closure for <code>and_then</code> must return the same error type as the <code>Result</code> it's called on.</li>
+        </ul>
+        <pre><code><span class="kw">let</span> s: <span class="ty">Option</span>&lt;&amp;<span class="ty">str</span>&gt; = <span class="ty">Some</span>(<span class="str">"42"</span>);
+<span class="mac">assert_eq!</span>(s.<span class="fn">map</span>(|s| s.<span class="fn">len</span>()), <span class="ty">Some</span>(<span class="num">2</span>));                         <span class="cm">// plain value: map</span>
+<span class="mac">assert_eq!</span>(s.<span class="fn">map</span>(|s| s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">ok</span>()), <span class="ty">Some</span>(<span class="ty">Some</span>(<span class="num">42</span>)));    <span class="cm">// Option: map nests it</span>
+<span class="mac">assert_eq!</span>(s.<span class="fn">and_then</span>(|s| s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">ok</span>()), <span class="ty">Some</span>(<span class="num">42</span>));     <span class="cm">// and_then doesn't</span>
 
 <span class="kw">let</span> r: <span class="ty">Result</span>&lt;&amp;<span class="ty">str</span>, <span class="ty">String</span>&gt; = <span class="ty">Ok</span>(<span class="str">"42"</span>);
-<span class="kw">let</span> n: <span class="ty">Result</span>&lt;<span class="ty">i32</span>, <span class="ty">String</span>&gt; = r.<span class="fn">and_then</span>(|s| s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">map_err</span>(|e| e.<span class="fn">to_string</span>()));
-<span class="mac">assert_eq!</span>(n, <span class="ty">Ok</span>(<span class="num">42</span>));</code></pre>
+<span class="mac">assert_eq!</span>(r.<span class="fn">and_then</span>(|s| s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">map_err</span>(|e| e.<span class="fn">to_string</span>())), <span class="ty">Ok</span>(<span class="num">42</span>));</code></pre>
       </aside>
 
       <h2>4. <code>_while</code> adds a predicate</h2>
@@ -361,34 +407,38 @@
 
       <aside class="clarify">
         <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>take</code>, <code>take_while</code> or <code>filter</code>?</p>
-        <p>Use <code>take</code> and <code>skip</code> when you know the count up front. Use <code>take_while</code> and <code>skip_while</code> when the boundary is the first item that fails a test: the end of a sorted run, a header block, leading blanks. Use <code>filter</code> when the test applies to every item, wherever it is. On data that isn't sorted, the three come apart:</p>
+        <p>On sorted data they often agree. On unsorted data they don't:</p>
+        <ul>
+          <li><strong><code>take(n)</code></strong>: you know how many.</li>
+          <li><strong><code>take_while(f)</code></strong>: stop at the first item that fails. Nothing after it is looked at.</li>
+          <li><strong><code>filter(f)</code></strong>: check every item, wherever it is.</li>
+          <li><strong><code>skip_while(f)</code></strong>: drop items until the first that fails, then keep everything after it, unchecked.</li>
+        </ul>
         <pre><code><span class="kw">let</span> v = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">7</span>, <span class="num">3</span>, <span class="num">9</span>];
+<span class="kw">let</span> small = |x: &amp;&amp;<span class="ty">i32</span>| **x &lt; <span class="num">5</span>;
 
 <span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">take</span>(<span class="num">2</span>).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>]);
-<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">take_while</span>(|&amp;&amp;x| x &lt; <span class="num">5</span>).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>]);   <span class="cm">// stops at 7</span>
-<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">filter</span>(|&amp;&amp;x| x &lt; <span class="num">5</span>).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>, &amp;<span class="num">3</span>]);   <span class="cm">// finds the 3 as well</span>
-
-<span class="cm">// skip_while stops testing at the first false and lets the rest through</span>
-<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">skip_while</span>(|&amp;&amp;x| x &lt; <span class="num">5</span>).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">7</span>, &amp;<span class="num">3</span>, &amp;<span class="num">9</span>]); <span class="cm">// 3 &lt; 5, kept anyway</span></code></pre>
+<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">take_while</span>(small).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>]);       <span class="cm">// stops at 7</span>
+<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">filter</span>(small).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>, &amp;<span class="num">3</span>]);       <span class="cm">// finds the 3 too</span>
+<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">skip_while</span>(small).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">7</span>, &amp;<span class="num">3</span>, &amp;<span class="num">9</span>]);   <span class="cm">// keeps the 3 anyway</span></code></pre>
       </aside>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Two things to know before you use <code>take_while</code></p>
-        <p>First, <code>take_while</code> has to look at the item that fails the test, so that item is used up. If you need it afterwards, use <code>peekable</code> and <code>next_if</code>, or find the boundary with <code>position</code>. Second, when you want to transform items until the first one that doesn't work, <code>map_while</code> does both in one step.</p>
-        <pre><code><span class="kw">let</span> v = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">7</span>, <span class="num">3</span>, <span class="num">9</span>];
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>take_while</code> eats the item that stopped it</p>
+        <p>To know it should stop, <code>take_while</code> has to take the failing item, and it doesn't give it back. If you need that item, find the split point with <code>position</code> instead.</p>
+        <pre><code><span class="kw">let</span> v = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">7</span>, <span class="num">3</span>];
 
 <span class="kw">let</span> <span class="kw">mut</span> it = v.<span class="fn">iter</span>();
 <span class="kw">let</span> head: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = it.<span class="fn">by_ref</span>().<span class="fn">take_while</span>(|&amp;&amp;x| x &lt; <span class="num">5</span>).<span class="fn">collect</span>();
 <span class="mac">assert_eq!</span>(head, [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>]);
 <span class="mac">assert_eq!</span>(it.<span class="fn">next</span>(), <span class="ty">Some</span>(&amp;<span class="num">3</span>));   <span class="cm">// the 7 is gone</span>
 
-<span class="cm">// position finds the boundary without using anything up</span>
 <span class="kw">let</span> cut = v.<span class="fn">iter</span>().<span class="fn">position</span>(|&amp;x| x &gt;= <span class="num">5</span>).<span class="fn">unwrap_or</span>(v.<span class="fn">len</span>());
-<span class="mac">assert_eq!</span>((&amp;v[..cut], &amp;v[cut..]), (&amp;[<span class="num">1</span>, <span class="num">2</span>][..], &amp;[<span class="num">7</span>, <span class="num">3</span>, <span class="num">9</span>][..]));
+<span class="mac">assert_eq!</span>(v.<span class="fn">split_at</span>(cut), (&amp;[<span class="num">1</span>, <span class="num">2</span>][..], &amp;[<span class="num">7</span>, <span class="num">3</span>][..]));   <span class="cm">// nothing lost</span>
 
-<span class="cm">// map_while: parse until the first thing that isn't a number</span>
-<span class="kw">let</span> parsed: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = [<span class="str">"1"</span>, <span class="str">"2"</span>, <span class="str">"x"</span>, <span class="str">"4"</span>].<span class="fn">iter</span>().<span class="fn">map_while</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>()).<span class="fn">collect</span>();
-<span class="mac">assert_eq!</span>(parsed, [<span class="num">1</span>, <span class="num">2</span>]);</code></pre>
+<span class="cm">// map_while: transform until the first None</span>
+<span class="kw">let</span> nums: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = [<span class="str">"1"</span>, <span class="str">"2"</span>, <span class="str">"x"</span>, <span class="str">"4"</span>].<span class="fn">iter</span>().<span class="fn">map_while</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>()).<span class="fn">collect</span>();
+<span class="mac">assert_eq!</span>(nums, [<span class="num">1</span>, <span class="num">2</span>]);</code></pre>
       </aside>
 
       <h2>5. <code>_by</code> / <code>_by_key</code> -- "by what measure?"</h2>
@@ -438,60 +488,50 @@ v.<span class="fn">iter</span>().<span class="fn">max_by_key</span>(|x| ...);   
       </p>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>_by_key</code> or <code>_by</code>: where the line actually falls</p>
-        <p>Start with <code>_by_key</code>: it's shorter and names what decides the order. Several fields still fit, as a tuple, and <code>Reverse</code> flips one of them. Switch to <code>_by</code> when the key can't be handed back on its own: a float (<code>f64</code> isn't <code>Ord</code>, so compare with <code>total_cmp</code>), or a key that borrows from the item. <code>_by</code> also breaks ties with <code>then_with</code> without cloning anything.</p>
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>_by_key</code> or <code>_by</code>?</p>
+        <p>Start with <code>_by_key</code>. Switch to <code>_by</code> when the key can't be handed back on its own.</p>
+        <ul>
+          <li><strong><code>_by_key</code></strong>: one value decides the order. Several values? Return a tuple. Reversed? Wrap it in <code>Reverse</code>.</li>
+          <li><strong><code>_by</code></strong>: the comparison needs both items at once: floats (<code>f64</code> isn't <code>Ord</code>, so use <code>total_cmp</code>), or a key that borrows from the item.</li>
+        </ul>
         <pre><code><span class="kw">use</span> std::cmp::<span class="ty">Reverse</span>;
 
-<span class="kw">struct</span> <span class="ty">Player</span> { name: <span class="ty">String</span>, score: <span class="ty">u32</span>, time: <span class="ty">f64</span> }
-<span class="kw">fn</span> <span class="fn">names</span>(ps: &amp;[<span class="ty">Player</span>]) -&gt; <span class="ty">Vec</span>&lt;&amp;<span class="ty">str</span>&gt; { ps.<span class="fn">iter</span>().<span class="fn">map</span>(|p| p.name.<span class="fn">as_str</span>()).<span class="fn">collect</span>() }
+<span class="kw">let</span> <span class="kw">mut</span> scores = <span class="mac">vec!</span>[(<span class="str">"bo"</span>, <span class="num">90</span>), (<span class="str">"al"</span>, <span class="num">90</span>), (<span class="str">"cy"</span>, <span class="num">70</span>)];
+scores.<span class="fn">sort_by_key</span>(|&amp;(name, score)| (<span class="ty">Reverse</span>(score), name));   <span class="cm">// score high to low, then name</span>
+<span class="mac">assert_eq!</span>(scores, [(<span class="str">"al"</span>, <span class="num">90</span>), (<span class="str">"bo"</span>, <span class="num">90</span>), (<span class="str">"cy"</span>, <span class="num">70</span>)]);
 
-<span class="kw">let</span> <span class="kw">mut</span> players = <span class="mac">vec!</span>[
-    <span class="ty">Player</span> { name: <span class="str">"Bo"</span>.<span class="fn">into</span>(), score: <span class="num">90</span>, time: <span class="num">12.5</span> },
-    <span class="ty">Player</span> { name: <span class="str">"Al"</span>.<span class="fn">into</span>(), score: <span class="num">90</span>, time: <span class="num">11.0</span> },
-    <span class="ty">Player</span> { name: <span class="str">"Cy"</span>.<span class="fn">into</span>(), score: <span class="num">70</span>, time: <span class="num">9.0</span> },
-];
+<span class="kw">let</span> <span class="kw">mut</span> times = <span class="mac">vec!</span>[<span class="num">2.5_f64</span>, <span class="num">0.5</span>, <span class="num">1.0</span>];
+<span class="cm">// times.sort_by_key(|t| *t);   // error[E0277]: the trait bound `f64: Ord` is not satisfied</span>
+times.<span class="fn">sort_by</span>(|a, b| a.<span class="fn">total_cmp</span>(b));
+<span class="mac">assert_eq!</span>(times, [<span class="num">0.5</span>, <span class="num">1.0</span>, <span class="num">2.5</span>]);
 
-<span class="cm">// Score high to low, then name A to Z: a tuple key (clones each name)...</span>
-players.<span class="fn">sort_by_key</span>(|p| (<span class="ty">Reverse</span>(p.score), p.name.<span class="fn">clone</span>()));
-<span class="mac">assert_eq!</span>(<span class="fn">names</span>(&amp;players), [<span class="str">"Al"</span>, <span class="str">"Bo"</span>, <span class="str">"Cy"</span>]);
-<span class="cm">// ...or _by with then_with (no clone)</span>
-players.<span class="fn">sort_by</span>(|a, b| b.score.<span class="fn">cmp</span>(&amp;a.score).<span class="fn">then_with</span>(|| a.name.<span class="fn">cmp</span>(&amp;b.name)));
-<span class="mac">assert_eq!</span>(<span class="fn">names</span>(&amp;players), [<span class="str">"Al"</span>, <span class="str">"Bo"</span>, <span class="str">"Cy"</span>]);
-
-<span class="cm">// A float: _by_key won't compile, total_cmp works</span>
-players.<span class="fn">sort_by</span>(|a, b| a.time.<span class="fn">total_cmp</span>(&amp;b.time));
-<span class="mac">assert_eq!</span>(<span class="fn">names</span>(&amp;players), [<span class="str">"Cy"</span>, <span class="str">"Al"</span>, <span class="str">"Bo"</span>]);
-
-<span class="cm">// A key that borrows from the item: _by_key can't return it, _by compares the borrows</span>
-<span class="cm">// players.sort_by_key(|p| &amp;p.name);   // error: lifetime may not live long enough</span>
-players.<span class="fn">sort_by</span>(|a, b| a.name.<span class="fn">cmp</span>(&amp;b.name));
-<span class="mac">assert_eq!</span>(<span class="fn">names</span>(&amp;players), [<span class="str">"Al"</span>, <span class="str">"Bo"</span>, <span class="str">"Cy"</span>]);</code></pre>
+<span class="kw">struct</span> <span class="ty">User</span> { name: <span class="ty">String</span> }
+<span class="kw">let</span> <span class="kw">mut</span> users = [<span class="ty">User</span> { name: <span class="str">"bo"</span>.<span class="fn">into</span>() }, <span class="ty">User</span> { name: <span class="str">"al"</span>.<span class="fn">into</span>() }];
+<span class="cm">// users.sort_by_key(|u| &amp;u.name);   // error: lifetime may not live long enough</span>
+users.<span class="fn">sort_by</span>(|a, b| a.name.<span class="fn">cmp</span>(&amp;b.name));
+<span class="mac">assert_eq!</span>(users[<span class="num">0</span>].name, <span class="str">"al"</span>);</code></pre>
       </aside>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Ties, stability, and a key that's expensive to compute</p>
-        <p>Three details that decide between close variants. <code>sort</code> and <code>sort_by_key</code> are stable: items that compare equal keep their order, which matters when you sort by one field after another. The <code>sort_unstable</code> versions are often faster when you don't care about that. On ties, <code>max_by_key</code> returns the last of the equals and <code>min_by_key</code> the first. And <code>sort_by_cached_key</code> computes each key at most once, which pays off when the key allocates or does real work; for a plain field, the docs say <code>sort_by_key</code> is likely faster.</p>
-        <pre><code><span class="kw">use</span> std::cell::<span class="ty">Cell</span>;
-
-<span class="cm">// Stable: equal keys keep their original order</span>
-<span class="kw">let</span> <span class="kw">mut</span> words = <span class="mac">vec!</span>[<span class="str">"bb"</span>, <span class="str">"a"</span>, <span class="str">"cc"</span>, <span class="str">"d"</span>];
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> Ties, stability and <code>sort_by_cached_key</code></p>
+        <p>When items compare equal, the variants behave differently:</p>
+        <ul>
+          <li><strong><code>sort</code>, <code>sort_by_key</code></strong>: stable: equal items keep the order they started in.</li>
+          <li><strong><code>sort_unstable*</code></strong>: often faster, but equal items may swap.</li>
+          <li><strong><code>max_by_key</code> / <code>min_by_key</code></strong>: on a tie, max returns the last of the equals and min the first.</li>
+          <li><strong><code>sort_by_cached_key</code></strong>: computes each key once. Use it when the key is costly, like <code>to_lowercase</code>. For a plain field, <code>sort_by_key</code> is likely faster.</li>
+        </ul>
+        <pre><code><span class="kw">let</span> <span class="kw">mut</span> words = <span class="mac">vec!</span>[<span class="str">"bb"</span>, <span class="str">"a"</span>, <span class="str">"cc"</span>, <span class="str">"d"</span>];
 words.<span class="fn">sort_by_key</span>(|w| w.<span class="fn">len</span>());
-<span class="mac">assert_eq!</span>(words, [<span class="str">"a"</span>, <span class="str">"d"</span>, <span class="str">"bb"</span>, <span class="str">"cc"</span>]);   <span class="cm">// "a" still before "d", "bb" before "cc"</span>
+<span class="mac">assert_eq!</span>(words, [<span class="str">"a"</span>, <span class="str">"d"</span>, <span class="str">"bb"</span>, <span class="str">"cc"</span>]);   <span class="cm">// "a" before "d", as they started</span>
 
-<span class="cm">// Ties in max and min</span>
 <span class="kw">let</span> words = [<span class="str">"bb"</span>, <span class="str">"a"</span>, <span class="str">"cc"</span>, <span class="str">"d"</span>];
 <span class="mac">assert_eq!</span>(words.<span class="fn">iter</span>().<span class="fn">max_by_key</span>(|w| w.<span class="fn">len</span>()), <span class="ty">Some</span>(&amp;<span class="str">"cc"</span>));   <span class="cm">// the last of the longest</span>
 <span class="mac">assert_eq!</span>(words.<span class="fn">iter</span>().<span class="fn">min_by_key</span>(|w| w.<span class="fn">len</span>()), <span class="ty">Some</span>(&amp;<span class="str">"a"</span>));    <span class="cm">// the first of the shortest</span>
 
-<span class="cm">// An expensive key, computed at most once per item</span>
-<span class="kw">let</span> calls = <span class="ty">Cell</span>::<span class="fn">new</span>(<span class="num">0</span>);
-<span class="kw">let</span> <span class="kw">mut</span> names = <span class="mac">vec!</span>[<span class="str">"bo"</span>, <span class="str">"Al"</span>, <span class="str">"cy"</span>, <span class="str">"Di"</span>];
-names.<span class="fn">sort_by_cached_key</span>(|n| {
-    calls.<span class="fn">set</span>(calls.<span class="fn">get</span>() + <span class="num">1</span>);
-    n.<span class="fn">to_lowercase</span>()
-});
-<span class="mac">assert_eq!</span>(names, [<span class="str">"Al"</span>, <span class="str">"bo"</span>, <span class="str">"cy"</span>, <span class="str">"Di"</span>]);
-<span class="mac">assert!</span>(calls.<span class="fn">get</span>() &lt;= names.<span class="fn">len</span>());</code></pre>
+<span class="kw">let</span> <span class="kw">mut</span> names = <span class="mac">vec!</span>[<span class="str">"bo"</span>, <span class="str">"Al"</span>, <span class="str">"cy"</span>];
+names.<span class="fn">sort_by_cached_key</span>(|n| n.<span class="fn">to_lowercase</span>());   <span class="cm">// one to_lowercase per name</span>
+<span class="mac">assert_eq!</span>(names, [<span class="str">"Al"</span>, <span class="str">"bo"</span>, <span class="str">"cy"</span>]);</code></pre>
       </aside>
 
       <h2>6. <code>copied</code> vs <code>cloned</code> -- how expensive is the copy?</h2>
@@ -529,23 +569,25 @@ names.<span class="fn">sort_by_cached_key</span>(|n| {
       </p>
 
       <aside class="clarify">
-        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>copied</code>, <code>cloned</code>, <code>into_iter</code>, or nothing at all?</p>
-        <p>First ask whether you need owned values. If you're only reading, keep the references and copy nothing. If you need owned values and the items are <code>Copy</code>, use <code>copied</code>. If they aren't <code>Copy</code> and you still need the collection, use <code>cloned</code>. If you're done with the collection, <code>into_iter</code> moves the items out and nothing is cloned. <code>copied</code> and <code>cloned</code> work on an <code>Option&lt;&amp;T&gt;</code> too.</p>
+        <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>copied</code>, <code>cloned</code>, <code>into_iter</code>, or nothing?</p>
+        <p>First ask whether you need owned values at all.</p>
+        <ul>
+          <li><strong>Only reading</strong>: keep the references. Nothing is copied.</li>
+          <li><strong>Owned, and the items are <code>Copy</code></strong>: <code>copied</code>.</li>
+          <li><strong>Owned, anything else, and you keep the collection</strong>: <code>cloned</code>, or <code>to_vec()</code> for the whole thing.</li>
+          <li><strong>Done with the collection</strong>: <code>into_iter</code>. The items move out; nothing is cloned.</li>
+        </ul>
         <pre><code><span class="kw">let</span> strings = <span class="mac">vec!</span>[<span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"a"</span>), <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"b"</span>)];
 <span class="kw">let</span> buf = strings[<span class="num">0</span>].<span class="fn">as_ptr</span>();
 
-<span class="kw">let</span> found: <span class="ty">Option</span>&lt;&amp;<span class="ty">String</span>&gt; = strings.<span class="fn">iter</span>().<span class="fn">find</span>(|s| s.<span class="fn">as_str</span>() == <span class="str">"a"</span>);   <span class="cm">// reading: no copy</span>
-<span class="mac">assert_eq!</span>(found.<span class="fn">map</span>(|s| s.<span class="fn">as_ptr</span>()), <span class="ty">Some</span>(buf));
+<span class="kw">let</span> r: &amp;<span class="ty">String</span> = &amp;strings[<span class="num">0</span>];                             <span class="cm">// a reference: the same String</span>
+<span class="mac">assert_eq!</span>(r.<span class="fn">as_ptr</span>(), buf);
+<span class="kw">let</span> c: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = strings.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>();   <span class="cm">// cloned: new Strings</span>
+<span class="mac">assert_ne!</span>(c[<span class="num">0</span>].<span class="fn">as_ptr</span>(), buf);
+<span class="kw">let</span> m: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = strings.<span class="fn">into_iter</span>().<span class="fn">collect</span>();       <span class="cm">// into_iter: moved, not copied</span>
+<span class="mac">assert_eq!</span>(m[<span class="num">0</span>].<span class="fn">as_ptr</span>(), buf);
 
-<span class="kw">let</span> cloned: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = strings.<span class="fn">iter</span>().<span class="fn">cloned</span>().<span class="fn">collect</span>();   <span class="cm">// new Strings, originals kept</span>
-<span class="mac">assert_ne!</span>(cloned[<span class="num">0</span>].<span class="fn">as_ptr</span>(), buf);
-<span class="mac">assert_eq!</span>(cloned, strings.<span class="fn">to_vec</span>());                          <span class="cm">// to_vec() says it shorter</span>
-
-<span class="kw">let</span> kept: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = strings.<span class="fn">into_iter</span>().<span class="fn">filter</span>(|s| s.<span class="fn">as_str</span>() != <span class="str">"b"</span>).<span class="fn">collect</span>();
-<span class="mac">assert_eq!</span>(kept[<span class="num">0</span>].<span class="fn">as_ptr</span>(), buf);                             <span class="cm">// moved out, not cloned</span>
-
-<span class="kw">let</span> v = [<span class="num">10</span>, <span class="num">20</span>];
-<span class="mac">assert_eq!</span>(v.<span class="fn">first</span>().<span class="fn">copied</span>(), <span class="ty">Some</span>(<span class="num">10</span>));                      <span class="cm">// Option&lt;&amp;i32&gt; to Option&lt;i32&gt;</span></code></pre>
+<span class="mac">assert_eq!</span>([<span class="num">10</span>, <span class="num">20</span>].<span class="fn">first</span>().<span class="fn">copied</span>(), <span class="ty">Some</span>(<span class="num">10</span>));          <span class="cm">// copied works on Option&lt;&amp;T&gt; too</span></code></pre>
       </aside>
 
       <h2>Putting it all together</h2>
