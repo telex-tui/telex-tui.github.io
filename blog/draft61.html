@@ -566,9 +566,10 @@
 
       <p>
         <code>copied()</code> turns <code>&amp;T</code> into <code>T</code> for any
-        type that implements <code>Copy</code>. It's a memcpy of a few bytes --
-        trivially cheap. When you see <code>copied()</code> in code, you know
-        nothing expensive is happening.
+        type that implements <code>Copy</code>. It's a plain memcpy: no
+        allocation, no <code>clone</code> call. That's usually a few bytes, but
+        <code>Copy</code> doesn't promise small: a <code>[u8; 4096]</code> is
+        <code>Copy</code> too.
       </p>
 
       <aside class="clarify">
@@ -582,6 +583,7 @@
 <span class="fn">is_copy</span>::&lt;&amp;<span class="ty">str</span>&gt;();         <span class="cm">// shared references are Copy</span>
 <span class="fn">is_copy</span>::&lt;(<span class="ty">u8</span>, <span class="ty">f64</span>)&gt;();    <span class="cm">// so are tuples and arrays of Copy types</span>
 <span class="fn">is_copy</span>::&lt;[<span class="ty">u16</span>; <span class="num">4</span>]&gt;();
+<span class="fn">is_copy</span>::&lt;[<span class="ty">u8</span>; <span class="num">4096</span>]&gt;();   <span class="cm">// Copy doesn't mean small: this one is 4 KB</span>
 <span class="cm">// is_copy::&lt;String&gt;();    // error[E0277]: the trait bound `String: Copy` is not satisfied</span>
 <span class="cm">// is_copy::&lt;Vec&lt;i32&gt;&gt;();  // the same: it owns heap memory</span>
 <span class="cm">// is_copy::&lt;&amp;mut i32&gt;();  // the same: only one &amp;mut can exist at a time</span>
@@ -609,8 +611,8 @@
         <code>cloned()</code> calls <code>.clone()</code> on each element. It
         compiles for anything that implements <code>Clone</code>, but unlike
         <code>copied()</code>, it might allocate. When you see <code>cloned()</code>
-        in a review, it's a signal: "heap allocations happening here, and the
-        author knows it."
+        in a review, it's a signal: "this may allocate, and the author accepted
+        that."
       </p>
 
       <aside class="clarify">
@@ -1024,9 +1026,10 @@ c.<span class="fn">to_mut</span>().<span class="fn">push</span>(<span class="str
       <p>
         <code>max_by_key</code> and <code>min_by_key</code> let you point at a
         field or derived value and say "compare by this." No need to implement
-        <code>Ord</code> on the whole struct. If you need more complex comparison
-        logic (multi-field tiebreaking), use <code>max_by</code> with a full
-        comparator closure instead.
+        <code>Ord</code> on the whole struct. Several fields still fit, as a tuple
+        key. Switch to <code>max_by</code> with a comparator closure when the key
+        can't be handed back on its own, such as a float or a key that borrows
+        from the item.
       </p>
 
       <aside class="clarify">
@@ -1891,13 +1894,16 @@ counts.<span class="fn">entry</span>(<span class="str">"c"</span>).<span class="
         This is Rust's answer to <code>try/finally</code>, <code>defer</code>, and
         RAII. The <code>Drop</code> implementation runs when the value goes out of
         scope -- whether that's at the end of the function, after a <code>?</code>
-        early return, or during a panic unwind. You don't call it. You can't forget
-        it.
+        early return, or during a panic unwind. You don't call it, so you can't
+        forget to. It isn't a hard guarantee, though: it doesn't run if the program
+        aborts on panic (<code>panic = "abort"</code>) or calls
+        <code>std::process::exit</code>, or if the value is leaked with
+        <code>mem::forget</code>.
       </p>
 
       <aside class="clarify">
         <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>let _ = ...</code> drops immediately</p>
-        <p>The <code>Drop</code> impl uses <code>let _ = ...</code> to ignore a <code>Result</code>, which is fine. But <code>_</code> isn't a variable: it binds nothing, so a guard assigned to <code>_</code> is dropped at the end of that statement. Give a guard a name, even <code>_guard</code>, to keep it until the end of the scope. Named values are dropped in reverse order:</p>
+        <p>The <code>Drop</code> impl uses <code>let _ = ...</code> to ignore a <code>Result</code>, which is fine. But <code>_</code> isn't a variable: it binds nothing, so a new value assigned to <code>_</code>, like the guard from <code>mutex.lock()</code>, is dropped at the end of that statement. An existing variable assigned to <code>_</code> isn't touched. Give a guard a name, even <code>_guard</code>, to keep it until the end of the scope. Named values are dropped in reverse order:</p>
         <pre><code><span class="kw">use</span> std::cell::<span class="ty">RefCell</span>;
 
 <span class="kw">struct</span> <span class="ty">Noisy</span>&lt;<span class="ty">'a</span>&gt;(&amp;<span class="ty">'static</span> <span class="ty">str</span>, &amp;<span class="ty">'a</span> <span class="ty">RefCell</span>&lt;<span class="ty">Vec</span>&lt;&amp;<span class="ty">'static</span> <span class="ty">str</span>&gt;&gt;);
@@ -1918,7 +1924,11 @@ counts.<span class="fn">entry</span>(<span class="str">"c"</span>).<span class="
 
 <span class="kw">let</span> early = <span class="ty">Noisy</span>(<span class="str">"early"</span>, &amp;log);
 <span class="fn">drop</span>(early);                       <span class="cm">// or end it yourself, whenever you like</span>
-<span class="mac">assert_eq!</span>(log.<span class="fn">borrow</span>().<span class="fn">last</span>(), <span class="ty">Some</span>(&amp;<span class="str">"early"</span>));</code></pre>
+<span class="mac">assert_eq!</span>(log.<span class="fn">borrow</span>().<span class="fn">last</span>(), <span class="ty">Some</span>(&amp;<span class="str">"early"</span>));
+
+<span class="kw">let</span> kept = <span class="ty">Noisy</span>(<span class="str">"kept"</span>, &amp;log);
+<span class="kw">let</span> _ = kept;                      <span class="cm">// an existing variable: nothing moves, nothing drops</span>
+<span class="mac">assert_eq!</span>(log.<span class="fn">borrow</span>().<span class="fn">last</span>(), <span class="ty">Some</span>(&amp;<span class="str">"early"</span>));   <span class="cm">// "kept" is still alive</span></code></pre>
         <p class="clarify-more">More on this: <a href="rust-patterns-drop-raii.html">Drop and RAII</a></p>
       </aside>
 
@@ -2077,7 +2087,9 @@ counts.<span class="fn">entry</span>(<span class="str">"c"</span>).<span class="
         values -- no unnecessary cloning of strings we already own. Specific
         Failure Context (#4) attaches the offending key to any normalization
         error. The Slot Machine (#38) handles both "key exists, update it" and
-        "key is new, insert it" without a double lookup.
+        "key is new, insert it" in one lookup. (Here a plain <code>insert</code>
+        would do the same; <code>entry</code> earns its keep when the new value
+        depends on the old one.)
       </p>
 
       <h3>The Conditional Processing Pipeline</h3>
