@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rust's _or Methods (and Five Other Naming Patterns), with Clarification Boxes - Telex</title>
-  <meta name="description" content="Six naming conventions — _or/_or_else, as_/to_/into_, _map, _while, _by/_by_key, copied/cloned — that cover 80% of the standard library, with clarification boxes on when to use which variant.">
+  <meta name="description" content="Six naming conventions — _or/_or_else, as_/to_/into_, _map, _while, _by/_by_key, copied/cloned — that cover a large share of the standard library's method names, with clarification boxes on when to use which variant.">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="../style.css">
   <link rel="icon" type="image/png" href="../assets/telex-tui.png">
@@ -36,8 +36,8 @@
         <code>as_ref</code>, <code>to_owned</code>, <code>into_inner</code>,
         <code>filter_map</code>, <code>take_while</code>, <code>min_by_key</code>,
         <code>copied</code>, <code>cloned</code>. It looks like a mountain of
-        unrelated methods. It isn't. Just six naming conventions cover roughly
-        80% of the standard library. Once they click, methods you've never seen before become guessable.
+        unrelated methods. It isn't. Just six naming conventions cover a large
+        share of the method names in the standard library. Once they click, methods you've never seen before become guessable.
       </p>
 
       <p>
@@ -52,8 +52,9 @@
 
       <p>
         This is the most pervasive. Whenever you see a pair like this, the
-        <code>_or</code> version takes a value you already have. The
-        <code>_or_else</code> version takes a closure that computes the value on demand.
+        <code>_or</code> version takes a value, and Rust works that value out
+        before the call, whether it's needed or not. The <code>_or_else</code>
+        version takes a closure, and calls it only when the value is needed.
         Same pattern in <code>unwrap_or</code> / <code>unwrap_or_else</code>,
         <code>ok_or</code> / <code>ok_or_else</code>,
         <code>or</code> / <code>or_else</code>.
@@ -62,7 +63,7 @@
 
       <pre><code><span class="kw">let</span> a: <span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt; = <span class="ty">None</span>;
 
-<span class="cm">// _or: you already have the fallback value</span>
+<span class="cm">// _or: the fallback is worked out first, every time</span>
 <span class="kw">let</span> x = a.<span class="fn">unwrap_or</span>(<span class="num">42</span>);
 
 <span class="cm">// _or_else: compute the fallback only if needed</span>
@@ -75,10 +76,10 @@
       <pre><code><span class="cm">// Option</span>
 <span class="fn">unwrap_or</span>(val)       / <span class="fn">unwrap_or_else</span>(|| ...)
 <span class="fn">or</span>(other_option)     / <span class="fn">or_else</span>(|| ...)
+<span class="fn">ok_or</span>(err)           / <span class="fn">ok_or_else</span>(|| ...)   <span class="cm">// Option to Result</span>
 
 <span class="cm">// Result</span>
 <span class="fn">unwrap_or</span>(val)       / <span class="fn">unwrap_or_else</span>(|err| ...)
-<span class="fn">ok_or</span>(err)           / <span class="fn">ok_or_else</span>(|| ...)
 <span class="fn">or</span>(other_result)     / <span class="fn">or_else</span>(|err| ...)</code></pre>
 
       <aside class="clarify">
@@ -152,7 +153,7 @@
 
       <aside class="clarify">
         <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>_or</code> or <code>_or_else</code>: when is the fallback made?</p>
-        <p>Every <code>_or</code> / <code>_or_else</code> pair differs in exactly one thing: when the fallback gets made.</p>
+        <p>The main difference between <code>_or</code> and <code>_or_else</code> is when the fallback gets made. (On <code>Result</code>, the closure also gets the error, as the box above shows.)</p>
         <ul>
           <li><strong><code>_or(x)</code></strong>: <code>x</code> is made first, every time, even when it isn't used. Fine for <code>8080</code>, <code>"none"</code> or a variable you already have.</li>
           <li><strong><code>_or_else(f)</code></strong>: <code>f</code> runs only when the fallback is needed. Use it when making the fallback costs something: an allocation, a lookup, a log line.</li>
@@ -238,7 +239,7 @@
         <ul>
           <li><strong><code>as_</code></strong>: you only need to read it for now. Same memory, nothing copied.</li>
           <li><strong><code>to_</code></strong>: you need your own copy and still need the original. New memory.</li>
-          <li><strong><code>into_</code></strong>: you're done with the original. It's used up, and its memory is handed over.</li>
+          <li><strong><code>into_</code></strong>: you're done with the original. It's used up, and where it can, its memory is reused instead of copied.</li>
         </ul>
         <pre><code><span class="kw">let</span> s = <span class="ty">String</span>::<span class="fn">from</span>(<span class="str">"hello"</span>);
 <span class="kw">let</span> buf = s.<span class="fn">as_ptr</span>();                  <span class="cm">// where the bytes live</span>
@@ -381,7 +382,7 @@
 
       <pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
 
-<span class="cm">// take(n) -- take exactly n elements</span>
+<span class="cm">// take(n) -- take up to n elements</span>
 <span class="kw">let</span> first_three: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">take</span>(<span class="num">3</span>).<span class="fn">collect</span>();
 <span class="cm">// [1, 2, 3]</span>
 
@@ -389,7 +390,7 @@
 <span class="kw">let</span> small: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">take_while</span>(|&amp;&amp;x| x &lt; <span class="num">4</span>).<span class="fn">collect</span>();
 <span class="cm">// [1, 2, 3]</span>
 
-<span class="cm">// skip(n) -- skip exactly n elements</span>
+<span class="cm">// skip(n) -- skip up to n elements</span>
 <span class="kw">let</span> after_two: <span class="ty">Vec</span>&lt;&amp;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">skip</span>(<span class="num">2</span>).<span class="fn">collect</span>();
 <span class="cm">// [3, 4, 5]</span>
 
@@ -402,22 +403,23 @@
         <code>_while</code> makes it dynamic. Crucially, the
         condition stops being checked at the first <code>false</code>:
         <code>take_while</code> ends there, and <code>skip_while</code> lets
-        everything after it through, unchecked.
+        that item and everything after it through, unchecked.
       </p>
 
       <aside class="clarify">
         <p class="clarify-title"><span class="clarify-tag">Clarification</span> <code>take</code>, <code>take_while</code> or <code>filter</code>?</p>
-        <p>On sorted data they often agree. On unsorted data they don't:</p>
+        <p><code>take_while</code> and <code>filter</code> agree when every item that passes comes first, as in sorted data. Otherwise they don't:</p>
         <ul>
-          <li><strong><code>take(n)</code></strong>: you know how many.</li>
+          <li><strong><code>take(n)</code></strong>: you know how many. It takes up to <code>n</code>: fewer if the items run out.</li>
           <li><strong><code>take_while(f)</code></strong>: stop at the first item that fails. Nothing after it is looked at.</li>
           <li><strong><code>filter(f)</code></strong>: check every item, wherever it is.</li>
-          <li><strong><code>skip_while(f)</code></strong>: drop items until the first that fails, then keep everything after it, unchecked.</li>
+          <li><strong><code>skip_while(f)</code></strong>: drop items until the first that fails, then keep that one and everything after it, unchecked.</li>
         </ul>
         <pre><code><span class="kw">let</span> v = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">7</span>, <span class="num">3</span>, <span class="num">9</span>];
 <span class="kw">let</span> small = |x: &amp;&amp;<span class="ty">i32</span>| **x &lt; <span class="num">5</span>;
 
 <span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">take</span>(<span class="num">2</span>).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>]);
+<span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">take</span>(<span class="num">10</span>).<span class="fn">count</span>(), <span class="num">5</span>);                                   <span class="cm">// up to n: only 5 there</span>
 <span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">take_while</span>(small).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>]);       <span class="cm">// stops at 7</span>
 <span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">filter</span>(small).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">1</span>, &amp;<span class="num">2</span>, &amp;<span class="num">3</span>]);       <span class="cm">// finds the 3 too</span>
 <span class="mac">assert_eq!</span>(v.<span class="fn">iter</span>().<span class="fn">skip_while</span>(small).<span class="fn">collect</span>::&lt;<span class="ty">Vec</span>&lt;_&gt;&gt;(), [&amp;<span class="num">7</span>, &amp;<span class="num">3</span>, &amp;<span class="num">9</span>]);   <span class="cm">// keeps the 3 anyway</span></code></pre>
@@ -452,7 +454,7 @@
 
       <pre><code><span class="kw">let</span> words = <span class="mac">vec!</span>[<span class="str">"cherry"</span>, <span class="str">"fig"</span>, <span class="str">"apple"</span>, <span class="str">"date"</span>];
 
-<span class="cm">// min() -- natural ordering (alphabetical for strings)</span>
+<span class="cm">// min() -- natural ordering (byte order for strings, so "Zebra" &lt; "apple")</span>
 <span class="kw">let</span> first = words.<span class="fn">iter</span>().<span class="fn">min</span>();
 <span class="cm">// Some("apple")</span>
 
@@ -482,9 +484,9 @@ v.<span class="fn">iter</span>().<span class="fn">max_by</span>(|a, b| ...);    
 v.<span class="fn">iter</span>().<span class="fn">max_by_key</span>(|x| ...);      <span class="cm">// compare by extracted key</span></code></pre>
 
       <p>
-        Use <code>_by_key</code> for comparing a single property or derived
-        value. Use <code>_by</code> for complex logic, such as multi-field
-        tie-breaking or custom sort orders.
+        Use <code>_by_key</code> when you can hand back the key: one field, a
+        derived value, or a tuple of them for tie-breaking. Use <code>_by</code>
+        when you can't, such as with floats or keys that borrow from the item.
       </p>
 
       <aside class="clarify">
@@ -495,6 +497,10 @@ v.<span class="fn">iter</span>().<span class="fn">max_by_key</span>(|x| ...);   
           <li><strong><code>_by</code></strong>: the comparison needs both items at once: floats (<code>f64</code> isn't <code>Ord</code>, so use <code>total_cmp</code>), or a key that borrows from the item.</li>
         </ul>
         <pre><code><span class="kw">use</span> std::cmp::<span class="ty">Reverse</span>;
+
+<span class="kw">let</span> words = [<span class="str">"apple"</span>, <span class="str">"Zebra"</span>];
+<span class="mac">assert_eq!</span>(words.<span class="fn">iter</span>().<span class="fn">min</span>(), <span class="ty">Some</span>(&amp;<span class="str">"Zebra"</span>));                              <span class="cm">// byte order: 'Z' &lt; 'a'</span>
+<span class="mac">assert_eq!</span>(words.<span class="fn">iter</span>().<span class="fn">min_by_key</span>(|w| w.<span class="fn">to_lowercase</span>()), <span class="ty">Some</span>(&amp;<span class="str">"apple"</span>));   <span class="cm">// alphabetical</span>
 
 <span class="kw">let</span> <span class="kw">mut</span> scores = <span class="mac">vec!</span>[(<span class="str">"bo"</span>, <span class="num">90</span>), (<span class="str">"al"</span>, <span class="num">90</span>), (<span class="str">"cy"</span>, <span class="num">70</span>)];
 scores.<span class="fn">sort_by_key</span>(|&amp;(name, score)| (<span class="ty">Reverse</span>(score), name));   <span class="cm">// score high to low, then name</span>
@@ -539,13 +545,13 @@ names.<span class="fn">sort_by_cached_key</span>(|n| n.<span class="fn">to_lower
       <p>
         Both do the same thing: turn an iterator of references into an iterator
         of owned values. Same idea (get an owned value from a reference), but
-        <code>copied</code> is for small cheap types and <code>cloned</code> is
-        for anything:
+        <code>copied</code> is for <code>Copy</code> types and <code>cloned</code> is
+        for anything that implements <code>Clone</code>:
       </p>
 
       <pre><code><span class="kw">let</span> v = <span class="mac">vec!</span>[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
 
-<span class="cm">// copied -- requires T: Copy (small, cheap types: integers, bools, floats)</span>
+<span class="cm">// copied -- requires T: Copy (plain values: integers, bools, floats)</span>
 <span class="kw">let</span> owned: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = v.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">collect</span>();
 
 <span class="cm">// cloned -- requires T: Clone (anything, but might be expensive)</span>
@@ -563,8 +569,8 @@ names.<span class="fn">sort_by_cached_key</span>(|n| n.<span class="fn">to_lower
 
       <p>
         If it compiles with <code>copied</code>, prefer it. It signals to the
-        reader that the copy is trivial -- a memcpy of a few bytes, not a heap
-        allocation. When you see <code>cloned</code>, you know something more
+        reader that the copy is a plain memcpy, never a heap allocation. That's
+        usually a few bytes, though a large array can be <code>Copy</code> too. When you see <code>cloned</code>, you know something more
         expensive might be happening.
       </p>
 
@@ -573,7 +579,7 @@ names.<span class="fn">sort_by_cached_key</span>(|n| n.<span class="fn">to_lower
         <p>First ask whether you need owned values at all.</p>
         <ul>
           <li><strong>Only reading</strong>: keep the references. Nothing is copied.</li>
-          <li><strong>Owned, and the items are <code>Copy</code></strong>: <code>copied</code>.</li>
+          <li><strong>Owned, and the items are <code>Copy</code></strong>: <code>copied</code>. That's a plain memcpy, never a heap allocation, but not always small: a big array is <code>Copy</code> too.</li>
           <li><strong>Owned, anything else, and you keep the collection</strong>: <code>cloned</code>, or <code>to_vec()</code> for the whole thing.</li>
           <li><strong>Done with the collection</strong>: <code>into_iter</code>. The items move out; nothing is cloned.</li>
         </ul>
@@ -587,7 +593,11 @@ names.<span class="fn">sort_by_cached_key</span>(|n| n.<span class="fn">to_lower
 <span class="kw">let</span> m: <span class="ty">Vec</span>&lt;<span class="ty">String</span>&gt; = strings.<span class="fn">into_iter</span>().<span class="fn">collect</span>();       <span class="cm">// into_iter: moved, not copied</span>
 <span class="mac">assert_eq!</span>(m[<span class="num">0</span>].<span class="fn">as_ptr</span>(), buf);
 
-<span class="mac">assert_eq!</span>([<span class="num">10</span>, <span class="num">20</span>].<span class="fn">first</span>().<span class="fn">copied</span>(), <span class="ty">Some</span>(<span class="num">10</span>));          <span class="cm">// copied works on Option&lt;&amp;T&gt; too</span></code></pre>
+<span class="mac">assert_eq!</span>([<span class="num">10</span>, <span class="num">20</span>].<span class="fn">first</span>().<span class="fn">copied</span>(), <span class="ty">Some</span>(<span class="num">10</span>));          <span class="cm">// copied works on Option&lt;&amp;T&gt; too</span>
+
+<span class="kw">let</span> blocks = [[<span class="num">0u8</span>; <span class="num">4096</span>]; <span class="num">2</span>];
+<span class="kw">let</span> owned: <span class="ty">Vec</span>&lt;[<span class="ty">u8</span>; <span class="num">4096</span>]&gt; = blocks.<span class="fn">iter</span>().<span class="fn">copied</span>().<span class="fn">collect</span>();   <span class="cm">// Copy, but 4 KB each</span>
+<span class="mac">assert_eq!</span>(owned.<span class="fn">len</span>(), <span class="num">2</span>);</code></pre>
       </aside>
 
       <h2>Putting it all together</h2>
@@ -606,13 +616,14 @@ names.<span class="fn">sort_by_cached_key</span>(|n| n.<span class="fn">to_lower
         <li><code>max_by_key</code> -- finds the maximum by an extracted value
           (<code>_by_key</code> = extracted comparison)</li>
         <li><code>to_ascii_uppercase</code> -- creates a new value, leaves the
-          original (<code>to_</code> = new allocation)</li>
+          original (<code>to_</code> = a new value)</li>
       </ul>
 
       <p>
         When you encounter a new type in the standard library, you can often guess
         what methods it has. Does it have <code>as_ref</code>? Probably. Does it
-        have <code>into_inner</code>? If it wraps something, yes. Does the
+        have <code>into_inner</code>? If it wraps something, often (but not
+        <code>Box</code>: you write <code>*b</code> to move the value out). Does the
         iterator adapter have a <code>_by_key</code> variant? Check, but likely.
       </p>
 
