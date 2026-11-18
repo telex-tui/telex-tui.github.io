@@ -688,7 +688,7 @@ footer a:hover {
   background: transparent;
 }
 
-/* ── Clarification boxes (40 Rust Patterns, draft61) ── */
+/* ── Clarification boxes (draft61, draft62) ── */
 
 .post .clarify {
   background: var(--bg-card);
