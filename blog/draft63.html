@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Option Forgets Why - Telex</title>
+  <meta name="description" content="Four strings followed through Result and Option, one call at a time, to see where the reason goes.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="icon" type="image/png" href="../assets/telex-tui.png">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo-link">
+        <img src="../assets/telex-tui.png" alt="Telex logo">
+        Telex
+      </a>
+      <nav>
+        <a href="https://telex-tui.github.io/telex-tui/">Book</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/drafted-ai-crazies.html">DraftedAICrazies</a>
+        <a href="https://github.com/telex-tui/telex-tui">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="post">
+      <h1>Option Forgets Why</h1>
+      <div class="post-meta">November 2026</div>
+
+      <h2>Four strings</h2>
+
+      <p>
+        Option is Result with the reason thrown away. This post follows four strings
+        through both types, one call at a time, and watches where the reason goes.
+      </p>
+
+      <pre><code><span class="kw">let</span> inputs = [<span class="str">"1"</span>, <span class="str">"abc"</span>, <span class="str">""</span>, <span class="str">"3"</span>];</code></pre>
+
+      <p>
+        <code>"1"</code> and <code>"3"</code> parse. <code>"abc"</code> never will.
+        <code>""</code> is the interesting one: <code>parse</code> calls it an error,
+        but an empty field often just means nothing was entered. Whether <code>""</code>
+        is wrong or merely missing is the question the post keeps coming back to.
+      </p>
+
+      <h2>Reading a trace</h2>
+
+      <p>
+        Every example in this post comes with a trace: one row per call, one column per
+        input.
+      </p>
+
+      <pre><code><span class="kw">let</span> valid: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = inputs.<span class="fn">iter</span>().<span class="fn">filter_map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>()).<span class="fn">collect</span>();
+<span class="cm">// .iter()              "1"     "abc"              ""           "3"</span>
+<span class="cm">//   .parse()         Ok(1)  Err(InvalidDigit)  Err(Empty)    Ok(3)</span>
+<span class="cm">//   .ok()          Some(1)      None               None    Some(3)</span>
+<span class="cm">// .filter_map(..)       1                                       3</span>
+<span class="cm">// .collect()           [1, 3]</span></code></pre>
+
+      <p>
+        Read across a row to see what one call did to every input. Read down a column to
+        follow one input through the chain. Indented rows run inside a closure, here the
+        one passed to <code>filter_map</code>.
+      </p>
+
+      <p>
+        Each column lines up on its innermost value, so a value holds still while its
+        wrappers change. Down the <code>"1"</code> column, <code>Ok(</code> becomes
+        <code>Some(</code> around the same <code>1</code>, and then
+        <code>filter_map</code> unwraps it.
+      </p>
+
+      <p>
+        The rest of the notation:
+      </p>
+
+      <ul>
+        <li>
+          A blank cell means the call ran and produced nothing. The gaps in the
+          <code>filter_map</code> row are the failures being dropped.
+        </li>
+        <li>
+          <code>·</code> means the call never ran for that input.
+        </li>
+        <li>
+          Errors show their kind: <code>InvalidDigit</code> is short for
+          <code>ParseIntError { kind: InvalidDigit }</code>.
+        </li>
+        <li>
+          References are left out. <code>.iter()</code> hands out
+          <code>&amp;&amp;str</code>, and the trace shows the string.
+        </li>
+        <li>
+          Labels shorten most arguments to <code>(..)</code>. The code above each trace
+          has them in full.
+        </li>
+        <li>
+          When the code is an expression in <code>s</code> rather than a chain, the top
+          row is <code>s</code> and each column is one run of it.
+        </li>
+        <li>
+          A row that starts with <code>or</code> is an alternative to the row above, not
+          the next step.
+        </li>
+      </ul>
+
+      <h2>Forget</h2>
+
+      <p>
+        <code>.ok()</code> turns a <code>Result</code> into an <code>Option</code> by
+        keeping the value and dropping the reason. <code>.err()</code> keeps the reason
+        and drops the value.
+      </p>
+
+      <pre><code><span class="kw">let</span> value = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">ok</span>();    <span class="cm">// keep the value, drop the reason</span>
+<span class="kw">let</span> reason = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">err</span>();  <span class="cm">// keep the reason, drop the value</span>
+<span class="cm">// s              "1"        "abc"               ""           "3"</span>
+<span class="cm">// .parse()     Ok(1)     Err(InvalidDigit)   Err(Empty)    Ok(3)</span>
+<span class="cm">// .ok()      Some(1)         None                None    Some(3)</span>
+<span class="cm">// or .err()       None  Some(InvalidDigit)  Some(Empty)       None</span></code></pre>
+
+      <p>
+        Under <code>Result</code>, <code>"abc"</code> and <code>""</code> fail for
+        different reasons. One <code>.ok()</code> later they are the same
+        <code>None</code>, and nothing downstream can tell them apart. That is the whole
+        post in one row.
+      </p>
+
+      <p>
+        <code>.err()</code> is the mirror image, useful when the failures are what you
+        want to collect. It forgets too: the <code>1</code> and the <code>3</code>
+        become <code>None</code>.
+      </p>
+
+      <h2>Skip</h2>
+
+      <p>
+        Both types are collections of zero or one. Iterate <code>Some(x)</code> or
+        <code>Ok(x)</code> and you get one item; iterate <code>None</code> or
+        <code>Err(_)</code> and you get nothing. So flattening drops the failures with
+        no extra code.
+      </p>
+
+      <pre><code><span class="kw">let</span> kept: <span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt; = inputs.<span class="fn">iter</span>().<span class="fn">flat_map</span>(|s| s.<span class="fn">parse</span>()).<span class="fn">collect</span>();
+<span class="cm">// .iter()          "1"     "abc"              ""         "3"</span>
+<span class="cm">//   .parse()     Ok(1)  Err(InvalidDigit)  Err(Empty)  Ok(3)</span>
+<span class="cm">// .flat_map(..)     1                                     3</span>
+<span class="cm">// .collect()       [1, 3]</span></code></pre>
+
+      <p>
+        <code>flat_map</code> takes the <code>Result</code> as it is, so there is no
+        <code>.ok()</code>: each <code>Err</code> simply yields no item.
+        <code>filter_map</code> only accepts an <code>Option</code>, which is why the
+        chain in the first trace has to forget before it can skip.
+      </p>
+
+      <p>
+        Either way, <code>kept</code> holds no sign of the failures. Not that they
+        happened, not how many, not why.
+      </p>
+
+      <h2>Stop</h2>
+
+      <p>
+        Collecting into <code>Result&lt;Vec&lt;_&gt;, _&gt;</code> gives you every value
+        or the first error, and it stops pulling the moment it has that error.
+      </p>
+
+      <pre><code><span class="kw">let</span> all: <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt;, _&gt; = inputs.<span class="fn">iter</span>().<span class="fn">map</span>(|s| s.<span class="fn">parse</span>()).<span class="fn">collect</span>();
+<span class="cm">// .iter()       "1"     "abc"           ·  ·</span>
+<span class="cm">//   .parse()  Ok(1)  Err(InvalidDigit)  ·  ·</span>
+<span class="cm">// .collect()         Err(InvalidDigit)</span></code></pre>
+
+      <p>
+        The dots are the point. <code>collect</code> stops at the first
+        <code>Err</code>, so <code>""</code> and <code>"3"</code> are never parsed,
+        never even taken out of the array. You hear about the first failure and no
+        others.
+      </p>
+
+      <p>
+        So a batch comes out one of two ways:
+      </p>
+
+      <pre><code><span class="cm">//    ["1", "3"]             -&gt; Ok([1, 3])</span>
+<span class="cm">// or ["1", "abc", "", "3"]  -&gt; Err(InvalidDigit)</span></code></pre>
+
+      <p>
+        <code>Option</code> stops in the same place, with the usual loss:
+      </p>
+
+      <pre><code><span class="kw">let</span> all: <span class="ty">Option</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">i32</span>&gt;&gt; = inputs.<span class="fn">iter</span>().<span class="fn">map</span>(|s| s.<span class="fn">parse</span>().<span class="fn">ok</span>()).<span class="fn">collect</span>();
+<span class="cm">// .iter()         "1"     "abc"           ·  ·</span>
+<span class="cm">//   .parse()    Ok(1)  Err(InvalidDigit)  ·  ·</span>
+<span class="cm">//   .ok()     Some(1)      None           ·  ·</span>
+<span class="cm">// .collect()               None</span></code></pre>
+
+      <p>
+        <code>Result</code> tells you why it stopped. <code>Option</code> only tells you
+        that it did.
+      </p>
+
+      <h2>Reject</h2>
+
+      <p>
+        Sometimes a value parses and you still do not want it.
+        <code>Option::filter</code> turns a <code>Some</code> into a <code>None</code>
+        when the predicate fails.
+      </p>
+
+      <pre><code><span class="kw">let</span> big = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">ok</span>().<span class="fn">filter</span>(|&amp;n| n &gt; <span class="num">1</span>);
+<span class="cm">// s                "1"       "abc"              ""           "3"</span>
+<span class="cm">// .parse()       Ok(1)    Err(InvalidDigit)  Err(Empty)    Ok(3)</span>
+<span class="cm">// .ok()        Some(1)        None               None    Some(3)</span>
+<span class="cm">// .filter(..)       None      None               None    Some(3)</span></code></pre>
+
+      <p>
+        Three <code>None</code>s, three different stories: too small, not a number,
+        empty. Nothing in the result says which is which.
+      </p>
+
+      <p>
+        <code>Result</code> has no <code>filter</code> at all. It could not have a
+        useful one: rejecting a value means producing an error, and only you know what
+        that error should be. So you name it.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::num::<span class="ty">ParseIntError</span>;
+
+<span class="cm">#[derive(Debug)]</span>
+<span class="kw">enum</span> <span class="ty">Why</span> {
+    <span class="ty">Parse</span>(<span class="ty">ParseIntError</span>),
+    <span class="ty">TooSmall</span>(<span class="ty">i32</span>),
+}
+
+<span class="kw">let</span> big = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;()
+    .<span class="fn">map_err</span>(<span class="ty">Why</span>::<span class="ty">Parse</span>)
+    .<span class="fn">and_then</span>(|n| <span class="kw">if</span> n &gt; <span class="num">1</span> { <span class="ty">Ok</span>(n) } <span class="kw">else</span> { <span class="ty">Err</span>(<span class="ty">Why</span>::<span class="ty">TooSmall</span>(n)) });
+<span class="cm">// s                          "1"            "abc"                     ""          "3"</span>
+<span class="cm">// .parse()                 Ok(1)         Err(InvalidDigit)         Err(Empty)   Ok(3)</span>
+<span class="cm">// .map_err(..)             Ok(1)   Err(Parse(InvalidDigit))  Err(Parse(Empty))  Ok(3)</span>
+<span class="cm">// .and_then(..)  Err(TooSmall(1))  Err(Parse(InvalidDigit))  Err(Parse(Empty))  Ok(3)</span></code></pre>
+
+      <p>
+        Follow the <code>1</code>. It never moves, but its wrapper goes from
+        <code>Ok(</code> to <code>Err(TooSmall(</code>. The rejection is now a reason
+        like the others, and all four columns end up different.
+      </p>
+
+      <h2>Fall back</h2>
+
+      <p>
+        Eventually you want a plain <code>i32</code>. Both types have
+        <code>unwrap_or</code>, and with a fixed fallback they behave the same.
+      </p>
+
+      <pre><code><span class="kw">let</span> n = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">unwrap_or</span>(<span class="num">0</span>);
+<span class="cm">// s                "1"     "abc"              ""         "3"</span>
+<span class="cm">// .parse()       Ok(1)  Err(InvalidDigit)  Err(Empty)  Ok(3)</span>
+<span class="cm">// .unwrap_or(0)     1       0                  0          3</span></code></pre>
+
+      <p>
+        The difference shows when the fallback is a closure. <code>Result</code>'s
+        <code>unwrap_or_else</code> passes the error in. <code>Option</code>'s passes
+        nothing, because it has nothing to pass.
+      </p>
+
+      <pre><code><span class="kw">let</span> n = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">unwrap_or_else</span>(|e| { <span class="mac">eprintln!</span>(<span class="str">"{s:?}: {e}"</span>); <span class="num">0</span> });
+<span class="cm">// stderr: "abc": invalid digit found in string</span>
+<span class="cm">//         "": cannot parse integer from empty string</span>
+
+<span class="kw">let</span> n = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">ok</span>().<span class="fn">unwrap_or_else</span>(|| { <span class="mac">eprintln!</span>(<span class="str">"{s:?}: no number"</span>); <span class="num">0</span> });
+<span class="cm">// stderr: "abc": no number</span>
+<span class="cm">//         "": no number</span></code></pre>
+
+      <p>
+        Both return 0 for the same two inputs. Only the first can say what it papered
+        over.
+      </p>
+
+      <h2>Decide what <code>""</code> means</h2>
+
+      <p>
+        So far <code>""</code> has been an error, because that is what
+        <code>parse</code> says. For a form field or a config value, empty usually means
+        "not provided", and not provided may be fine. That is an <code>Option</code>
+        decision, made before parsing.
+      </p>
+
+      <pre><code><span class="kw">let</span> n: <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;<span class="ty">i32</span>&gt;, _&gt; = (!s.<span class="fn">is_empty</span>()).<span class="fn">then_some</span>(s).<span class="fn">map</span>(<span class="ty">str</span>::<span class="fn">parse</span>).<span class="fn">transpose</span>();
+<span class="cm">// s                     "1"           "abc"              ""             "3"</span>
+<span class="cm">// .then_some(s)    Some("1")     Some("abc")              None     Some("3")</span>
+<span class="cm">// .map(..)       Some(Ok(1))  Some(Err(InvalidDigit))     None   Some(Ok(3))</span>
+<span class="cm">// .transpose()   Ok(Some(1))       Err(InvalidDigit)   Ok(None)  Ok(Some(3))</span></code></pre>
+
+      <p>
+        <code>then_some</code> turns the empty string into <code>None</code> before
+        anything else happens. <code>map</code> parses only what is there, which leaves
+        an <code>Option</code> around a <code>Result</code>. <code>transpose</code>
+        swaps the two layers: an error inside a <code>Some</code> becomes a plain error,
+        and a <code>None</code> becomes <code>Ok(None)</code>.
+      </p>
+
+      <p>
+        Watch the <code>"1"</code> column: <code>Some(Ok(</code> becomes
+        <code>Ok(Some(</code> around a <code>1</code> that never moves. The type now
+        reads as a sentence: the value may be missing, but it must not be wrong.
+        <code>"abc"</code> is still an error, and <code>""</code> no longer is.
+      </p>
+
+      <h2>Require it after all</h2>
+
+      <p>
+        Then the field becomes mandatory, and the <code>None</code> needs a reason.
+        <code>ok_or</code> supplies one. Add a variant to <code>Why</code>, and a
+        <code>From</code> impl so <code>?</code> can convert parse errors.
+      </p>
+
+      <pre><code><span class="kw">use</span> std::num::<span class="ty">ParseIntError</span>;
+
+<span class="cm">#[derive(Debug)]</span>
+<span class="kw">enum</span> <span class="ty">Why</span> {
+    <span class="ty">Parse</span>(<span class="ty">ParseIntError</span>),
+    <span class="ty">TooSmall</span>(<span class="ty">i32</span>),
+    <span class="ty">Missing</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">From</span>&lt;<span class="ty">ParseIntError</span>&gt; <span class="kw">for</span> <span class="ty">Why</span> {
+    <span class="kw">fn</span> <span class="fn">from</span>(e: <span class="ty">ParseIntError</span>) -&gt; <span class="ty">Self</span> { <span class="ty">Why</span>::<span class="ty">Parse</span>(e) }
+}
+
+<span class="kw">fn</span> <span class="fn">required</span>(s: &amp;<span class="ty">str</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">i32</span>, <span class="ty">Why</span>&gt; {
+    <span class="kw">let</span> s = (!s.<span class="fn">is_empty</span>()).<span class="fn">then_some</span>(s).<span class="fn">ok_or</span>(<span class="ty">Why</span>::<span class="ty">Missing</span>)?;
+    <span class="ty">Ok</span>(s.<span class="fn">parse</span>()?)
+}
+<span class="cm">//    required("1")   -&gt; Ok(1)</span>
+<span class="cm">// or required("abc") -&gt; Err(Parse(InvalidDigit))</span>
+<span class="cm">// or required("")    -&gt; Err(Missing)</span>
+<span class="cm">// or required("3")   -&gt; Ok(3)</span></code></pre>
+
+      <p>
+        A function call has one outcome per input, so it gets the <code>or</code> form
+        instead of a trace.
+      </p>
+
+      <p>
+        <code>?</code> is where the two types meet head on. In a function that returns
+        <code>Result</code>, it will not take an <code>Option</code>, and the compiler
+        says what to do instead:
+      </p>
+
+      <pre><code><span class="cm">// let s = (!s.is_empty()).then_some(s)?;</span>
+<span class="cm">// error[E0277]: the `?` operator can only be used on `Result`s, not `Option`s, in a function that returns `Result`</span>
+<span class="cm">//   use `.ok_or(...)?` to provide an error compatible with `Result&lt;i32, Why&gt;`</span></code></pre>
+
+      <p>
+        One trap remains. It is tempting to reach <code>Why</code> by going through
+        <code>Option</code>:
+      </p>
+
+      <pre><code><span class="kw">let</span> n = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">ok</span>().<span class="fn">ok_or</span>(<span class="ty">Why</span>::<span class="ty">Missing</span>);   <span class="cm">// don't</span>
+<span class="cm">// s               "1"     "abc"              ""             "3"</span>
+<span class="cm">// .parse()      Ok(1)  Err(InvalidDigit)  Err(Empty)      Ok(3)</span>
+<span class="cm">// .ok()       Some(1)      None               None      Some(3)</span>
+<span class="cm">// .ok_or(..)    Ok(1)  Err(Missing)       Err(Missing)    Ok(3)</span></code></pre>
+
+      <p>
+        <code>"abc"</code> is not missing. The round trip threw away the real reason and
+        filled in a wrong one. Translate the reason instead of replacing it:
+      </p>
+
+      <pre><code><span class="kw">let</span> n = s.<span class="fn">parse</span>::&lt;<span class="ty">i32</span>&gt;().<span class="fn">map_err</span>(<span class="ty">Why</span>::<span class="ty">Parse</span>);
+<span class="cm">// s               "1"           "abc"                     ""          "3"</span>
+<span class="cm">// .parse()      Ok(1)        Err(InvalidDigit)         Err(Empty)   Ok(3)</span>
+<span class="cm">// .map_err(..)  Ok(1)  Err(Parse(InvalidDigit))  Err(Parse(Empty))  Ok(3)</span></code></pre>
+
+      <p>
+        Once <code>.ok()</code> has dropped a reason, you can put a reason back, but
+        never the one you lost.
+      </p>
+
+      <h2>The life of <code>""</code></h2>
+
+      <p>
+        One column, the whole post:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Section</th>
+            <th>Call</th>
+            <th><code>""</code> became</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Forget</td>
+            <td><code>.ok()</code></td>
+            <td><code>None</code>, from <code>Err(Empty)</code></td>
+          </tr>
+          <tr>
+            <td>Skip</td>
+            <td><code>.flat_map(..)</code></td>
+            <td>nothing</td>
+          </tr>
+          <tr>
+            <td>Stop</td>
+            <td><code>.collect()</code></td>
+            <td>never pulled</td>
+          </tr>
+          <tr>
+            <td>Reject</td>
+            <td><code>.filter(..)</code></td>
+            <td><code>None</code>, or <code>Err(Parse(Empty))</code> with <code>Why</code></td>
+          </tr>
+          <tr>
+            <td>Fall back</td>
+            <td><code>.unwrap_or(0)</code></td>
+            <td><code>0</code></td>
+          </tr>
+          <tr>
+            <td>Decide</td>
+            <td><code>.transpose()</code></td>
+            <td><code>Ok(None)</code></td>
+          </tr>
+          <tr>
+            <td>Require</td>
+            <td><code>required(..)</code></td>
+            <td><code>Err(Missing)</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        And the conversions, with what each one does to the reason:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th>Call</th>
+            <th>The reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Result&lt;T, E&gt;</code></td>
+            <td><code>Option&lt;T&gt;</code></td>
+            <td><code>.ok()</code></td>
+            <td>thrown away</td>
+          </tr>
+          <tr>
+            <td><code>Result&lt;T, E&gt;</code></td>
+            <td><code>Option&lt;E&gt;</code></td>
+            <td><code>.err()</code></td>
+            <td>kept, and the value is thrown away</td>
+          </tr>
+          <tr>
+            <td><code>Result&lt;T, E&gt;</code></td>
+            <td><code>Result&lt;T, F&gt;</code></td>
+            <td><code>.map_err(f)</code></td>
+            <td>translated</td>
+          </tr>
+          <tr>
+            <td><code>Option&lt;T&gt;</code></td>
+            <td><code>Result&lt;T, E&gt;</code></td>
+            <td><code>.ok_or(e)</code>, <code>.ok_or_else(f)</code></td>
+            <td>supplied by you</td>
+          </tr>
+          <tr>
+            <td><code>Option&lt;Result&lt;T, E&gt;&gt;</code></td>
+            <td><code>Result&lt;Option&lt;T&gt;, E&gt;</code></td>
+            <td><code>.transpose()</code></td>
+            <td>kept</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Use <code>Option</code> when nobody will ask why. Use <code>Result</code> when
+        someone will. And when you cross from one to the other, read the trace: it shows
+        exactly where the why goes.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="container">
+      MIT - Copyright &copy; 2025 Mark Branion
+    </div>
+  </footer>
+</body>
+</html>
